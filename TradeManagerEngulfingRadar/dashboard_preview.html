@@ -9,9 +9,9 @@
       /* Pitch-dark obsidian & pure black container palette */
       --canvas-bg: #000000;
       --surface-1: #050608;
-      --surface-2: #0b0e14;
-      --surface-3: #111622;
-      --surface-highlight: #171f30;
+      --surface-2: #080a0e;
+      --surface-3: #10131b;
+      --surface-highlight: #182030;
       
       --border-soft: #1c2436;
       --border-hard: #2a3752;
@@ -23,13 +23,7 @@
       --text-med: #b4c6e7;
       --text-dim: #7a8ea8;
 
-      /* Deep Navy Midnight Shadow (Lifting all neon text cleanly from pitch black) */
-      --text-outline: 
-        0 1px 2px rgba(2, 6, 23, 0.95),
-        0 0 1px rgba(15, 23, 42, 0.9),
-        0 0 8px rgba(0, 0, 0, 0.8);
-      
-      /* High-Luminance True Laser Red Palette (#ff2e4d - Pure Red with elevated luminance) */
+      /* High-Vibrancy Neon Accents (Matched 1:1 with MQL5 constants) */
       --cyan-bright: #00e5ff;
       --cyan-bg: rgba(0, 229, 255, 0.12);
       
@@ -37,7 +31,6 @@
       --bull-bg: rgba(0, 230, 118, 0.12);
       --bull-border: #00e676;
 
-      /* High-Luminance Red (Laser Scarlet/Ultra Crimson: Merah murni dengan saturasi & lightness 58%) */
       --bear-bright: #ff2e4d;
       --bear-bg: rgba(255, 46, 77, 0.14);
       --bear-border: #ff2e4d;
@@ -45,6 +38,16 @@
       --gold-bright: #ffb300;
       --gold-bg: rgba(255, 179, 0, 0.12);
       --gold-border: #ffb300;
+
+      --tab-active-bg: #221508;
+      --row-selected-bg: #1a150d;
+      --row-alt-bg: #121822;
+
+      /* Elevation Shadow */
+      --text-outline: 
+        0 1px 2px rgba(2, 6, 23, 0.95),
+        0 0 1px rgba(15, 23, 42, 0.9),
+        0 0 8px rgba(0, 0, 0, 0.8);
     }
 
     * { 
@@ -70,7 +73,7 @@
       background: var(--surface-1);
       border: 1px solid var(--border-hard);
       border-radius: 12px;
-      box-shadow: 0 0 40px rgba(0, 240, 255, 0.08), 0 30px 70px rgba(0, 0, 0, 0.95);
+      box-shadow: 0 0 40px rgba(0, 229, 255, 0.08), 0 30px 70px rgba(0, 0, 0, 0.95);
       overflow: hidden;
     }
 
@@ -222,13 +225,13 @@
     .brand-tag {
       font-size: 10px;
       padding: 3px 8px;
-      background: rgba(0, 240, 255, 0.15);
+      background: rgba(0, 229, 255, 0.15);
       color: var(--cyan-bright);
       border: 1px solid var(--cyan-bright);
       border-radius: 4px;
       font-weight: 800;
       letter-spacing: 1px;
-      box-shadow: 0 0 8px rgba(0, 240, 255, 0.3);
+      box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
     }
 
     .nav-tabs {
@@ -257,10 +260,10 @@
     }
     .tab-item:hover { color: var(--text-pure); background: var(--surface-3); }
     .tab-item.active {
-      background: rgba(0, 240, 255, 0.12);
+      background: var(--tab-active-bg);
       color: var(--cyan-bright);
-      border-color: rgba(0, 240, 255, 0.5);
-      box-shadow: 0 0 14px rgba(0, 240, 255, 0.2);
+      border-color: var(--cyan-bright);
+      box-shadow: 0 0 14px rgba(0, 229, 255, 0.3);
     }
 
     .main-body { padding: 24px; }
@@ -269,7 +272,7 @@
 
     /* ================= CARDS & CONTAINERS ================= */
     .card {
-      background: var(--surface-2);
+      background: var(--surface-3);
       border: 1px solid var(--border-hard);
       border-radius: 10px;
       padding: 18px;
@@ -302,8 +305,8 @@
     th {
       text-align: left;
       padding: 12px 14px;
-      background: var(--surface-3);
-      color: var(--text-pure);
+      background: var(--row-alt-bg);
+      color: var(--text-med);
       font-size: 11px;
       font-weight: 900;
       text-transform: uppercase;
@@ -322,11 +325,11 @@
     tr:last-child td { border-bottom: none; }
     tr:hover { background: var(--surface-2); }
     tr.selected {
-      background: rgba(0, 240, 255, 0.08);
+      background: var(--row-selected-bg);
       border-left: 3px solid var(--cyan-bright);
     }
 
-    /* Sharp Badges (Exact 1:1 symmetry between Buy and Sell) */
+    /* Sharp Badges */
     .badge {
       display: inline-flex;
       align-items: center;
@@ -347,14 +350,10 @@
       color: var(--bear-bright);
       border: 1px solid var(--bear-border);
     }
-    .badge-sell .ico-arrow-down {
-      border-top-color: var(--bear-bright);
-    }
     .badge-be-on {
       background: var(--gold-bg);
       color: var(--gold-bright);
       border: 1px solid var(--gold-border);
-      box-shadow: 0 0 8px rgba(255, 196, 0, 0.25);
     }
     .badge-be-off {
       background: var(--surface-3);
@@ -369,7 +368,7 @@
       gap: 18px;
     }
     .tool-box {
-      background: var(--surface-2);
+      background: var(--surface-3);
       border: 1px solid var(--border-hard);
       border-radius: 10px;
       padding: 18px;
@@ -378,11 +377,11 @@
     .tool-header {
       font-size: 13px;
       font-weight: 900;
-      color: var(--text-pure);
+      color: var(--cyan-bright);
       margin-bottom: 14px;
       display: flex;
+      justify-content: space-between;
       align-items: center;
-      gap: 8px;
       text-transform: uppercase;
       letter-spacing: 0.8px;
       text-shadow: var(--text-outline);
@@ -398,13 +397,13 @@
       font-size: 12px;
       font-weight: 800;
       color: var(--text-pure);
-      width: 90px;
+      width: 110px;
       flex-shrink: 0;
       text-shadow: var(--text-outline);
     }
 
     input, select {
-      background: #020305;
+      background: var(--canvas-bg);
       border: 1px solid var(--border-hard);
       color: var(--text-pure);
       padding: 9px 12px;
@@ -418,7 +417,7 @@
     }
     input:focus, select:focus {
       border-color: var(--cyan-bright);
-      box-shadow: 0 0 10px rgba(0, 240, 255, 0.35);
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.35);
       background: #000000;
     }
 
@@ -441,28 +440,27 @@
       text-shadow: var(--text-outline);
     }
     .btn-blue {
-      background: rgba(0, 240, 255, 0.12);
+      background: var(--tab-active-bg);
       color: var(--cyan-bright);
-      border-color: rgba(0, 240, 255, 0.5);
-      box-shadow: 0 0 10px rgba(0, 240, 255, 0.15);
+      border-color: var(--cyan-bright);
     }
     .btn-blue:hover {
-      background: rgba(0, 240, 255, 0.22);
-      box-shadow: 0 0 16px rgba(0, 240, 255, 0.35);
+      background: rgba(0, 229, 255, 0.24);
+      box-shadow: 0 0 14px rgba(0, 229, 255, 0.4);
     }
     
     .btn-green {
-      background: var(--bull-bg);
+      background: rgba(8, 34, 18, 0.8);
       color: var(--bull-bright);
       border: 1px solid var(--bull-border);
     }
     .btn-green:hover {
-      background: rgba(0, 255, 136, 0.24);
-      box-shadow: 0 0 14px rgba(0, 255, 136, 0.4);
+      background: rgba(0, 230, 118, 0.24);
+      box-shadow: 0 0 14px rgba(0, 230, 118, 0.4);
     }
 
     .btn-red {
-      background: var(--bear-bg);
+      background: rgba(18, 8, 34, 0.8);
       color: var(--bear-bright);
       border: 1px solid var(--bear-border);
     }
@@ -471,13 +469,23 @@
       box-shadow: 0 0 14px rgba(255, 46, 77, 0.4);
     }
 
+    .btn-gold {
+      background: rgba(26, 42, 65, 0.8);
+      color: var(--gold-bright);
+      border: 1px solid var(--gold-border);
+    }
+    .btn-gold:hover {
+      background: rgba(255, 179, 0, 0.25);
+      box-shadow: 0 0 14px rgba(255, 179, 0, 0.4);
+    }
+
     .btn-neutral {
-      background: rgba(255, 255, 255, 0.05);
+      background: var(--surface-2);
       color: var(--text-pure);
       border-color: var(--border-hard);
     }
     .btn-neutral:hover {
-      background: rgba(255, 255, 255, 0.1);
+      background: var(--surface-highlight);
       border-color: var(--cyan-bright);
     }
 
@@ -494,18 +502,23 @@
     }
     .radar-card {
       display: grid;
-      grid-template-columns: 140px 80px 1fr 160px 100px;
+      grid-template-columns: 140px 80px 1fr 180px 140px;
       align-items: center;
       padding: 14px 18px;
-      background: #020305;
+      background: var(--canvas-bg);
       border: 1px solid var(--border-hard);
       border-radius: 8px;
       gap: 14px;
       transition: all 0.2s;
     }
+    .radar-card.editing {
+      background: var(--row-selected-bg);
+      border-color: var(--gold-bright);
+      box-shadow: 0 0 12px rgba(255, 179, 0, 0.2);
+    }
     .radar-card:hover {
       border-color: var(--cyan-bright);
-      box-shadow: 0 0 12px rgba(0, 240, 255, 0.15);
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.15);
     }
 
     .radar-symbol {
@@ -515,25 +528,18 @@
       letter-spacing: 0.5px;
       text-shadow: var(--text-outline);
     }
-    .radar-price-cur {
-      font-size: 11px;
-      color: var(--text-med);
-      margin-top: 2px;
-      font-weight: 600;
-      text-shadow: var(--text-outline);
-    }
 
     .radar-tf {
-      background: rgba(0, 240, 255, 0.08);
+      background: var(--surface-2);
       color: var(--cyan-bright);
-      border: 1px solid rgba(0, 240, 255, 0.4);
+      border: 1px solid var(--cyan-bright);
       padding: 5px 8px;
       border-radius: 5px;
       font-size: 12px;
       font-weight: 900;
       text-align: center;
       text-shadow: var(--text-outline);
-      box-shadow: 0 0 8px rgba(0, 240, 255, 0.15);
+      box-shadow: 0 0 8px rgba(0, 229, 255, 0.15);
     }
 
     .radar-conditions {
@@ -553,16 +559,16 @@
     .cond-val {
       font-family: monospace;
       color: var(--cyan-bright);
-      background: rgba(0, 240, 255, 0.08);
+      background: var(--surface-2);
       padding: 2px 7px;
       border-radius: 3px;
-      border: 1px solid rgba(0, 240, 255, 0.25);
+      border: 1px solid var(--border-hard);
       font-weight: 700;
     }
 
     .radar-atr-box {
-      background: rgba(0, 240, 255, 0.05);
-      border: 1px solid rgba(0, 240, 255, 0.3);
+      background: rgba(0, 229, 255, 0.05);
+      border: 1px solid rgba(0, 229, 255, 0.3);
       border-radius: 6px;
       padding: 6px 10px;
       font-size: 11px;
@@ -644,14 +650,14 @@
               <thead>
                 <tr>
                   <th width="34"><input type="checkbox" id="check-all" class="custom-cb" onchange="selectAll(this.checked)" checked></th>
-                  <th>Ticket</th>
-                  <th>Simbol</th>
-                  <th>Tipe</th>
-                  <th>Volume</th>
-                  <th>Open Price</th>
-                  <th>Stop Loss</th>
-                  <th>Take Profit</th>
-                  <th>Status Auto-BE</th>
+                  <th width="85">Ticket</th>
+                  <th width="90">Symbol</th>
+                  <th width="130">Type</th>
+                  <th width="85">Lots</th>
+                  <th width="95">Open</th>
+                  <th width="95">SL</th>
+                  <th width="95">TP</th>
+                  <th>Auto-BE</th>
                 </tr>
               </thead>
               <tbody>
@@ -660,33 +666,33 @@
                   <td><strong>#918231</strong></td>
                   <td><strong style="color:var(--text-pure);">EURUSD</strong></td>
                   <td><span class="badge badge-buy"><div class="ico ico-arrow-up"></div> BUY</span></td>
-                  <td>1.00 Lot</td>
+                  <td>1.00</td>
                   <td>1.08450</td>
-                  <td>1.08100</td>
-                  <td>1.09200</td>
-                  <td><span class="badge badge-be-on">TRIGGER @ 1.08800</span></td>
+                  <td><span style="color:var(--bear-bright);">1.08100</span></td>
+                  <td><span style="color:var(--bull-bright);">1.09200</span></td>
+                  <td><span class="badge badge-be-on">ON @ 1.08800</span></td>
                 </tr>
                 <tr class="selected">
                   <td><input type="checkbox" class="order-cb custom-cb" checked></td>
                   <td><strong>#918240</strong></td>
                   <td><strong style="color:var(--text-pure);">XAUUSD</strong></td>
                   <td><span class="badge badge-sell"><div class="ico ico-arrow-down"></div> SELL</span></td>
-                  <td>0.50 Lot</td>
+                  <td>0.50</td>
                   <td>2740.00</td>
-                  <td>2755.00</td>
-                  <td>2710.00</td>
+                  <td><span style="color:var(--bear-bright);">2755.00</span></td>
+                  <td><span style="color:var(--bull-bright);">2710.00</span></td>
                   <td><span class="badge badge-be-off">OFF</span></td>
                 </tr>
                 <tr>
                   <td><input type="checkbox" class="order-cb custom-cb"></td>
                   <td><strong>#918299</strong></td>
                   <td><strong style="color:var(--text-pure);">USDJPY</strong></td>
-                  <td><span class="badge badge-buy"><div class="ico ico-arrow-up"></div> BUY LIMIT</span></td>
-                  <td>0.20 Lot</td>
+                  <td><span class="badge" style="background:var(--gold-bg); color:var(--gold-bright); border:1px solid var(--gold-border);">BUY LIMIT</span></td>
+                  <td>0.20</td>
                   <td>153.100</td>
-                  <td>152.400</td>
-                  <td>154.500</td>
-                  <td><span class="badge badge-be-off">OFF</span></td>
+                  <td><span style="color:var(--bear-bright);">-</span></td>
+                  <td><span style="color:var(--bull-bright);">-</span></td>
+                  <td><span class="badge badge-be-off">-</span></td>
                 </tr>
               </tbody>
             </table>
@@ -702,47 +708,44 @@
           <!-- Box A: Bulk SL / TP -->
           <div class="tool-box">
             <div class="tool-header">
-              <div class="ico ico-crosshair"></div>
-              <span>BULK SL & TP PRICE MODIFIER</span>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <div class="ico ico-crosshair"></div>
+                <span>BULK PRICE MODIFIER</span>
+              </div>
             </div>
             
             <div class="form-row">
               <span class="form-label">STOP LOSS:</span>
               <input type="text" placeholder="Harga SL (misal 1.08000)" id="input-sl">
-              <button class="btn btn-red" style="width:110px;">SET SL</button>
+              <button class="btn btn-red" style="width:110px;" onclick="applySL()">SET SL</button>
             </div>
             
             <div class="form-row">
               <span class="form-label">TAKE PROFIT:</span>
               <input type="text" placeholder="Harga TP (misal 1.09500)" id="input-tp">
-              <button class="btn btn-green" style="width:110px;">SET TP</button>
+              <button class="btn btn-green" style="width:110px;" onclick="applyTP()">SET TP</button>
             </div>
           </div>
 
-          <!-- Box B: Auto Break Even -->
+          <!-- Box B: Break-Even Engine -->
           <div class="tool-box">
             <div class="tool-header">
-              <div class="ico ico-shield"></div>
-              <span>AUTO BREAK-EVEN (BE) ENGINE</span>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <div class="ico ico-shield"></div>
+                <span>BREAK-EVEN (BE) ENGINE</span>
+              </div>
+              <!-- Instant BE Spread Button -->
+              <button class="btn btn-gold btn-sm" onclick="applyInstantBE()">SET BE SPREAD</button>
             </div>
             
             <div class="form-row">
-              <span class="form-label">TRIGGER:</span>
+              <span class="form-label">TRIGGER PRICE:</span>
               <input type="text" placeholder="Harga trigger eksekusi BE..." id="input-be">
             </div>
             
-            <div class="form-row">
-              <span class="form-label">OFFSET:</span>
-              <select id="be-spread-mode">
-                <option>Otomatis (Open Price ± Realtime Spread)</option>
-                <option>Exact Open Price (+0 Point)</option>
-                <option>Custom Lock (+10 Points)</option>
-              </select>
-            </div>
-            
             <div style="display:flex; gap:10px; margin-top:12px;">
-              <button class="btn btn-blue" style="flex:1;">AKTIFKAN BE</button>
-              <button class="btn btn-neutral">NONAKTIFKAN</button>
+              <button class="btn btn-blue" style="flex:1;" onclick="applyAutoBE()">ACTIVATE BE TRIGGER</button>
+              <button class="btn btn-neutral" onclick="disableAutoBE()">DEACTIVATE</button>
             </div>
           </div>
 
@@ -757,137 +760,124 @@
           <div class="card-title">
             <span>DAFTAR PANTAUAN MULTI-SIMBOL AKTIF</span>
             <span style="display:flex; align-items:center; gap:6px; color:var(--bull-bright); font-size:11px; font-weight:800;">
-              <span class="pulse-dot"></span> RADAR LIVE RUNNING
+              <span class="pulse-dot"></span> REALTIME TICK BREAK ACTIVE
             </span>
           </div>
 
-          <div class="radar-list">
+          <div class="radar-list" id="radar-container">
             
             <!-- Item 1 -->
-            <div class="radar-card">
+            <div class="radar-card" id="radar-card-0">
               <div>
                 <div class="radar-symbol">EURUSD</div>
-                <div class="radar-price-cur">Bid: 1.08450</div>
               </div>
-              <div class="radar-tf">M15</div>
+              <div class="radar-tf">[M5]</div>
               <div class="radar-conditions">
                 <div class="cond-row">
-                  <div class="ico ico-arrow-up"></div>
-                  <span class="cond-bull">Bullish Engulfing:</span>
-                  <span>Jika Harga &lt;</span>
-                  <span class="cond-val">1.08200</span>
+                  <span class="cond-bull">Bullish:</span>
+                  <span class="cond-val">BEBAS (Any Price)</span>
                 </div>
                 <div class="cond-row">
-                  <div class="ico ico-arrow-down"></div>
-                  <span class="cond-bear">Bearish Engulfing:</span>
-                  <span>Jika Harga &gt;</span>
-                  <span class="cond-val">1.09100</span>
+                  <span class="cond-bear">Bearish:</span>
+                  <span class="cond-val">BEBAS (Any Price)</span>
                 </div>
               </div>
               <div class="radar-atr-box">
                 <strong>50% ATR(14)</strong><br>
-                Otomatis dihitung & dilampirkan ke notif
+                auto-included in alert
               </div>
               <div style="display:flex; justify-content:flex-end; gap:6px;">
-                <button class="btn btn-neutral btn-sm">EDIT</button>
-                <button class="btn btn-red btn-sm"><div class="ico ico-trash"></div></button>
+                <button class="btn btn-neutral btn-sm" onclick="editRadar(0, 'EURUSD', '5', 'ALL', 'ALL')">EDIT</button>
+                <button class="btn btn-red btn-sm" onclick="deleteRadar(this)"><div class="ico ico-trash"></div></button>
               </div>
             </div>
 
             <!-- Item 2 -->
-            <div class="radar-card">
+            <div class="radar-card" id="radar-card-1">
               <div>
                 <div class="radar-symbol">XAUUSD</div>
-                <div class="radar-price-cur">Bid: 2742.50</div>
               </div>
-              <div class="radar-tf">H1</div>
+              <div class="radar-tf">[H1]</div>
               <div class="radar-conditions">
                 <div class="cond-row">
-                  <div class="ico ico-arrow-up"></div>
-                  <span class="cond-bull">Bullish Engulfing:</span>
-                  <span>Jika Harga &lt;</span>
+                  <span class="cond-bull">Bullish jika &lt;</span>
                   <span class="cond-val">2720.00</span>
                 </div>
                 <div class="cond-row">
-                  <div class="ico ico-arrow-down"></div>
-                  <span class="cond-bear">Bearish Engulfing:</span>
-                  <span>Jika Harga &gt;</span>
+                  <span class="cond-bear">Bearish jika &gt;</span>
                   <span class="cond-val">2765.00</span>
                 </div>
               </div>
               <div class="radar-atr-box">
                 <strong>50% ATR(14)</strong><br>
-                Otomatis dihitung & dilampirkan ke notif
+                auto-included in alert
               </div>
               <div style="display:flex; justify-content:flex-end; gap:6px;">
-                <button class="btn btn-neutral btn-sm">EDIT</button>
-                <button class="btn btn-red btn-sm"><div class="ico ico-trash"></div></button>
+                <button class="btn btn-neutral btn-sm" onclick="editRadar(1, 'XAUUSD', '60', '2720.00', '2765.00')">EDIT</button>
+                <button class="btn btn-red btn-sm" onclick="deleteRadar(this)"><div class="ico ico-trash"></div></button>
               </div>
             </div>
 
           </div>
         </div>
 
-        <!-- Add Form & Push Preview -->
+        <!-- Add / Edit Form & Push Preview -->
         <div class="action-deck">
           
           <div class="tool-box">
             <div class="tool-header">
-              <div class="ico ico-plus" style="color:var(--cyan-bright);"></div>
-              <span>TAMBAH PANTAUAN SIMBOL BARU</span>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <div class="ico ico-plus" style="color:var(--cyan-bright);" id="form-icon"></div>
+                <span id="form-title">ADD SYMBOL TO RADAR</span>
+              </div>
             </div>
             
             <div class="form-row">
-              <span class="form-label">SIMBOL & TF:</span>
-              <input type="text" placeholder="Contoh: GBPUSD" value="GBPUSD" style="width:55%;">
-              <select style="width:45%;">
-                <option>M5</option>
-                <option selected>M15</option>
-                <option>M30</option>
-                <option>H1</option>
-                <option>H4</option>
-                <option>D1</option>
-              </select>
+              <span class="form-label">SYMBOL:</span>
+              <input type="text" placeholder="Contoh: GBPUSD" value="GBPUSD" style="width:55%;" id="new-symbol">
+              <span class="form-label" style="width:70px; text-align:right;">TF (MIN):</span>
+              <input type="text" value="5" style="width:45%;" id="new-tf">
             </div>
             
             <div class="form-row">
               <span class="form-label" style="color:var(--bull-bright);">BULLISH &lt; :</span>
-              <input type="text" placeholder="Trigger harga bawah (misal: 1.25800)">
+              <input type="text" placeholder="Harga batas, 'ALL' utk bebas, kosong = OFF" id="bull-price">
             </div>
             
             <div class="form-row">
               <span class="form-label" style="color:var(--bear-bright);">BEARISH &gt; :</span>
-              <input type="text" placeholder="Trigger harga atas (misal: 1.27200)">
+              <input type="text" placeholder="Harga batas, 'ALL' utk bebas, kosong = OFF" id="bear-price">
             </div>
 
-            <div class="form-row">
-              <span class="form-label">ATR PERIOD:</span>
-              <input type="number" value="14" style="width:80px;">
-              <span style="font-size:11px; color:var(--text-med);">Kalkulasi 50% ATR previous candle</span>
+            <div style="font-size:11px; color:var(--text-med); margin-bottom:10px;">
+              *Isi harga, ketik 'ALL' utk bebas, atau kosongkan utk OFF
             </div>
             
-            <button class="btn btn-blue" style="width:100%; margin-top:8px;">
-              <div class="ico ico-plus"></div> SIMPAN KE RADAR PANTAUAN
-            </button>
+            <div style="display:flex; gap:8px;" id="form-actions">
+              <button class="btn btn-blue" style="flex:1;" onclick="saveRadar()" id="btn-save-radar">
+                <div class="ico ico-plus"></div> + SAVE TO ENGULFING RADAR
+              </button>
+            </div>
           </div>
 
-          <!-- Alert Format Preview -->
+          <!-- Alert Format Preview & Test Alert -->
           <div class="tool-box">
             <div class="tool-header">
-              <div class="ico ico-bolt" style="background:var(--gold-bright);"></div>
-              <span>PREVIEW FORMAT NOTIFIKASI MOBILE (PUSH ALERT)</span>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <div class="ico ico-bolt" style="background:var(--gold-bright);"></div>
+                <span>MOBILE PUSH ALERT PREVIEW</span>
+              </div>
+              <button class="btn btn-gold btn-sm" onclick="testAlert()">TEST ALERT</button>
             </div>
             
             <div class="notif-terminal">
-              [ENGULFING RADAR ALERT]<br>
-              Simbol: <span class="hl-title">EURUSD (M15)</span><br>
-              Pola: <span class="hl-bull">Strong Bullish Engulfing</span><br>
-              Harga Trigger: 1.08180 (Syarat: &lt; 1.08200)<br>
+              [ENGULFING ALERT] <span class="hl-title">EURUSD (M5)</span><br>
+              Type: <span class="hl-bull">Realtime Strong BULLISH Break</span><br>
+              Price: 1.08250<br>
+              <span class="hl-atr">50% ATR(14): 11.5 pips (115 pts)</span><br>
+              Suggested SL: 1.08135 (Low - 50% ATR)<br>
               -------------------------------------<br>
-              Engulfed Bar Range: 14.2 pips<br>
-              ATR(14) Bar Sebelumnya: 20.0 pips<br>
-              <span class="hl-atr">50% ATR: 10.0 pips (0.00100)</span><br>
-              Waktu Server: 2026.11.10 09:45:00
+              Broken Range: 14.5 pips (Instantly Triggered)
             </div>
           </div>
 
@@ -899,6 +889,8 @@
   </div>
 
   <script>
+    let editingIndex = -1;
+
     function switchNav(tabId, el) {
       document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.tab-item').forEach(b => b.classList.remove('active'));
@@ -919,6 +911,92 @@
         this.closest('tr').classList.toggle('selected', this.checked);
       });
     });
+
+    function applySL() {
+      const sl = document.getElementById('input-sl').value;
+      if (!sl) return alert('Silakan masukkan harga Stop Loss.');
+      const selected = document.querySelectorAll('.order-cb:checked').length;
+      alert(`Menerapkan SL: ${sl} pada ${selected} order terpilih.`);
+    }
+
+    function applyTP() {
+      const tp = document.getElementById('input-tp').value;
+      if (!tp) return alert('Silakan masukkan harga Take Profit.');
+      const selected = document.querySelectorAll('.order-cb:checked').length;
+      alert(`Menerapkan TP: ${tp} pada ${selected} order terpilih.`);
+    }
+
+    function applyInstantBE() {
+      const selected = document.querySelectorAll('.order-cb:checked').length;
+      alert(`Instant BE (+/- Spread) berhasil diterapkan ke ${selected} posisi terpilih.`);
+    }
+
+    function applyAutoBE() {
+      const trigger = document.getElementById('input-be').value;
+      if (!trigger) return alert('Silakan masukkan harga trigger untuk Auto BE.');
+      const selected = document.querySelectorAll('.order-cb:checked').length;
+      alert(`Auto-BE Trigger diaktifkan pada harga ${trigger} untuk ${selected} order terpilih.`);
+    }
+
+    function disableAutoBE() {
+      const selected = document.querySelectorAll('.order-cb:checked').length;
+      alert(`Auto-BE dinonaktifkan untuk ${selected} order terpilih.`);
+    }
+
+    function editRadar(idx, sym, tf, bull, bear) {
+      editingIndex = idx;
+      document.querySelectorAll('.radar-card').forEach(c => c.classList.remove('editing'));
+      const card = document.getElementById(`radar-card-${idx}`);
+      if (card) card.classList.add('editing');
+
+      document.getElementById('form-title').innerText = 'EDIT SELECTED RADAR';
+      document.getElementById('form-title').style.color = 'var(--gold-bright)';
+      document.getElementById('new-symbol').value = sym;
+      document.getElementById('new-tf').value = tf;
+      document.getElementById('bull-price').value = bull;
+      document.getElementById('bear-price').value = bear;
+
+      document.getElementById('form-actions').innerHTML = `
+        <button class="btn btn-gold" style="flex:1;" onclick="saveRadar()">UPDATE SELECTED RADAR</button>
+        <button class="btn btn-neutral" style="width:100px;" onclick="cancelEdit()">CANCEL</button>
+      `;
+    }
+
+    function cancelEdit() {
+      editingIndex = -1;
+      document.querySelectorAll('.radar-card').forEach(c => c.classList.remove('editing'));
+      document.getElementById('form-title').innerText = 'ADD SYMBOL TO RADAR';
+      document.getElementById('form-title').style.color = 'var(--cyan-bright)';
+      document.getElementById('new-symbol').value = 'GBPUSD';
+      document.getElementById('new-tf').value = '5';
+      document.getElementById('bull-price').value = '';
+      document.getElementById('bear-price').value = '';
+
+      document.getElementById('form-actions').innerHTML = `
+        <button class="btn btn-blue" style="flex:1;" onclick="saveRadar()" id="btn-save-radar">
+          <div class="ico ico-plus"></div> + SAVE TO ENGULFING RADAR
+        </button>
+      `;
+    }
+
+    function saveRadar() {
+      const sym = document.getElementById('new-symbol').value;
+      const tf = document.getElementById('new-tf').value;
+      if (editingIndex >= 0) {
+        alert(`Pantauan simbol ${sym} (TF: ${tf}) berhasil diperbarui!`);
+        cancelEdit();
+      } else {
+        alert(`Simbol ${sym} (TF: ${tf}) berhasil ditambahkan ke Radar Pantauan!`);
+      }
+    }
+
+    function deleteRadar(btn) {
+      btn.closest('.radar-card').remove();
+    }
+
+    function testAlert() {
+      alert(`[TEST NOTIFICATION SENT]\nSymbol: EURUSD (M5)\nType: Realtime Strong BULLISH Break\n50% ATR: 11.5 pips (115 pts)\nSuggested SL: 1.08135\nStatus: Push Alert Sukses!`);
+    }
   </script>
 </body>
 </html>
