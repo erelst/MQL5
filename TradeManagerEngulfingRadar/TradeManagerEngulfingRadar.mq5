@@ -83,6 +83,7 @@ SSelectedOrder    g_selected_orders[];
 int               g_active_tab = 1; // 1 = Orders Tab, 2 = Radar Tab
 int               g_orders_page = 0;
 int               g_editing_radar_idx = -1; // -1 = Add mode, >= 0 = Edit mode index
+ENUM_BE_OFFSET_MODE g_be_offset_mode = BE_OFFSET_AUTO_SPREAD; // Selected Offset Mode for Trigger
 const int         MAX_ROWS_PER_PAGE = 8;
 string            g_prefix = "TMER_";
 
@@ -280,6 +281,20 @@ void OnChartEvent(const int id,
          else Alert("Masukkan harga Take Profit yang valid!");
          return;
       }
+      else if(sparam == g_prefix + "BTN_BE_MODE")
+      {
+         // Cycle through Offset modes: Auto Spread -> Exact Zero -> Custom Lock
+         if(g_be_offset_mode == BE_OFFSET_AUTO_SPREAD)
+            g_be_offset_mode = BE_OFFSET_ZERO;
+         else if(g_be_offset_mode == BE_OFFSET_ZERO)
+            g_be_offset_mode = BE_OFFSET_CUSTOM_POINTS;
+         else
+            g_be_offset_mode = BE_OFFSET_AUTO_SPREAD;
+            
+         CreateDashboardUI();
+         UpdateDashboardUI();
+         return;
+      }
       else if(sparam == g_prefix + "BTN_INSTANT_BE")
       {
          ApplyInstantBESpread();
@@ -292,7 +307,7 @@ void OnChartEvent(const int id,
          double val_be = StringToDouble(str_be);
          if(val_be > 0)
          {
-            ActivateBulkAutoBE(val_be, BE_OFFSET_AUTO_SPREAD, 0);
+            ActivateBulkAutoBE(val_be, g_be_offset_mode, 10);
             UpdateDashboardUI();
          }
          else Alert("Masukkan harga trigger BE yang valid!");
@@ -1236,11 +1251,26 @@ void CreateDashboardUI()
       // Instant BE button (Direct Move to Open +/- Spread)
       CreateButton("BTN_INSTANT_BE", box_b_x + 210, deck_y + 8, 155, 22, "SET BE SPREAD", C'26,42,65', CLR_GOLD_NEON, CLR_GOLD_NEON);
       
-      CreateLabel("LBL_INP_BE", box_b_x + 12, deck_y + 42, "TRIGGER PRICE:", CLR_TEXT_PURE, 8, true);
-      CreateEdit("INP_BE_TRIG", box_b_x + 125, deck_y + 38, 240, 24, "", CLR_CANVAS_BG, CLR_TEXT_PURE);
+      CreateLabel("LBL_INP_BE", box_b_x + 12, deck_y + 40, "TRIGGER PRICE:", CLR_TEXT_PURE, 8, true);
+      CreateEdit("INP_BE_TRIG", box_b_x + 125, deck_y + 36, 240, 22, "", CLR_CANVAS_BG, CLR_TEXT_PURE);
       
-      CreateButton("BTN_APPLY_BE", box_b_x + 12, deck_y + 78, 190, 26, "ACTIVATE BE TRIGGER", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
-      CreateButton("BTN_CANCEL_BE", box_b_x + 210, deck_y + 78, 155, 26, "DEACTIVATE", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
+      CreateLabel("LBL_BE_MODE", box_b_x + 12, deck_y + 68, "BE OFFSET MODE:", CLR_TEXT_MED, 8, true);
+      string mode_str = "AUTO SPREAD (+/- Spread)";
+      color mode_clr = CLR_CYAN_NEON;
+      if(g_be_offset_mode == BE_OFFSET_ZERO)
+      {
+         mode_str = "EXACT OPEN (+0 pts)";
+         mode_clr = CLR_TEXT_PURE;
+      }
+      else if(g_be_offset_mode == BE_OFFSET_CUSTOM_POINTS)
+      {
+         mode_str = "CUSTOM LOCK (+10 pts)";
+         mode_clr = CLR_GOLD_NEON;
+      }
+      CreateButton("BTN_BE_MODE", box_b_x + 125, deck_y + 64, 240, 22, mode_str, CLR_CANVAS_BG, mode_clr, CLR_BORDER_HARD);
+      
+      CreateButton("BTN_APPLY_BE", box_b_x + 12, deck_y + 98, 190, 26, "ACTIVATE BE TRIGGER", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
+      CreateButton("BTN_CANCEL_BE", box_b_x + 210, deck_y + 98, 155, 26, "DEACTIVATE", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
    }
    else if(g_active_tab == 2)
    {
