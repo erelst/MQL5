@@ -72,6 +72,31 @@
       overflow: hidden;
     }
 
+    /* Pure CSS Icons */
+    .ico {
+      display: inline-block;
+      position: relative;
+      width: 14px;
+      height: 14px;
+      vertical-align: middle;
+      flex-shrink: 0;
+      filter: drop-shadow(0 1px 2px #000);
+    }
+
+    .ico-bolt {
+      width: 10px;
+      height: 16px;
+      background: var(--cyan-bright);
+      clip-path: polygon(55% 0%, 0% 55%, 45% 55%, 35% 100%, 100% 45%, 55% 45%);
+    }
+
+    .ico-save {
+      width: 13px;
+      height: 13px;
+      background: currentColor;
+      clip-path: polygon(0% 0%, 75% 0%, 100% 25%, 100% 100%, 0% 100%);
+    }
+
     .top-bar {
       display: flex;
       justify-content: space-between;
@@ -290,7 +315,8 @@
   <div class="app-container">
     <div class="top-bar">
       <div class="brand">
-        <span>⚡ ENGULFING AUTO TRADER</span>
+        <div class="ico ico-bolt"></div>
+        <span>ENGULFING AUTO TRADER</span>
         <span class="brand-tag">ON-CHART AUTO EXECUTION</span>
       </div>
       <div class="status-badge" id="status-badge" onclick="togglePower()">
@@ -372,7 +398,7 @@
       <!-- Action Button -->
       <div style="margin-bottom: 16px;">
         <button class="btn btn-blue" onclick="saveSettings()">
-          💾 APPLY & SAVE SETTINGS
+          <div class="ico ico-save"></div> APPLY & SAVE SETTINGS
         </button>
       </div>
 
@@ -387,8 +413,8 @@
           Symbol: <span class="hl-title">EURUSD</span> | TF: <span class="hl-title" id="disp-tf">M5</span> | Mode: <span class="hl-title" id="disp-dir">BUY & SELL</span><br>
           Target Ratio: <span class="hl-title" id="disp-rr">1:2.0 RR</span> | Buffer SL: <span class="hl-atr">50% ATR(14)</span><br>
           ----------------------------------------------------------------<br>
-          🟢 <strong>BUY BREAK</strong> : SL = Low[1] - 50% ATR &nbsp;|&nbsp; TP = Ask + (Jarak_SL * <span id="disp-rr-buy">2.0</span>)<br>
-          🔴 <strong>SELL BREAK</strong>: SL = High[1] + 50% ATR + Spread &nbsp;|&nbsp; TP = Bid - (Jarak_SL * <span id="disp-rr-sell">2.0</span>)
+          <span class="hl-bull">[BUY BREAK]</span> : SL = Low[1] - 50% ATR &nbsp;|&nbsp; TP = Ask + (Jarak_SL * <span id="disp-rr-buy">2.0</span>)<br>
+          <span class="hl-bear">[SELL BREAK]</span>: SL = High[1] + 50% ATR + Spread &nbsp;|&nbsp; TP = Bid - (Jarak_SL * <span id="disp-rr-sell">2.0</span>)
         </div>
       </div>
     </div>
