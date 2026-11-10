@@ -602,7 +602,7 @@ void CreateDashboardUI()
    int root_x = 20;
    int root_y = 20;
    int win_w  = 540;
-   int win_h  = 430;
+   int win_h  = 460;
    
    // Outer Pitch-black window
    CreateRect("WIN_BG", root_x, root_y, win_w, win_h, CLR_PANEL_BG, CLR_BORDER_HARD);
@@ -634,14 +634,20 @@ void CreateDashboardUI()
    CreateButton("BTN_DIR_BUY",  root_x + 248, row1_y + 11, 120, 26, "BUY ONLY",  btn_buy_bg,  btn_buy_cl,  btn_buy_cl);
    CreateButton("BTN_DIR_SELL", root_x + 376, row1_y + 11, 120, 26, "SELL ONLY", btn_sell_bg, btn_sell_cl, btn_sell_cl);
    
-   // Row 2: Strategy Inputs (RR Ratio, TF, Lot, Auto Trail)
-   int row2_y = row1_y + 58;
-   CreateRect("CARD_INPUTS", root_x + 14, row2_y, win_w - 28, 160, CLR_CARD_BG, CLR_BORDER_HARD);
+   // Row 2: Strategy Inputs (Form Grid Rapi & Sejajar)
+   int row2_y = row1_y + 56;
+   CreateRect("CARD_INPUTS", root_x + 14, row2_y, win_w - 28, 195, CLR_CARD_BG, CLR_BORDER_HARD);
    
-   CreateLabel("LBL_RR", root_x + 24, row2_y + 14, "RISK REWARD (1:X):", CLR_TEXT_PURE, 8, true);
-   CreateEdit("INP_RR", root_x + 160, row2_y + 10, 80, 22, DoubleToString(g_risk_reward_ratio, 2), CLR_CANVAS_BG, CLR_CYAN_NEON);
+   // Definisi Kolom Sejajar:
+   // Kolom 1 (Kiri): Label di x = root_x + 24, Kontrol di x = root_x + 148, Lebar Kontrol = 110
+   // Kolom 2 (Kanan): Label di x = root_x + 276, Kontrol di x = root_x + 396, Lebar Kontrol = 110
    
-   CreateLabel("LBL_TF", root_x + 265, row2_y + 14, "TIMEFRAME (MIN):", CLR_TEXT_PURE, 8, true);
+   // Baris A: Risk Reward & Timeframe (y = row2_y + 14)
+   int form_r1_y = row2_y + 14;
+   CreateLabel("LBL_RR", root_x + 24, form_r1_y + 4, "RISK REWARD (1:X):", CLR_TEXT_PURE, 8, true);
+   CreateEdit("INP_RR", root_x + 148, form_r1_y, 110, 22, DoubleToString(g_risk_reward_ratio, 2), CLR_CANVAS_BG, CLR_CYAN_NEON);
+   
+   CreateLabel("LBL_TF", root_x + 276, form_r1_y + 4, "TIMEFRAME (MIN):", CLR_TEXT_PURE, 8, true);
    int tf_min = (int)g_timeframe;
    if(g_timeframe == PERIOD_M1) tf_min = 1;
    else if(g_timeframe == PERIOD_M5) tf_min = 5;
@@ -650,40 +656,47 @@ void CreateDashboardUI()
    else if(g_timeframe == PERIOD_H1) tf_min = 60;
    else if(g_timeframe == PERIOD_H4) tf_min = 240;
    else if(g_timeframe == PERIOD_D1) tf_min = 1440;
-   CreateEdit("INP_TF", root_x + 400, row2_y + 10, 80, 22, IntegerToString(tf_min), CLR_CANVAS_BG, CLR_CYAN_NEON);
+   CreateEdit("INP_TF", root_x + 396, form_r1_y, 110, 22, IntegerToString(tf_min), CLR_CANVAS_BG, CLR_CYAN_NEON);
    
-   CreateLabel("LBL_LOT_MODE", root_x + 24, row2_y + 42, "LOT MODE:", CLR_TEXT_PURE, 8, true);
+   // Baris B: Lot Mode & Nilai Lot (y = row2_y + 48)
+   int form_r2_y = row2_y + 48;
+   CreateLabel("LBL_LOT_MODE", root_x + 24, form_r2_y + 4, "LOT MODE:", CLR_TEXT_PURE, 8, true);
    string lot_mode_str = (g_lot_mode == LOT_FIXED) ? "FIXED LOT" : "% RISK / SL";
    color lot_mode_clr = (g_lot_mode == LOT_FIXED) ? CLR_CYAN_NEON : CLR_GOLD_NEON;
-   CreateButton("BTN_TOGGLE_LOT_MODE", root_x + 120, row2_y + 38, 110, 22, lot_mode_str, CLR_CANVAS_BG, lot_mode_clr, CLR_BORDER_HARD);
+   CreateButton("BTN_TOGGLE_LOT_MODE", root_x + 148, form_r2_y, 110, 22, lot_mode_str, CLR_CANVAS_BG, lot_mode_clr, CLR_BORDER_HARD);
    
    string lot_lbl_str = (g_lot_mode == LOT_FIXED) ? "LOT VALUE:" : "% RISK:";
    double lot_val_disp = (g_lot_mode == LOT_FIXED) ? g_fixed_lot : g_risk_pct;
-   CreateLabel("LBL_LOT_VAL", root_x + 245, row2_y + 42, lot_lbl_str, CLR_TEXT_PURE, 8, true);
-   CreateEdit("INP_LOT", root_x + 340, row2_y + 38, 140, 22, DoubleToString(lot_val_disp, 2), CLR_CANVAS_BG, CLR_TEXT_PURE);
+   CreateLabel("LBL_LOT_VAL", root_x + 276, form_r2_y + 4, lot_lbl_str, CLR_TEXT_PURE, 8, true);
+   CreateEdit("INP_LOT", root_x + 396, form_r2_y, 110, 22, DoubleToString(lot_val_disp, 2), CLR_CANVAS_BG, CLR_TEXT_PURE);
    
-   // Auto Trail SL/TP Settings Row (Trigger % & Multiplier editable)
-   CreateLabel("LBL_TRAIL", root_x + 24, row2_y + 70, "AUTO TRAIL:", CLR_TEXT_PURE, 8, true);
+   // Baris C: Auto Trail Toggle & Parameter Trailing (y = row2_y + 82)
+   int form_r3_y = row2_y + 82;
+   CreateLabel("LBL_TRAIL", root_x + 24, form_r3_y + 4, "AUTO TRAIL:", CLR_TEXT_PURE, 8, true);
    string trail_mode_str = g_enable_trail ? "ON" : "OFF";
    color trail_mode_clr = g_enable_trail ? CLR_GOLD_NEON : CLR_TEXT_MED;
-   CreateButton("BTN_TOGGLE_TRAIL", root_x + 105, row2_y + 66, 50, 22, trail_mode_str, CLR_CANVAS_BG, trail_mode_clr, CLR_BORDER_HARD);
+   CreateButton("BTN_TOGGLE_TRAIL", root_x + 148, form_r3_y, 110, 22, trail_mode_str, CLR_CANVAS_BG, trail_mode_clr, CLR_BORDER_HARD);
    
-   CreateLabel("LBL_TRAIL_PCT", root_x + 165, row2_y + 70, "SISA TP (%):", CLR_TEXT_MED, 8, true);
-   CreateEdit("INP_TRAIL_PCT", root_x + 250, row2_y + 66, 55, 22, DoubleToString(g_trail_trigger_pct, 1), CLR_CANVAS_BG, CLR_GOLD_NEON);
+   CreateLabel("LBL_TRAIL_PCT", root_x + 276, form_r3_y + 4, "SISA TP (%):", CLR_TEXT_MED, 8, true);
+   CreateEdit("INP_TRAIL_PCT", root_x + 396, form_r3_y, 110, 22, DoubleToString(g_trail_trigger_pct, 1), CLR_CANVAS_BG, CLR_GOLD_NEON);
    
-   CreateLabel("LBL_ATR_MULT_LBL", root_x + 315, row2_y + 70, "MIN ATR (X):", CLR_TEXT_MED, 8, true);
-   CreateEdit("INP_ATR_MULT", root_x + 400, row2_y + 66, 80, 22, DoubleToString(g_atr_multiplier, 1), CLR_CANVAS_BG, CLR_CYAN_NEON);
+   // Baris D: Min ATR Multiplier & Reserved/Helper (y = row2_y + 116)
+   int form_r4_y = row2_y + 116;
+   CreateLabel("LBL_ATR_MULT_LBL", root_x + 24, form_r4_y + 4, "MIN ATR (X):", CLR_TEXT_MED, 8, true);
+   CreateEdit("INP_ATR_MULT", root_x + 148, form_r4_y, 110, 22, DoubleToString(g_atr_multiplier, 1), CLR_CANVAS_BG, CLR_CYAN_NEON);
    
-   CreateLabel("LBL_BULL_MAX", root_x + 24, row2_y + 100, "BUY HARGA < :", CLR_BULL_NEON, 8, true);
+   // Baris E: Filter Harga Buy & Filter Harga Sell (y = row2_y + 150)
+   int form_r5_y = row2_y + 150;
+   CreateLabel("LBL_BULL_MAX", root_x + 24, form_r5_y + 4, "BUY HARGA < :", CLR_BULL_NEON, 8, true);
    string str_bmax = (g_bull_price_max > 0) ? DoubleToString(g_bull_price_max, _Digits) : "ALL";
-   CreateEdit("INP_BULL_MAX", root_x + 160, row2_y + 96, 110, 22, str_bmax, CLR_CANVAS_BG, CLR_TEXT_PURE);
+   CreateEdit("INP_BULL_MAX", root_x + 148, form_r5_y, 110, 22, str_bmax, CLR_CANVAS_BG, CLR_TEXT_PURE);
    
-   CreateLabel("LBL_BEAR_MIN", root_x + 290, row2_y + 100, "SELL HARGA > :", CLR_BEAR_NEON, 8, true);
+   CreateLabel("LBL_BEAR_MIN", root_x + 276, form_r5_y + 4, "SELL HARGA > :", CLR_BEAR_NEON, 8, true);
    string str_smin = (g_bear_price_min > 0) ? DoubleToString(g_bear_price_min, _Digits) : "ALL";
-   CreateEdit("INP_BEAR_MIN", root_x + 400, row2_y + 96, 110, 22, str_smin, CLR_CANVAS_BG, CLR_TEXT_PURE);
+   CreateEdit("INP_BEAR_MIN", root_x + 396, form_r5_y, 110, 22, str_smin, CLR_CANVAS_BG, CLR_TEXT_PURE);
    
    // Row 3: Action Buttons
-   int row3_y = row2_y + 170;
+   int row3_y = row2_y + 205;
    CreateButton("BTN_SAVE_CONFIG", root_x + 14, row3_y, win_w - 28, 28, "APPLY & SAVE SETTINGS", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
    
    // Row 4: Live Info Terminal Preview

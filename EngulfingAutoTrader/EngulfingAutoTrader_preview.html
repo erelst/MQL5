@@ -385,11 +385,17 @@
 
           <div class="form-row">
             <span class="form-label" style="color:var(--gold-bright);">AUTO TRAIL:</span>
-            <button class="btn-toggle active-both" id="btn-trail-toggle" onclick="toggleTrail()" style="width:70px;">ON</button>
-            <span class="form-label" style="width:70px; text-align:right;">SISA %:</span>
-            <input type="text" value="5.0" id="inp-trail-pct" style="width:55px;" oninput="updateLiveCalculation()">
-            <span class="form-label" style="width:75px; text-align:right;">MIN ATR:</span>
-            <input type="text" value="2.0" id="inp-atr-mult" style="width:55px;" oninput="updateLiveCalculation()">
+            <button class="btn-toggle active-both" id="btn-trail-toggle" onclick="toggleTrail()" style="width:100px; flex-shrink: 0;">ON</button>
+          </div>
+
+          <div class="form-row">
+            <span class="form-label" style="color:var(--gold-bright);">SISA TP (%):</span>
+            <input type="text" value="5.0" id="inp-trail-pct" oninput="updateLiveCalculation()">
+          </div>
+
+          <div class="form-row">
+            <span class="form-label" style="color:var(--cyan-bright);">MIN ATR (X):</span>
+            <input type="text" value="2.0" id="inp-atr-mult" oninput="updateLiveCalculation()">
           </div>
 
           <div class="form-row">
