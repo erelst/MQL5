@@ -1542,7 +1542,11 @@ void SaveStateToFile()
       FileWriteInteger(handle, total_radar);
       for(int i = 0; i < total_radar; i++)
       {
-         FileWriteString(handle, g_radar_symbols[i].symbol);
+         int sym_len = StringLen(g_radar_symbols[i].symbol);
+         FileWriteInteger(handle, sym_len);
+         if(sym_len > 0)
+            FileWriteString(handle, g_radar_symbols[i].symbol, sym_len);
+            
          FileWriteInteger(handle, (int)g_radar_symbols[i].timeframe);
          FileWriteInteger(handle, g_radar_symbols[i].bull_enabled ? 1 : 0);
          FileWriteDouble(handle, g_radar_symbols[i].bull_price_max);
@@ -1557,7 +1561,12 @@ void SaveStateToFile()
       for(int i = 0; i < total_be; i++)
       {
          FileWriteLong(handle, (long)g_auto_be_list[i].ticket);
-         FileWriteString(handle, g_auto_be_list[i].symbol);
+         
+         int sym_len = StringLen(g_auto_be_list[i].symbol);
+         FileWriteInteger(handle, sym_len);
+         if(sym_len > 0)
+            FileWriteString(handle, g_auto_be_list[i].symbol, sym_len);
+            
          FileWriteInteger(handle, (int)g_auto_be_list[i].pos_type);
          FileWriteDouble(handle, g_auto_be_list[i].trigger_price);
          FileWriteInteger(handle, (int)g_auto_be_list[i].offset_mode);
@@ -1587,7 +1596,12 @@ void LoadStateFromFile()
       ArrayResize(g_radar_symbols, total_radar);
       for(int i = 0; i < total_radar; i++)
       {
-         g_radar_symbols[i].symbol         = FileReadString(handle);
+         int sym_len = FileReadInteger(handle);
+         if(sym_len > 0)
+            g_radar_symbols[i].symbol = FileReadString(handle, sym_len);
+         else
+            g_radar_symbols[i].symbol = "";
+            
          g_radar_symbols[i].timeframe      = (ENUM_TIMEFRAMES)FileReadInteger(handle);
          g_radar_symbols[i].bull_enabled   = (FileReadInteger(handle) == 1);
          g_radar_symbols[i].bull_price_max = FileReadDouble(handle);
@@ -1605,7 +1619,13 @@ void LoadStateFromFile()
       {
          g_auto_be_list[i].ticket        = (ulong)FileReadLong(handle);
          g_auto_be_list[i].is_position   = true;
-         g_auto_be_list[i].symbol        = FileReadString(handle);
+         
+         int sym_len = FileReadInteger(handle);
+         if(sym_len > 0)
+            g_auto_be_list[i].symbol = FileReadString(handle, sym_len);
+         else
+            g_auto_be_list[i].symbol = "";
+            
          g_auto_be_list[i].pos_type      = (ENUM_POSITION_TYPE)FileReadInteger(handle);
          g_auto_be_list[i].trigger_price = FileReadDouble(handle);
          g_auto_be_list[i].offset_mode   = (ENUM_BE_OFFSET_MODE)FileReadInteger(handle);

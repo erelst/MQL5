@@ -966,7 +966,11 @@ void SaveStateToFile()
       
       for(int i = 0; i < total_rules; i++)
       {
-         FileWriteString(handle, g_rules[i].symbol);
+         int sym_len = StringLen(g_rules[i].symbol);
+         FileWriteInteger(handle, sym_len);
+         if(sym_len > 0)
+            FileWriteString(handle, g_rules[i].symbol, sym_len);
+            
          FileWriteInteger(handle, (int)g_rules[i].direction);
          FileWriteDouble(handle, g_rules[i].risk_reward_ratio);
          FileWriteInteger(handle, (int)g_rules[i].timeframe);
@@ -1017,7 +1021,12 @@ void LoadStateFromFile()
       
       for(int i = 0; i < total_rules; i++)
       {
-         g_rules[i].symbol            = FileReadString(handle);
+         int sym_len = FileReadInteger(handle);
+         if(sym_len > 0)
+            g_rules[i].symbol = FileReadString(handle, sym_len);
+         else
+            g_rules[i].symbol = "";
+            
          g_rules[i].direction         = (ENUM_TRADE_DIRECTION)FileReadInteger(handle);
          g_rules[i].risk_reward_ratio = FileReadDouble(handle);
          g_rules[i].timeframe         = (ENUM_TIMEFRAMES)FileReadInteger(handle);
