@@ -49,6 +49,13 @@ EA mengirimkan alert pop-up dan push notifikasi ke HP Anda pada momen penting ek
 
 ---
 
+### 5. State Persistence (Pengaturan & List Rule Tidak Hilang)
+Sistem penyimpanan persisten otomatis (`.bin`) menjaga data Multi-Rule Auto Trader Anda tetap utuh:
+- **Tahan Ganti Timeframe & Restart MT5**: Seluruh aturan Multi-Rule di tabel, status aktif/paused tiap rule, saklar master power, dan posisi trailing otomatis tersimpan.
+- **Auto-Restore saat Re-Attach**: Saat EA ditutup atau dipasang ulang (*re-attach*), EA otomatis membaca data penyimpanan dan mengembalikan seluruh daftar aturan persis seperti sebelum ditutup.
+
+---
+
 ## Parameter Input Dasar
 
 | Parameter | Default | Keterangan |

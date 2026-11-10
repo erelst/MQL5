@@ -1533,6 +1533,10 @@ void SaveStateToFile()
    int handle = FileOpen(filename, FILE_WRITE|FILE_BIN);
    if(handle != INVALID_HANDLE)
    {
+      // 0. Save UI Active Tab & Offset Mode
+      FileWriteInteger(handle, g_active_tab);
+      FileWriteInteger(handle, (int)g_be_offset_mode);
+      
       // 1. Save Radar Symbols
       int total_radar = ArraySize(g_radar_symbols);
       FileWriteInteger(handle, total_radar);
@@ -1573,6 +1577,11 @@ void LoadStateFromFile()
    int handle = FileOpen(filename, FILE_READ|FILE_BIN);
    if(handle != INVALID_HANDLE)
    {
+      // 0. Read UI Active Tab & Offset Mode
+      g_active_tab = FileReadInteger(handle);
+      if(g_active_tab != 1 && g_active_tab != 2) g_active_tab = 1;
+      g_be_offset_mode = (ENUM_BE_OFFSET_MODE)FileReadInteger(handle);
+      
       // 1. Read Radar Symbols
       int total_radar = FileReadInteger(handle);
       ArrayResize(g_radar_symbols, total_radar);

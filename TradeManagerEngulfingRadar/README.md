@@ -31,6 +31,13 @@ Tool Expert Advisor (EA) multi-simbol untuk MetaTrader 5 dengan dashboard intera
 
 ---
 
+### 3. State Persistence (Pengaturan Tidak Hilang)
+Sistem penyimpanan persisten otomatis (`.bin`) menjaga data Anda tetap utuh:
+- **Tahan Ganti Timeframe & Restart MT5**: Seluruh daftar simbol pantauan di Radar, batas harga filter, posisi tab aktif, mode offset Break-Even, dan trigger Auto-BE yang sedang aktif akan otomatis tersimpan.
+- **Auto-Restore saat Re-Attach**: Saat EA ditutup atau dipasang ulang (*re-attach*), EA otomatis membaca data penyimpanan dan mengembalikan kondisi panel persis seperti sebelum ditutup tanpa perlu mengetik ulang.
+
+---
+
 ## Panduan Pemasangan
 
 1. **Salin File EA**:
