@@ -3,174 +3,114 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Engulfing Auto Trader Dashboard Preview</title>
+  <title>ENGULFING AUTO TRADER - Multi-Rule Realtime Dashboard Preview</title>
   <style>
     :root {
-      /* Pitch-dark obsidian & pure black container palette */
       --canvas-bg: #000000;
-      --surface-1: #050608;
-      --surface-2: #080a0e;
-      --surface-3: #10131b;
-      --surface-highlight: #182030;
-      
-      --border-soft: #1c2436;
+      --panel-bg: #080a0e;
+      --card-bg: #10131b;
+      --card-alt: #141822;
       --border-hard: #2a3752;
-      --border-accent: #00e5ff;
-
-      /* Ultra-bright text palette */
+      --border-soft: #1c2436;
       --text-pure: #ffffff;
-      --text-high: #f0f6fc;
       --text-med: #b4c6e7;
-      --text-dim: #7a8ea8;
-
-      /* High-Vibrancy Neon Accents (Matched 1:1 with MQL5 constants) */
       --cyan-bright: #00e5ff;
-      --cyan-bg: rgba(0, 229, 255, 0.12);
-      
       --bull-bright: #00e676;
-      --bull-bg: rgba(0, 230, 118, 0.12);
-      --bull-border: #00e676;
-
       --bear-bright: #ff2e4d;
-      --bear-bg: rgba(255, 46, 77, 0.14);
-      --bear-border: #ff2e4d;
-
       --gold-bright: #ffb300;
-      --gold-bg: rgba(255, 179, 0, 0.12);
-      --gold-border: #ffb300;
-
       --tab-active-bg: #221508;
-      --row-selected-bg: #1a150d;
-      --row-alt-bg: #121822;
-
-      /* Elevation Shadow */
-      --text-outline: 
-        0 1px 2px rgba(2, 6, 23, 0.95),
-        0 0 1px rgba(15, 23, 42, 0.9),
-        0 0 8px rgba(0, 0, 0, 0.8);
+      --power-on-bg: #082212;
+      --power-off-bg: #220812;
+      --row-selected: #14263c;
+      --font-stack: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      --text-outline: 0 0 1px #000000;
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif; }
-    
-    body {
-      background-color: var(--canvas-bg);
-      color: var(--text-high);
-      padding: 24px;
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      min-height: 100vh;
-      text-shadow: var(--text-outline);
-    }
-
-    .app-container {
-      width: 780px;
-      background: var(--surface-1);
-      border: 1px solid var(--border-hard);
-      border-radius: 12px;
-      box-shadow: 0 0 40px rgba(0, 229, 255, 0.08), 0 30px 70px rgba(0, 0, 0, 0.95);
-      overflow: hidden;
-    }
-
-    /* Pure CSS Icons */
-    .ico {
-      display: inline-block;
-      position: relative;
-      width: 14px;
-      height: 14px;
-      vertical-align: middle;
-      flex-shrink: 0;
-      filter: drop-shadow(0 1px 2px #000);
-    }
-
-    .ico-bolt {
-      width: 10px;
-      height: 16px;
-      background: var(--cyan-bright);
-      clip-path: polygon(55% 0%, 0% 55%, 45% 55%, 35% 100%, 100% 45%, 55% 45%);
-    }
-
-    .ico-save {
-      width: 13px;
-      height: 13px;
-      background: currentColor;
-      clip-path: polygon(0% 0%, 75% 0%, 100% 25%, 100% 100%, 0% 100%);
-    }
-
-    .top-bar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 16px 20px;
-      background: var(--surface-2);
-      border-bottom: 2px solid var(--border-hard);
-    }
-
-    .brand {
-      font-size: 15px;
-      font-weight: 800;
-      letter-spacing: 0.8px;
-      color: var(--text-pure);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .brand-tag {
-      font-size: 10px;
-      padding: 3px 8px;
-      background: rgba(0, 229, 255, 0.15);
-      color: var(--cyan-bright);
-      border: 1px solid var(--cyan-bright);
-      border-radius: 4px;
-      font-weight: 800;
-      letter-spacing: 1px;
-    }
-
-    .status-badge {
-      font-size: 11px;
-      font-weight: 800;
-      padding: 5px 12px;
-      border-radius: 4px;
-      border: 1px solid var(--bull-border);
-      background: var(--bull-bg);
-      color: var(--bull-bright);
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      cursor: pointer;
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
       user-select: none;
     }
 
-    .status-badge.off {
-      border-color: var(--bear-border);
-      background: var(--bear-bg);
+    body {
+      background-color: var(--canvas-bg);
+      color: var(--text-pure);
+      font-family: var(--font-stack);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .main-window {
+      width: 860px;
+      background: var(--panel-bg);
+      border: 1px solid var(--border-hard);
+      border-radius: 8px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.85);
+      overflow: hidden;
+    }
+
+    .window-header {
+      background: var(--card-bg);
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-hard);
+    }
+
+    .window-title {
+      font-size: 14px;
+      font-weight: 900;
+      letter-spacing: 0.8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-shadow: var(--text-outline);
+    }
+
+    .window-title .tag {
+      font-size: 11px;
+      color: var(--cyan-bright);
+      font-weight: 700;
+    }
+
+    .btn-power {
+      background: var(--power-on-bg);
+      border: 1px solid var(--bull-bright);
+      color: var(--bull-bright);
+      padding: 4px 14px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .btn-power.paused {
+      background: var(--power-off-bg);
+      border-color: var(--bear-bright);
       color: var(--bear-bright);
     }
 
-    .pulse-dot {
-      width: 7px;
-      height: 7px;
-      background: currentColor;
-      border-radius: 50%;
-      box-shadow: 0 0 8px currentColor;
-    }
-
-    .main-body { padding: 20px; }
-
-    .grid-2col {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
+    .content-body {
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
     }
 
     .card {
-      background: var(--surface-3);
+      background: var(--card-bg);
       border: 1px solid var(--border-hard);
-      border-radius: 10px;
-      padding: 16px;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7);
-      margin-bottom: 16px;
+      border-radius: 6px;
+      padding: 12px 14px;
     }
 
     .card-title {
@@ -178,28 +118,33 @@
       font-weight: 800;
       color: var(--cyan-bright);
       text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 14px;
+      letter-spacing: 0.8px;
+      margin-bottom: 12px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       border-bottom: 1px solid var(--border-soft);
-      padding-bottom: 8px;
+      padding-bottom: 6px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 18px;
     }
 
     .form-row {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      margin-bottom: 10px;
+      justify-content: space-between;
       gap: 8px;
     }
 
     .form-label {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 800;
       color: var(--text-pure);
-      width: 130px;
+      width: 120px;
       flex-shrink: 0;
     }
 
@@ -207,148 +152,215 @@
       background: var(--canvas-bg);
       border: 1px solid var(--border-hard);
       color: var(--text-pure);
-      padding: 7px 10px;
-      border-radius: 6px;
-      font-size: 12px;
+      padding: 5px 8px;
+      border-radius: 4px;
+      font-size: 11px;
       font-weight: 700;
       width: 100%;
       outline: none;
       transition: all 0.15s;
-      text-shadow: var(--text-outline);
     }
 
     input:focus, select:focus {
       border-color: var(--cyan-bright);
-      box-shadow: 0 0 10px rgba(0, 229, 255, 0.35);
+      box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
     }
 
-    .dir-toggle-group {
+    .btn-toggle-group {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
-      gap: 6px;
+      gap: 4px;
       width: 100%;
     }
 
     .btn-toggle {
-      padding: 7px 4px;
-      font-size: 11px;
-      font-weight: 900;
-      border-radius: 5px;
+      background: var(--panel-bg);
       border: 1px solid var(--border-hard);
-      background: var(--surface-2);
       color: var(--text-med);
+      padding: 5px 0;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 800;
       cursor: pointer;
       text-align: center;
       transition: all 0.15s;
-      user-select: none;
     }
 
     .btn-toggle.active-both {
       background: var(--tab-active-bg);
-      color: var(--cyan-bright);
       border-color: var(--cyan-bright);
-      box-shadow: 0 0 8px rgba(0, 229, 255, 0.25);
+      color: var(--cyan-bright);
     }
 
     .btn-toggle.active-buy {
-      background: var(--bull-bg);
+      background: var(--power-on-bg);
+      border-color: var(--bull-bright);
       color: var(--bull-bright);
-      border-color: var(--bull-border);
-      box-shadow: 0 0 8px rgba(0, 230, 118, 0.25);
     }
 
     .btn-toggle.active-sell {
-      background: var(--bear-bg);
+      background: var(--power-off-bg);
+      border-color: var(--bear-bright);
       color: var(--bear-bright);
-      border-color: var(--bear-border);
-      box-shadow: 0 0 8px rgba(255, 46, 77, 0.25);
     }
 
-    .btn {
-      padding: 9px 16px;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 900;
-      letter-spacing: 0.6px;
-      cursor: pointer;
-      border: 1px solid transparent;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 7px;
-      text-transform: uppercase;
-      text-shadow: var(--text-outline);
-      width: 100%;
-    }
-
-    .btn-blue {
+    .btn-submit {
       background: var(--tab-active-bg);
+      border: 1px solid var(--cyan-bright);
       color: var(--cyan-bright);
-      border-color: var(--cyan-bright);
-    }
-    .btn-blue:hover {
-      background: rgba(0, 229, 255, 0.24);
-      box-shadow: 0 0 14px rgba(0, 229, 255, 0.4);
-    }
-
-    .notif-terminal {
-      background: #000000;
-      border: 1px solid var(--border-hard);
-      border-left: 3px solid var(--cyan-bright);
-      border-radius: 8px;
-      padding: 12px 14px;
-      font-family: "Courier New", Courier, monospace;
+      padding: 7px;
+      border-radius: 4px;
       font-size: 11px;
-      line-height: 1.6;
-      color: var(--text-pure);
-      text-shadow: var(--text-outline);
+      font-weight: 900;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 10px;
+      transition: all 0.15s;
     }
 
-    .hl-title { color: var(--cyan-bright); font-weight: bold; }
-    .hl-bull { color: var(--bull-bright); font-weight: bold; }
-    .hl-bear { color: var(--bear-bright); font-weight: bold; }
-    .hl-atr { color: var(--gold-bright); font-weight: bold; }
+    .btn-submit.editing {
+      border-color: var(--gold-bright);
+      color: var(--gold-bright);
+    }
+
+    .btn-cancel {
+      background: var(--card-bg);
+      border: 1px solid var(--border-hard);
+      color: var(--text-med);
+      padding: 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    /* Table Styles */
+    .table-container {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    .table-container th {
+      background: var(--card-alt);
+      color: var(--text-med);
+      padding: 8px 6px;
+      text-align: left;
+      font-size: 10px;
+      font-weight: 800;
+      border-bottom: 1px solid var(--border-hard);
+      letter-spacing: 0.5px;
+    }
+
+    .table-container td {
+      padding: 7px 6px;
+      border-bottom: 1px solid var(--border-soft);
+      font-weight: 700;
+      vertical-align: middle;
+    }
+
+    .table-container tr.selected {
+      background: var(--row-selected) !important;
+      outline: 1px solid var(--gold-bright);
+    }
+
+    .table-container tr:nth-child(even) {
+      background: var(--card-bg);
+    }
+
+    .table-container tr:nth-child(odd) {
+      background: var(--panel-bg);
+    }
+
+    .badge-status {
+      padding: 3px 6px;
+      border-radius: 3px;
+      font-size: 9px;
+      font-weight: 800;
+      cursor: pointer;
+      display: inline-block;
+      text-align: center;
+    }
+
+    .badge-active {
+      background: var(--power-on-bg);
+      border: 1px solid var(--bull-bright);
+      color: var(--bull-bright);
+    }
+
+    .badge-paused {
+      background: var(--power-off-bg);
+      border: 1px solid var(--bear-bright);
+      color: var(--bear-bright);
+    }
+
+    .btn-sm {
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-size: 9px;
+      font-weight: 800;
+      cursor: pointer;
+      border: 1px solid var(--border-hard);
+      background: var(--card-bg);
+      color: var(--cyan-bright);
+      transition: all 0.15s;
+    }
+
+    .btn-del {
+      border-color: var(--bear-bright);
+      color: var(--bear-bright);
+      background: rgba(255, 46, 77, 0.1);
+    }
   </style>
 </head>
 <body>
 
-  <div class="app-container">
-    <div class="top-bar">
-      <div class="brand">
-        <div class="ico ico-bolt"></div>
+  <div class="main-window">
+    <!-- Window Header -->
+    <div class="window-header">
+      <div class="window-title">
         <span>ENGULFING AUTO TRADER</span>
-        <span class="brand-tag">ON-CHART AUTO EXECUTION</span>
+        <span class="tag">[MULTI-RULE REALTIME TICK ENGINE]</span>
       </div>
-      <div class="status-badge" id="status-badge" onclick="togglePower()">
-        <span class="pulse-dot"></span> <span id="status-text">STATUS: ACTIVE</span>
-      </div>
+      <button class="btn-power" id="btn-master" onclick="toggleMasterPower()">
+        <span id="txt-master">ALL ACTIVE</span>
+      </button>
     </div>
 
-    <div class="main-body">
-      <div class="grid-2col">
-        <!-- Kolom Kiri: Arah Trading & Target RR -->
-        <div class="card">
-          <div class="card-title">
-            <span>1. ARAH TRADING & TARGET RR</span>
+    <!-- Content Body -->
+    <div class="content-body">
+      <!-- Section 1: Form Deck -->
+      <div class="card">
+        <div class="card-title">
+          <span id="form-heading">1. ADD NEW AUTO TRADER RULE</span>
+          <span style="font-size: 10px; color: var(--gold-bright);">Realtime Tick Breakout + Auto Trail SL/TP</span>
+        </div>
+
+        <div class="form-grid">
+          <!-- Col 1 -->
+          <div class="form-row">
+            <span class="form-label">SYMBOL:</span>
+            <input type="text" id="inp-sym" value="EURUSD" style="color:var(--cyan-bright);">
           </div>
 
-          <div class="form-row" style="flex-direction: column; align-items: flex-start; margin-bottom: 12px;">
-            <span class="form-label" style="width:100%; margin-bottom: 6px;">ARAH TRADING:</span>
-            <div class="dir-toggle-group">
-              <button class="btn-toggle active-both" id="dir-both" onclick="setDir('BOTH')">BUY & SELL</button>
-              <button class="btn-toggle" id="dir-buy" onclick="setDir('BUY')">BUY ONLY</button>
-              <button class="btn-toggle" id="dir-sell" onclick="setDir('SELL')">SELL ONLY</button>
+          <div class="form-row">
+            <span class="form-label">DIRECTION:</span>
+            <div class="btn-toggle-group">
+              <button class="btn-toggle active-both" id="btn-both" onclick="setDir('BOTH')">BUY & SELL</button>
+              <button class="btn-toggle" id="btn-buy" onclick="setDir('BUY')">BUY ONLY</button>
+              <button class="btn-toggle" id="btn-sell" onclick="setDir('SELL')">SELL ONLY</button>
             </div>
           </div>
 
           <div class="form-row">
-            <span class="form-label">RISK REWARD (1:X):</span>
-            <input type="text" value="2.0" id="inp-rr" placeholder="Contoh: 1.5, 2.0, 2.5" oninput="updateLiveCalculation()">
+            <span class="form-label">RISK REWARD:</span>
+            <input type="text" id="inp-rr" value="2.0" placeholder="1:RR">
           </div>
 
           <div class="form-row">
-            <span class="form-label">TIMEFRAME (MIN):</span>
-            <select id="inp-tf" onchange="updateLiveCalculation()">
+            <span class="form-label">TIMEFRAME:</span>
+            <select id="inp-tf">
               <option value="1">M1 (1 Menit)</option>
               <option value="5" selected>M5 (5 Menit)</option>
               <option value="15">M15 (15 Menit)</option>
@@ -359,179 +371,302 @@
           </div>
 
           <div class="form-row">
-            <span class="form-label">MAX POSISI:</span>
-            <input type="number" value="1" id="inp-maxtrades">
-          </div>
-        </div>
-
-        <!-- Kolom Kanan: Manajemen Lot & Auto Trail Engine -->
-        <div class="card">
-          <div class="card-title">
-            <span>2. LOT SIZE & TRAIL ENGINE</span>
-          </div>
-
-          <div class="form-row">
             <span class="form-label">LOT MODE:</span>
-            <select id="inp-lotmode" onchange="toggleLotInput()">
-              <option value="FIXED">FIXED LOT SIZE</option>
-              <option value="RISK">% RISK PER TRADE</option>
-            </select>
-          </div>
-
-          <div class="form-row" id="row-lot">
-            <span class="form-label" id="lbl-lot">LOT SIZE:</span>
-            <input type="text" value="0.01" id="inp-lotvalue">
+            <div style="display: flex; gap: 6px; width: 100%;">
+              <button class="btn-toggle active-both" id="btn-lotmode" onclick="toggleLotMode()" style="width: 100px;">FIXED LOT</button>
+              <input type="text" id="inp-lotval" value="0.01">
+            </div>
           </div>
 
           <div class="form-row">
             <span class="form-label" style="color:var(--gold-bright);">AUTO TRAIL:</span>
-            <button class="btn-toggle active-both" id="btn-trail-toggle" onclick="toggleTrail()" style="width:100px; flex-shrink: 0;">ON</button>
-          </div>
-
-          <div class="form-row">
-            <span class="form-label" style="color:var(--gold-bright);">SISA TP (%):</span>
-            <input type="text" value="5.0" id="inp-trail-pct" oninput="updateLiveCalculation()">
-          </div>
-
-          <div class="form-row">
-            <span class="form-label" style="color:var(--cyan-bright);">MIN ATR (X):</span>
-            <input type="text" value="2.0" id="inp-atr-mult" oninput="updateLiveCalculation()">
+            <div style="display: flex; gap: 6px; width: 100%; align-items: center;">
+              <button class="btn-toggle active-both" id="btn-trail" onclick="toggleTrail()" style="width: 65px;">ON</button>
+              <span style="font-size: 10px; color: var(--text-med);">Sisa %:</span>
+              <input type="text" id="inp-trailpct" value="5.0" style="width: 45px;">
+              <span style="font-size: 10px; color: var(--text-med);">Min ATR:</span>
+              <input type="text" id="inp-atrmult" value="2.0" style="width: 45px;">
+            </div>
           </div>
 
           <div class="form-row">
             <span class="form-label" style="color:var(--bull-bright);">BUY HARGA &lt; :</span>
-            <input type="text" placeholder="Isi harga / 'ALL' utk Bebas" id="inp-bull-max" value="ALL">
+            <input type="text" id="inp-bmax" value="ALL" placeholder="'ALL' / angka">
           </div>
 
           <div class="form-row">
             <span class="form-label" style="color:var(--bear-bright);">SELL HARGA &gt; :</span>
-            <input type="text" placeholder="Isi harga / 'ALL' utk Bebas" id="inp-bear-min" value="ALL">
+            <input type="text" id="inp-smin" value="ALL" placeholder="'ALL' / angka">
           </div>
         </div>
+
+        <div style="display:flex; gap: 8px;">
+          <button class="btn-submit" id="btn-submit" onclick="submitRule()">+ ADD AUTO TRADER RULE</button>
+          <button class="btn-cancel" id="btn-cancel" onclick="cancelEdit()" style="display:none; width: 200px;">CANCEL EDIT</button>
+        </div>
       </div>
 
-      <!-- Action Button -->
-      <div style="margin-bottom: 16px;">
-        <button class="btn btn-blue" onclick="saveSettings()">
-          <div class="ico ico-save"></div> APPLY & SAVE SETTINGS
-        </button>
-      </div>
-
-      <!-- Live Calculation Simulation Box -->
-      <div class="card" style="margin-bottom: 0;">
-        <div class="card-title">
-          <span>3. SIMULASI AUTO TRAIL SL (BE) & TRAIL TP ENGINE</span>
-          <span style="font-size: 11px; color: var(--gold-bright);" id="trail-status-tag">AUTO TRAIL ENGINE: ACTIVE</span>
+      <!-- Section 2: Rules Table List -->
+      <div class="card" style="padding: 0; overflow: hidden;">
+        <div style="padding: 10px 14px; background: var(--card-bg); border-bottom: 1px solid var(--border-hard); font-size: 11px; font-weight: 800; color: var(--text-med);">
+          2. ACTIVE AUTO TRADER RULES LIST
         </div>
 
-        <div class="notif-terminal" id="sim-terminal">
-          Symbol: <span class="hl-title">EURUSD</span> | TF: <span class="hl-title" id="disp-tf">M5</span> | Mode: <span class="hl-title" id="disp-dir">BUY & SELL</span><br>
-          Target Ratio: <span class="hl-title" id="disp-rr">1:2.0 RR</span> | Buffer SL Awal: <span class="hl-atr">50% ATR(14)</span><br>
-          ----------------------------------------------------------------<br>
-          🛡️ <strong>Auto Trail SL (Pemicu 1)</strong>: Saat sisa 5% ke TP $\rightarrow$ SL dikunci ke <span class="hl-title">BE (Open ± Spread)</span><br>
-          🚀 <strong>Auto Trail TP (Volatilitas)</strong>: Jika ATR Realtime $\ge$ <span class="hl-atr">2x (100% ATR Awal)</span> $\rightarrow$ TP diperpanjang <span class="hl-title">+1x Target</span><br>
-          🔒 <strong>Auto Trail SL (Pemicu 2+)</strong>: Saat sisa 5% ke TP baru $\rightarrow$ SL dikunci ke <span class="hl-bull">Harga TP Sebelumnya</span>
-        </div>
+        <table class="table-container">
+          <thead>
+            <tr>
+              <th style="width: 35px;">NO</th>
+              <th style="width: 80px;">SYMBOL</th>
+              <th style="width: 95px;">DIRECTION</th>
+              <th style="width: 85px;">LOT / RISK</th>
+              <th style="width: 75px;">RR</th>
+              <th style="width: 50px;">TF</th>
+              <th>PRICE BOUNDS</th>
+              <th style="width: 110px;">AUTO TRAIL</th>
+              <th style="width: 75px;">STATUS</th>
+              <th style="width: 95px; text-align: center;">ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody id="rule-tbody">
+            <!-- Rendered by JS -->
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
 
   <script>
-    let isRunning = true;
-    let isTrailOn = true;
+    let isMasterActive = true;
     let currentDir = 'BOTH';
+    let lotMode = 'FIXED';
+    let isTrailOn = true;
+    let editingIndex = -1;
 
-    function setDir(dir) {
-      currentDir = dir;
-      document.getElementById('dir-both').className = 'btn-toggle' + (dir === 'BOTH' ? ' active-both' : '');
-      document.getElementById('dir-buy').className = 'btn-toggle' + (dir === 'BUY' ? ' active-buy' : '');
-      document.getElementById('dir-sell').className = 'btn-toggle' + (dir === 'SELL' ? ' active-sell' : '');
-      updateLiveCalculation();
+    let rules = [
+      {
+        symbol: 'EURUSD',
+        direction: 'BOTH',
+        rr: '2.00',
+        tf: 'M5',
+        lotMode: 'FIXED',
+        lotVal: '0.01',
+        trailOn: true,
+        trailPct: '5.0',
+        atrMult: '2.0',
+        bMax: 'ALL',
+        sMin: 'ALL',
+        active: true
+      },
+      {
+        symbol: 'GBPUSD',
+        direction: 'BUY',
+        rr: '2.50',
+        tf: 'M5',
+        lotMode: 'RISK',
+        lotVal: '1.0',
+        trailOn: true,
+        trailPct: '5.0',
+        atrMult: '2.0',
+        bMax: '1.27500',
+        sMin: 'ALL',
+        active: true
+      },
+      {
+        symbol: 'XAUUSD',
+        direction: 'SELL',
+        rr: '1.50',
+        tf: 'M15',
+        lotMode: 'FIXED',
+        lotVal: '0.02',
+        trailOn: false,
+        trailPct: '5.0',
+        atrMult: '2.0',
+        bMax: 'ALL',
+        sMin: '2650.00',
+        active: false
+      }
+    ];
+
+    function renderTable() {
+      const tbody = document.getElementById('rule-tbody');
+      tbody.innerHTML = '';
+
+      rules.forEach((r, idx) => {
+        const tr = document.createElement('tr');
+        if (editingIndex === idx) tr.className = 'selected';
+
+        let dirBadge = `<span style="color:var(--cyan-bright)">BUY & SELL</span>`;
+        if (r.direction === 'BUY') dirBadge = `<span style="color:var(--bull-bright)">BUY ONLY</span>`;
+        if (r.direction === 'SELL') dirBadge = `<span style="color:var(--bear-bright)">SELL ONLY</span>`;
+
+        let lotTxt = r.lotMode === 'FIXED' ? `${r.lotVal} Lot` : `${r.lotVal}% Risk`;
+        let boundsTxt = `B:${r.bMax} | S:${r.sMin}`;
+        let trailTxt = r.trailOn ? `<span style="color:var(--gold-bright)">ON (${r.trailPct}%, ${r.atrMult}x)</span>` : `<span style="color:var(--text-med)">OFF</span>`;
+        let statusBadge = r.active ? 
+          `<span class="badge-status badge-active" onclick="toggleRuleStatus(${idx})">ACTIVE</span>` :
+          `<span class="badge-status badge-paused" onclick="toggleRuleStatus(${idx})">PAUSED</span>`;
+
+        tr.innerHTML = `
+          <td>#${idx + 1}</td>
+          <td style="color:var(--text-pure); font-weight:800;">${r.symbol}</td>
+          <td>${dirBadge}</td>
+          <td>${lotTxt}</td>
+          <td style="color:var(--cyan-bright);">1:${r.rr}</td>
+          <td style="color:var(--gold-bright); font-weight:800;">[${r.tf}]</td>
+          <td style="color:var(--text-med); font-size:10px;">${boundsTxt}</td>
+          <td>${trailTxt}</td>
+          <td>${statusBadge}</td>
+          <td style="text-align: center;">
+            <button class="btn-sm" onclick="editRule(${idx})">EDIT</button>
+            <button class="btn-sm btn-del" onclick="deleteRule(${idx})">DEL</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
     }
 
-    function toggleLotInput() {
-      const mode = document.getElementById('inp-lotmode').value;
-      if (mode === 'FIXED') {
-        document.getElementById('lbl-lot').innerText = 'LOT SIZE:';
-        document.getElementById('inp-lotvalue').value = '0.01';
+    function toggleMasterPower() {
+      isMasterActive = !isMasterActive;
+      const btn = document.getElementById('btn-master');
+      const txt = document.getElementById('txt-master');
+      if (isMasterActive) {
+        btn.className = 'btn-power';
+        txt.innerText = 'ALL ACTIVE';
       } else {
-        document.getElementById('lbl-lot').innerText = '% RISK:';
-        document.getElementById('inp-lotvalue').value = '1.0';
+        btn.className = 'btn-power paused';
+        txt.innerText = 'ALL PAUSED';
       }
     }
 
-    function togglePower() {
-      isRunning = !isRunning;
-      const badge = document.getElementById('status-badge');
-      const text = document.getElementById('status-text');
+    function setDir(dir) {
+      currentDir = dir;
+      document.getElementById('btn-both').className = (dir === 'BOTH') ? 'btn-toggle active-both' : 'btn-toggle';
+      document.getElementById('btn-buy').className  = (dir === 'BUY') ? 'btn-toggle active-buy' : 'btn-toggle';
+      document.getElementById('btn-sell').className = (dir === 'SELL') ? 'btn-toggle active-sell' : 'btn-toggle';
+    }
 
-      if (isRunning) {
-        badge.className = 'status-badge';
-        text.innerText = 'STATUS: ACTIVE';
+    function toggleLotMode() {
+      const btn = document.getElementById('btn-lotmode');
+      if (lotMode === 'FIXED') {
+        lotMode = 'RISK';
+        btn.innerText = '% RISK / SL';
+        btn.className = 'btn-toggle active-buy';
       } else {
-        badge.className = 'status-badge off';
-        text.innerText = 'STATUS: PAUSED';
+        lotMode = 'FIXED';
+        btn.innerText = 'FIXED LOT';
+        btn.className = 'btn-toggle active-both';
       }
     }
 
     function toggleTrail() {
       isTrailOn = !isTrailOn;
-      const btn = document.getElementById('btn-trail-toggle');
-      const tag = document.getElementById('trail-status-tag');
+      const btn = document.getElementById('btn-trail');
       if (isTrailOn) {
-        btn.className = 'btn-toggle active-both';
         btn.innerText = 'ON';
-        tag.innerText = 'AUTO TRAIL ENGINE: ACTIVE';
-        tag.style.color = 'var(--gold-bright)';
+        btn.className = 'btn-toggle active-both';
       } else {
-        btn.className = 'btn-toggle';
         btn.innerText = 'OFF';
-        tag.innerText = 'AUTO TRAIL ENGINE: OFF';
-        tag.style.color = 'var(--text-med)';
+        btn.className = 'btn-toggle';
       }
-      updateLiveCalculation();
     }
 
-    function updateLiveCalculation() {
-      const rr = document.getElementById('inp-rr').value || '2.0';
-      const trailPct = document.getElementById('inp-trail-pct').value || '5.0';
-      const atrMult = document.getElementById('inp-atr-mult').value || '2.0';
+    function editRule(idx) {
+      editingIndex = idx;
+      const r = rules[idx];
+      document.getElementById('inp-sym').value = r.symbol;
+      setDir(r.direction);
+      document.getElementById('inp-rr').value = r.rr;
+      document.getElementById('inp-lotval').value = r.lotVal;
+      document.getElementById('inp-trailpct').value = r.trailPct;
+      document.getElementById('inp-atrmult').value = r.atrMult;
+      document.getElementById('inp-bmax').value = r.bMax;
+      document.getElementById('inp-smin').value = r.sMin;
+
+      lotMode = r.lotMode;
+      const btnLot = document.getElementById('btn-lotmode');
+      btnLot.innerText = lotMode === 'FIXED' ? 'FIXED LOT' : '% RISK / SL';
+      btnLot.className = lotMode === 'FIXED' ? 'btn-toggle active-both' : 'btn-toggle active-buy';
+
+      isTrailOn = r.trailOn;
+      const btnTrail = document.getElementById('btn-trail');
+      btnTrail.innerText = isTrailOn ? 'ON' : 'OFF';
+      btnTrail.className = isTrailOn ? 'btn-toggle active-both' : 'btn-toggle';
+
+      document.getElementById('form-heading').innerText = `1. EDIT RULE #${idx + 1} CONFIGURATION`;
+      document.getElementById('form-heading').style.color = 'var(--gold-bright)';
+      
+      const btnSubmit = document.getElementById('btn-submit');
+      btnSubmit.innerText = `UPDATE RULE #${idx + 1}`;
+      btnSubmit.className = 'btn-submit editing';
+
+      document.getElementById('btn-cancel').style.display = 'block';
+      renderTable();
+    }
+
+    function cancelEdit() {
+      editingIndex = -1;
+      document.getElementById('form-heading').innerText = `1. ADD NEW AUTO TRADER RULE`;
+      document.getElementById('form-heading').style.color = 'var(--cyan-bright)';
+
+      const btnSubmit = document.getElementById('btn-submit');
+      btnSubmit.innerText = `+ ADD AUTO TRADER RULE`;
+      btnSubmit.className = 'btn-submit';
+
+      document.getElementById('btn-cancel').style.display = 'none';
+      renderTable();
+    }
+
+    function submitRule() {
+      const sym = document.getElementById('inp-sym').value.trim().toUpperCase() || 'EURUSD';
+      const rr = document.getElementById('inp-rr').value.trim() || '2.00';
       const tfText = document.getElementById('inp-tf').options[document.getElementById('inp-tf').selectedIndex].text.split(' ')[0];
-      
-      let dirText = 'BUY & SELL';
-      if (currentDir === 'BUY') dirText = 'BUY ONLY';
-      if (currentDir === 'SELL') dirText = 'SELL ONLY';
+      const lotVal = document.getElementById('inp-lotval').value.trim() || '0.01';
+      const trailPct = document.getElementById('inp-trailpct').value.trim() || '5.0';
+      const atrMult = document.getElementById('inp-atrmult').value.trim() || '2.0';
+      const bMax = document.getElementById('inp-bmax').value.trim() || 'ALL';
+      const sMin = document.getElementById('inp-smin').value.trim() || 'ALL';
 
-      document.getElementById('disp-tf').innerText = tfText;
-      document.getElementById('disp-dir').innerText = dirText;
-      document.getElementById('disp-rr').innerText = `1:${rr} RR`;
-      
-      const simBox = document.getElementById('sim-terminal');
-      if (isTrailOn) {
-        simBox.innerHTML = `
-          Symbol: <span class="hl-title">EURUSD</span> | TF: <span class="hl-title">${tfText}</span> | Mode: <span class="hl-title">${dirText}</span><br>
-          Target Ratio: <span class="hl-title">1:${rr} RR</span> | Buffer SL Awal: <span class="hl-atr">50% ATR(14)</span><br>
-          ----------------------------------------------------------------<br>
-          🛡️ <strong>Auto Trail SL (Pemicu 1)</strong>: Saat sisa ${trailPct}% ke TP &rarr; SL dikunci ke <span class="hl-title">BE (Open &plusmn; Spread)</span><br>
-          🚀 <strong>Auto Trail TP (Volatilitas)</strong>: Jika ATR Realtime &ge; <span class="hl-atr">${atrMult}x (100% ATR Awal)</span> &rarr; TP diperpanjang <span class="hl-title">+1x Target</span><br>
-          🔒 <strong>Auto Trail SL (Pemicu 2+)</strong>: Saat sisa ${trailPct}% ke TP baru &rarr; SL dikunci ke <span class="hl-bull">Harga TP Sebelumnya</span>
-        `;
+      const ruleData = {
+        symbol: sym,
+        direction: currentDir,
+        rr: parseFloat(rr).toFixed(2),
+        tf: tfText,
+        lotMode: lotMode,
+        lotVal: lotVal,
+        trailOn: isTrailOn,
+        trailPct: trailPct,
+        atrMult: atrMult,
+        bMax: bMax,
+        sMin: sMin,
+        active: true
+      };
+
+      if (editingIndex >= 0) {
+        rules[editingIndex] = ruleData;
+        editingIndex = -1;
+        cancelEdit();
       } else {
-        simBox.innerHTML = `
-          Symbol: <span class="hl-title">EURUSD</span> | TF: <span class="hl-title">${tfText}</span> | Mode: <span class="hl-title">${dirText}</span><br>
-          Target Ratio: <span class="hl-title">1:${rr} RR</span> | Buffer SL Awal: <span class="hl-atr">50% ATR(14)</span><br>
-          ----------------------------------------------------------------<br>
-          🛑 <strong>Auto Trail Engine: OFF</strong> (Take Profit & Stop Loss tetap di level awal sampai selesai).
-        `;
+        rules.push(ruleData);
+      }
+
+      renderTable();
+    }
+
+    function deleteRule(idx) {
+      if (confirm(`Hapus Rule #${idx + 1} (${rules[idx].symbol})?`)) {
+        rules.splice(idx, 1);
+        if (editingIndex === idx) cancelEdit();
+        renderTable();
       }
     }
 
-    function saveSettings() {
-      const rr = document.getElementById('inp-rr').value;
-      const trailPct = document.getElementById('inp-trail-pct').value;
-      const atrMult = document.getElementById('inp-atr-mult').value;
-      alert(`Pengaturan Berhasil Disimpan:\n- Arah: ${currentDir}\n- Risk-to-Reward: 1:${rr}\n- Timeframe: M${document.getElementById('inp-tf').value}\n- Auto Trail: ${isTrailOn ? 'ON' : 'OFF'} (Sisa ${trailPct}%, Min ${atrMult}x ATR)\n- Auto-Trading: ${isRunning ? 'ACTIVE' : 'PAUSED'}`);
+    function toggleRuleStatus(idx) {
+      rules[idx].active = !rules[idx].active;
+      renderTable();
     }
+
+    // Init Table
+    renderTable();
   </script>
 </body>
 </html>

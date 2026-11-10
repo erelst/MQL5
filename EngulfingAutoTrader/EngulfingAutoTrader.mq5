@@ -5,8 +5,8 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Multi-Symbol Manager"
 #property link      "https://github.com/1jehuang/jcode"
-#property version   "1.10"
-#property description "Auto Execution EA on Realtime Strong Engulfing Break with Auto Trail SL (BE) & Volatility Trail TP Engine"
+#property version   "2.00"
+#property description "Multi-Rule Auto Execution EA on Realtime Strong Engulfing Break with Auto Trail SL (BE) & Volatility Trail TP Engine"
 
 #include <Trade\Trade.mqh>
 #include <Trade\PositionInfo.mqh>
@@ -28,50 +28,70 @@ enum ENUM_LOT_MODE
    LOT_RISK_PCT    // Risk Percentage (% Balance per SL)
 };
 
+// ponytail: single struct for auto trader rules
+struct AutoTraderRule
+{
+   string               symbol;
+   ENUM_TRADE_DIRECTION direction;
+   double               risk_reward_ratio;
+   ENUM_TIMEFRAMES      timeframe;
+   ENUM_LOT_MODE        lot_mode;
+   double               lot_value;         // Fixed lot or Risk %
+   bool                 enable_trail;
+   double               trail_trigger_pct;
+   double               atr_multiplier;
+   double               bull_price_max;    // 0 = Any price
+   double               bear_price_min;    // 0 = Any price
+   int                  max_trades;        // 0 = Unlimited
+   bool                 active;
+   datetime             last_bull_bar;
+   datetime             last_bear_bar;
+};
+
 struct SPositionTracking
 {
    ulong    ticket;
+   string   symbol;
+   ENUM_TIMEFRAMES timeframe;
    double   initial_atr100;    // 100% ATR of the entry candle
    double   initial_tp_dist;   // Initial distance between Open Price and initial TP
    double   prev_tp_level;     // Level of previous TP target (0.0 for initial)
    int      trail_cycle;       // Cycle count (0 = before BE, 1 = BE active, 2+ = trailing SL to prev TP)
+   double   trail_trigger_pct; // Trigger percentage
+   double   atr_multiplier;    // ATR multiplier
    bool     active;
 };
 
 //+------------------------------------------------------------------+
 //| INPUTS                                                           |
 //+------------------------------------------------------------------+
-input group "=== TRADE EXECUTION SETTINGS ==="
-input ENUM_TRADE_DIRECTION InpTradeDirection   = TRADE_DIR_BOTH; // Trading Direction
-input double               InpRiskRewardRatio  = 2.0;            // Risk Reward Ratio (1:RR, e.g. 1.5, 2.0, 2.5)
-input int                  InpMaxOpenTrades    = 1;              // Max Open Trades per Symbol (0 = Unlimited)
+input group "=== DEFAULT NEW RULE SETTINGS ==="
+input ENUM_TRADE_DIRECTION InpTradeDirection   = TRADE_DIR_BOTH; // Default Direction
+input double               InpRiskRewardRatio  = 2.0;            // Default RR Ratio (1:RR)
+input int                  InpMaxOpenTrades    = 1;              // Default Max Trades (0 = Unlimited)
 input int                  InpSlippage         = 10;             // Max Slippage (Points)
 input ulong                InpMagicNumber      = 882201;         // Magic Number
 
 input group "=== AUTO TRAIL SL & TP ENGINE ==="
-input bool                 InpEnableTrail      = true;           // Enable Auto Trail SL & Volatility Trail TP
-input double               InpTrailTriggerPct  = 5.0;            // Sisa Jarak Menuju TP untuk Trigger (%)
-input double               InpATRMultiplier    = 2.0;            // Minimum ATR Multiplier for Trail TP (>= 2.0x)
+input bool                 InpEnableTrail      = true;           // Default Enable Trail SL & TP
+input double               InpTrailTriggerPct  = 5.0;            // Sisa Jarak Menuju TP Trigger (%)
+input double               InpATRMultiplier    = 2.0;            // Min ATR Multiplier for Trail TP (>= 2.0x)
 
 input group "=== NOTIFICATIONS & ALERTS ==="
 input bool                 InpEnablePushAlerts = true;           // Send Mobile Push Notifications
 input bool                 InpEnableSoundAlerts= true;           // Enable Terminal / Sound Alerts
 
 input group "=== MONEY MANAGEMENT ==="
-input ENUM_LOT_MODE        InpLotMode          = LOT_FIXED;      // Lot Size Mode
-input double               InpFixedLot         = 0.01;           // Fixed Lot Size
-input double               InpRiskPercent      = 1.0;            // Risk Percent (% Balance per Trade)
+input ENUM_LOT_MODE        InpLotMode          = LOT_FIXED;      // Default Lot Mode
+input double               InpFixedLot         = 0.01;           // Default Fixed Lot Size
+input double               InpRiskPercent      = 1.0;            // Default Risk Percent (% Balance)
 
 input group "=== ENGULFING & ATR SETTINGS ==="
-input ENUM_TIMEFRAMES      InpTimeframe        = PERIOD_M5;      // Timeframe for Engulfing Break
+input ENUM_TIMEFRAMES      InpTimeframe        = PERIOD_M5;      // Default Timeframe
 input int                  InpATRPeriod        = 14;             // ATR Period for 50% calculation
 input double               InpBodyRatioMult    = 1.0;            // Min Body Ratio vs Previous Candle
 
-input group "=== PRICE BOUNDARY FILTERS ==="
-input double               InpBullishPriceMax  = 0.0;            // Buy only if Price < X (0 = Any Price)
-input double               InpBearishPriceMin  = 0.0;            // Sell only if Price > Y (0 = Any Price)
-
-// UI Coordinates & Colors (Pure High-Contrast Palette)
+// UI Coordinates & Colors (Cyberpunk Pitch-Black Palette)
 #define CLR_CANVAS_BG       C'0,0,0'
 #define CLR_PANEL_BG        C'8,10,14'
 #define CLR_CARD_BG         C'16,19,27'
@@ -86,6 +106,7 @@ input double               InpBearishPriceMin  = 0.0;            // Sell only if
 #define CLR_TAB_ACTIVE_BG   C'34,21,8'
 #define CLR_POWER_ON_BG     C'8,34,18'
 #define CLR_POWER_OFF_BG    C'34,8,18'
+#define CLR_ROW_SELECTED    C'20,38,60'
 
 //+------------------------------------------------------------------+
 //| GLOBALS & DYNAMIC STATE                                          |
@@ -95,24 +116,17 @@ CPositionInfo        m_position;
 CSymbolInfo          m_symbol_info;
 
 string               g_prefix = "EAT_";
-bool                 g_auto_trading_enabled = true;
-ENUM_TRADE_DIRECTION g_trade_direction;
-double               g_risk_reward_ratio;
-ENUM_TIMEFRAMES      g_timeframe;
-ENUM_LOT_MODE        g_lot_mode;
-double               g_fixed_lot;
-double               g_risk_pct;
-double               g_bull_price_max;
-double               g_bear_price_min;
-int                  g_max_open_trades;
-bool                 g_enable_trail;
-double               g_trail_trigger_pct;
-double               g_atr_multiplier;
+bool                 g_master_power_enabled = true;
 
+// Active Form Editing States
+ENUM_TRADE_DIRECTION g_form_direction  = TRADE_DIR_BOTH;
+ENUM_LOT_MODE        g_form_lot_mode   = LOT_FIXED;
+bool                 g_form_trail_on   = true;
+int                  g_editing_rule_idx = -1; // -1 = Add mode, >=0 = Edit mode
+
+// Rules Storage
+AutoTraderRule       g_rules[];
 SPositionTracking    g_tracking_list[];
-
-datetime             g_last_bull_trade_bar = 0;
-datetime             g_last_bear_trade_bar = 0;
 
 // Forward declarations
 void CreateDashboardUI();
@@ -121,10 +135,11 @@ void DestroyDashboardUI();
 void SaveStateToFile();
 void LoadStateFromFile();
 void ProcessAutoTrailSLTP();
-void RegisterPositionTracking(ulong ticket, double atr100, double open_p, double tp_p);
+void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, double atr100, double open_p, double tp_p, double trail_pct, double atr_mult);
+string FindExactOrMarketWatchSymbol(string input_sym);
 
 //+------------------------------------------------------------------+
-//| FAST DIRECT 100% ATR CALCULATION                                 |
+//| FAST DIRECT ATR CALCULATION                                      |
 //+------------------------------------------------------------------+
 double CalculateATR100(const string sym, const ENUM_TIMEFRAMES tf, int period)
 {
@@ -172,10 +187,8 @@ bool IsStrongBullishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf,
    out_cur_price   = cur_close;
    out_broken_low  = prev_low;
    
-   // 1. Previous candle must be Bearish
    if(prev_close >= prev_open) return false;
    
-   // 2. Realtime Breakout & Strong Engulfing:
    bool is_bullish_running = (cur_close > cur_open);
    bool is_breaking_high   = (cur_close >= prev_high || cur_high >= prev_high);
    bool is_covering_low    = (cur_low <= prev_low);
@@ -186,7 +199,6 @@ bool IsStrongBullishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf,
       out_atr_50 = CalculateATR50(sym, tf, InpATRPeriod);
       return true;
    }
-   
    return false;
 }
 
@@ -212,10 +224,8 @@ bool IsStrongBearishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf,
    out_cur_price    = cur_close;
    out_broken_high  = prev_high;
    
-   // 1. Previous candle must be Bullish
    if(prev_close <= prev_open) return false;
    
-   // 2. Realtime Breakout & Strong Engulfing:
    bool is_bearish_running = (cur_close < cur_open);
    bool is_breaking_low    = (cur_close <= prev_low || cur_low <= prev_low);
    bool is_covering_high   = (cur_high >= prev_high);
@@ -226,30 +236,28 @@ bool IsStrongBearishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf,
       out_atr_50 = CalculateATR50(sym, tf, InpATRPeriod);
       return true;
    }
-   
    return false;
 }
 
 //+------------------------------------------------------------------+
 //| LOT SIZE CALCULATION (FIXED OR RISK %)                           |
 //+------------------------------------------------------------------+
-double CalculateLotSize(const string sym, double entry_price, double sl_price)
+double CalculateLotSize(const string sym, ENUM_LOT_MODE mode, double lot_val, double entry_price, double sl_price)
 {
-   if(g_lot_mode == LOT_FIXED) return g_fixed_lot;
+   if(mode == LOT_FIXED) return lot_val;
    
-   double risk_amount = AccountInfoDouble(ACCOUNT_BALANCE) * (g_risk_pct / 100.0);
+   double risk_amount = AccountInfoDouble(ACCOUNT_BALANCE) * (lot_val / 100.0);
    double sl_distance = MathAbs(entry_price - sl_price);
-   if(sl_distance <= 0) return g_fixed_lot;
+   if(sl_distance <= 0) return 0.01;
    
    double tick_size  = SymbolInfoDouble(sym, SYMBOL_TRADE_TICK_SIZE);
    double tick_value = SymbolInfoDouble(sym, SYMBOL_TRADE_TICK_VALUE);
-   if(tick_size <= 0 || tick_value <= 0) return g_fixed_lot;
+   if(tick_size <= 0 || tick_value <= 0) return 0.01;
    
    double point_loss_per_lot = (sl_distance / tick_size) * tick_value;
-   if(point_loss_per_lot <= 0) return g_fixed_lot;
+   if(point_loss_per_lot <= 0) return 0.01;
    
    double calculated_lot = risk_amount / point_loss_per_lot;
-   
    double min_lot  = SymbolInfoDouble(sym, SYMBOL_VOLUME_MIN);
    double max_lot  = SymbolInfoDouble(sym, SYMBOL_VOLUME_MAX);
    double lot_step = SymbolInfoDouble(sym, SYMBOL_VOLUME_STEP);
@@ -281,40 +289,43 @@ int CountOpenPositions(const string sym)
 //+------------------------------------------------------------------+
 //| POSITION TRACKING MANAGEMENT (AUTO TRAIL SL & TRAIL TP)          |
 //+------------------------------------------------------------------+
-void RegisterPositionTracking(ulong ticket, double atr100, double open_p, double tp_p)
+void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, double atr100, double open_p, double tp_p, double trail_pct, double atr_mult)
 {
    int size = ArraySize(g_tracking_list);
    for(int i = 0; i < size; i++)
    {
       if(g_tracking_list[i].ticket == ticket)
       {
-         g_tracking_list[i].initial_atr100  = atr100;
-         g_tracking_list[i].initial_tp_dist = MathAbs(tp_p - open_p);
-         g_tracking_list[i].prev_tp_level   = 0.0;
-         g_tracking_list[i].trail_cycle     = 0;
-         g_tracking_list[i].active          = true;
+         g_tracking_list[i].symbol            = sym;
+         g_tracking_list[i].timeframe         = tf;
+         g_tracking_list[i].initial_atr100    = atr100;
+         g_tracking_list[i].initial_tp_dist   = MathAbs(tp_p - open_p);
+         g_tracking_list[i].prev_tp_level     = 0.0;
+         g_tracking_list[i].trail_cycle       = 0;
+         g_tracking_list[i].trail_trigger_pct = trail_pct;
+         g_tracking_list[i].atr_multiplier    = atr_mult;
+         g_tracking_list[i].active            = true;
          return;
       }
    }
    
    ArrayResize(g_tracking_list, size + 1);
-   g_tracking_list[size].ticket          = ticket;
-   g_tracking_list[size].initial_atr100  = atr100;
-   g_tracking_list[size].initial_tp_dist = MathAbs(tp_p - open_p);
-   g_tracking_list[size].prev_tp_level   = 0.0;
-   g_tracking_list[size].trail_cycle     = 0;
-   g_tracking_list[size].active          = true;
+   g_tracking_list[size].ticket            = ticket;
+   g_tracking_list[size].symbol            = sym;
+   g_tracking_list[size].timeframe         = tf;
+   g_tracking_list[size].initial_atr100    = atr100;
+   g_tracking_list[size].initial_tp_dist   = MathAbs(tp_p - open_p);
+   g_tracking_list[size].prev_tp_level     = 0.0;
+   g_tracking_list[size].trail_cycle       = 0;
+   g_tracking_list[size].trail_trigger_pct = trail_pct;
+   g_tracking_list[size].atr_multiplier    = atr_mult;
+   g_tracking_list[size].active            = true;
 }
 
 void ProcessAutoTrailSLTP()
 {
-   if(!g_enable_trail) return;
-   
    int size = ArraySize(g_tracking_list);
    if(size == 0) return;
-   
-   double trigger_ratio = g_trail_trigger_pct / 100.0; // default 0.05 (sisa 5%)
-   if(trigger_ratio <= 0) return;
    
    for(int i = size - 1; i >= 0; i--)
    {
@@ -340,10 +351,13 @@ void ProcessAutoTrailSLTP()
       double spread  = ask - bid;
       int digits     = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
       
-      if(cur_tp <= 0) continue; // No TP defined
+      if(cur_tp <= 0) continue;
       
-      double current_atr100 = CalculateATR100(sym, g_timeframe, InpATRPeriod);
-      double required_atr   = g_tracking_list[i].initial_atr100 * InpATRMultiplier;
+      double trigger_ratio = g_tracking_list[i].trail_trigger_pct / 100.0;
+      if(trigger_ratio <= 0) trigger_ratio = 0.05;
+      
+      double current_atr100 = CalculateATR100(sym, g_tracking_list[i].timeframe, InpATRPeriod);
+      double required_atr   = g_tracking_list[i].initial_atr100 * g_tracking_list[i].atr_multiplier;
       bool atr_exploding    = (current_atr100 >= required_atr);
       
       // ================= BUY POSITION =================
@@ -353,10 +367,8 @@ void ProcessAutoTrailSLTP()
          if(total_dist <= 0) continue;
          
          double remaining_dist = cur_tp - bid;
-         // Trigger condition: Sisa jarak <= trigger_pct% of total_dist
          if(remaining_dist <= total_dist * trigger_ratio && bid > open_p)
          {
-            // SIKLUS 1: Auto Trail SL ke BE (Mandiri, selalu aktif)
             if(g_tracking_list[i].trail_cycle == 0)
             {
                double be_sl = NormalizeDouble(open_p + spread, digits);
@@ -364,15 +376,14 @@ void ProcessAutoTrailSLTP()
                {
                   if(m_trade.PositionModify(tkt, be_sl, cur_tp))
                   {
-                     string msg = StringFormat("[AUTO TRADER - TRAIL SL BE]\nSymbol: %s (M%d)\nTicket: #%d (BUY)\nAction: SL moved to Break-Even\nNew SL: %.5f\nEntry: %.5f",
-                                               sym, (int)g_timeframe, tkt, be_sl, open_p);
+                     string msg = StringFormat("[AUTO TRADER - TRAIL SL BE]\nSymbol: %s\nTicket: #%d (BUY)\nAction: SL moved to Break-Even\nNew SL: %.5f\nEntry: %.5f",
+                                               sym, tkt, be_sl, open_p);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);
-                     PrintFormat("Auto Trail SL (BE) Executed for BUY #%d | New SL: %.5f", tkt, be_sl);
+                     PrintFormat("Auto Trail SL (BE) for BUY #%d | New SL: %.5f", tkt, be_sl);
                   }
                }
                
-               // Evaluasi Trail TP: Jika ATR Realtime >= g_atr_multiplier x ATR Awal
                if(atr_exploding)
                {
                   double new_tp = NormalizeDouble(cur_tp + g_tracking_list[i].initial_tp_dist, digits);
@@ -380,16 +391,14 @@ void ProcessAutoTrailSLTP()
                   {
                      g_tracking_list[i].prev_tp_level = cur_tp;
                      g_tracking_list[i].trail_cycle   = 1;
-                     string msg = StringFormat("[AUTO TRADER - TRAIL TP EXTENDED]\nSymbol: %s (M%d)\nTicket: #%d (BUY)\nAction: TP Extended (+1x Target)\nNew TP: %.5f\nATR Realtime: %.5f (>= %.1fx ATR Awal)",
-                                               sym, (int)g_timeframe, tkt, new_tp, current_atr100, g_atr_multiplier);
+                     string msg = StringFormat("[AUTO TRADER - TRAIL TP EXTENDED]\nSymbol: %s\nTicket: #%d (BUY)\nAction: TP Extended (+1x Target)\nNew TP: %.5f\nATR: %.5f (>= %.1fx ATR Awal)",
+                                               sym, tkt, new_tp, current_atr100, g_tracking_list[i].atr_multiplier);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);
-                     PrintFormat("Auto Trail TP Executed for BUY #%d | ATR: %.5f >= %.5f | New TP: %.5f",
-                                 tkt, current_atr100, required_atr, new_tp);
+                     PrintFormat("Auto Trail TP for BUY #%d | New TP: %.5f", tkt, new_tp);
                   }
                }
             }
-            // SIKLUS 2+: Auto Trail SL ke TP Sebelumnya & Perpanjang TP lagi jika ATR tetap >= g_atr_multiplier
             else if(g_tracking_list[i].trail_cycle >= 1)
             {
                double prev_tp = g_tracking_list[i].prev_tp_level;
@@ -399,11 +408,11 @@ void ProcessAutoTrailSLTP()
                {
                   if(m_trade.PositionModify(tkt, new_sl, cur_tp))
                   {
-                     string msg = StringFormat("[AUTO TRADER - TRAIL SL LOCKED]\nSymbol: %s (M%d)\nTicket: #%d (BUY)\nAction: SL locked to Prev TP\nNew SL: %.5f (Locked Profit: %.5f)",
-                                               sym, (int)g_timeframe, tkt, new_sl, prev_tp);
+                     string msg = StringFormat("[AUTO TRADER - TRAIL SL LOCKED]\nSymbol: %s\nTicket: #%d (BUY)\nAction: SL locked to Prev TP\nNew SL: %.5f",
+                                               sym, tkt, new_sl);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);
-                     PrintFormat("Auto Trail SL to Prev TP Executed for BUY #%d | New SL: %.5f", tkt, new_sl);
+                     PrintFormat("Auto Trail SL locked to Prev TP for BUY #%d | New SL: %.5f", tkt, new_sl);
                   }
                }
                
@@ -414,12 +423,11 @@ void ProcessAutoTrailSLTP()
                   {
                      g_tracking_list[i].prev_tp_level = cur_tp;
                      g_tracking_list[i].trail_cycle++;
-                     string msg = StringFormat("[AUTO TRADER - TRAIL TP EXTENDED]\nSymbol: %s (M%d)\nTicket: #%d (BUY)\nAction: TP Extended (Cycle %d)\nNew TP: %.5f\nATR Realtime: %.5f",
-                                               sym, (int)g_timeframe, tkt, g_tracking_list[i].trail_cycle, new_tp, current_atr100);
+                     string msg = StringFormat("[AUTO TRADER - TRAIL TP EXTENDED]\nSymbol: %s\nTicket: #%d (BUY)\nAction: TP Extended (Cycle %d)\nNew TP: %.5f",
+                                               sym, tkt, g_tracking_list[i].trail_cycle, new_tp);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);
-                     PrintFormat("Auto Trail TP Extended (Cycle %d) for BUY #%d | New TP: %.5f",
-                                 g_tracking_list[i].trail_cycle, tkt, new_tp);
+                     PrintFormat("Auto Trail TP Extended for BUY #%d | New TP: %.5f", tkt, new_tp);
                   }
                }
             }
@@ -432,10 +440,8 @@ void ProcessAutoTrailSLTP()
          if(total_dist <= 0) continue;
          
          double remaining_dist = ask - cur_tp;
-         // Trigger condition: Sisa jarak <= trigger_pct% of total_dist
          if(remaining_dist <= total_dist * trigger_ratio && ask < open_p)
          {
-            // SIKLUS 1: Auto Trail SL ke BE (Mandiri, selalu aktif)
             if(g_tracking_list[i].trail_cycle == 0)
             {
                double be_sl = NormalizeDouble(open_p - spread, digits);
@@ -443,15 +449,14 @@ void ProcessAutoTrailSLTP()
                {
                   if(m_trade.PositionModify(tkt, be_sl, cur_tp))
                   {
-                     string msg = StringFormat("[AUTO TRADER - TRAIL SL BE]\nSymbol: %s (M%d)\nTicket: #%d (SELL)\nAction: SL moved to Break-Even\nNew SL: %.5f\nEntry: %.5f",
-                                               sym, (int)g_timeframe, tkt, be_sl, open_p);
+                     string msg = StringFormat("[AUTO TRADER - TRAIL SL BE]\nSymbol: %s\nTicket: #%d (SELL)\nAction: SL moved to Break-Even\nNew SL: %.5f\nEntry: %.5f",
+                                               sym, tkt, be_sl, open_p);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);
-                     PrintFormat("Auto Trail SL (BE) Executed for SELL #%d | New SL: %.5f", tkt, be_sl);
+                     PrintFormat("Auto Trail SL (BE) for SELL #%d | New SL: %.5f", tkt, be_sl);
                   }
                }
                
-               // Evaluasi Trail TP: Jika ATR Realtime >= g_atr_multiplier x ATR Awal
                if(atr_exploding)
                {
                   double new_tp = NormalizeDouble(cur_tp - g_tracking_list[i].initial_tp_dist, digits);
@@ -459,16 +464,14 @@ void ProcessAutoTrailSLTP()
                   {
                      g_tracking_list[i].prev_tp_level = cur_tp;
                      g_tracking_list[i].trail_cycle   = 1;
-                     string msg = StringFormat("[AUTO TRADER - TRAIL TP EXTENDED]\nSymbol: %s (M%d)\nTicket: #%d (SELL)\nAction: TP Extended (+1x Target)\nNew TP: %.5f\nATR Realtime: %.5f (>= %.1fx ATR Awal)",
-                                               sym, (int)g_timeframe, tkt, new_tp, current_atr100, g_atr_multiplier);
+                     string msg = StringFormat("[AUTO TRADER - TRAIL TP EXTENDED]\nSymbol: %s\nTicket: #%d (SELL)\nAction: TP Extended (+1x Target)\nNew TP: %.5f\nATR: %.5f (>= %.1fx ATR Awal)",
+                                               sym, tkt, new_tp, current_atr100, g_tracking_list[i].atr_multiplier);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);
-                     PrintFormat("Auto Trail TP Executed for SELL #%d | ATR: %.5f >= %.5f | New TP: %.5f",
-                                 tkt, current_atr100, required_atr, new_tp);
+                     PrintFormat("Auto Trail TP for SELL #%d | New TP: %.5f", tkt, new_tp);
                   }
                }
             }
-            // SIKLUS 2+: Auto Trail SL ke TP Sebelumnya & Perpanjang TP lagi jika ATR tetap >= g_atr_multiplier
             else if(g_tracking_list[i].trail_cycle >= 1)
             {
                double prev_tp = g_tracking_list[i].prev_tp_level;
@@ -478,11 +481,11 @@ void ProcessAutoTrailSLTP()
                {
                   if(m_trade.PositionModify(tkt, new_sl, cur_tp))
                   {
-                     string msg = StringFormat("[AUTO TRADER - TRAIL SL LOCKED]\nSymbol: %s (M%d)\nTicket: #%d (SELL)\nAction: SL locked to Prev TP\nNew SL: %.5f (Locked Profit: %.5f)",
-                                               sym, (int)g_timeframe, tkt, new_sl, prev_tp);
+                     string msg = StringFormat("[AUTO TRADER - TRAIL SL LOCKED]\nSymbol: %s\nTicket: #%d (SELL)\nAction: SL locked to Prev TP\nNew SL: %.5f",
+                                               sym, tkt, new_sl);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);
-                     PrintFormat("Auto Trail SL to Prev TP Executed for SELL #%d | New SL: %.5f", tkt, new_sl);
+                     PrintFormat("Auto Trail SL locked to Prev TP for SELL #%d | New SL: %.5f", tkt, new_sl);
                   }
                }
                
@@ -493,18 +496,48 @@ void ProcessAutoTrailSLTP()
                   {
                      g_tracking_list[i].prev_tp_level = cur_tp;
                      g_tracking_list[i].trail_cycle++;
-                     string msg = StringFormat("[AUTO TRADER - TRAIL TP EXTENDED]\nSymbol: %s (M%d)\nTicket: #%d (SELL)\nAction: TP Extended (Cycle %d)\nNew TP: %.5f\nATR Realtime: %.5f",
-                                               sym, (int)g_timeframe, tkt, g_tracking_list[i].trail_cycle, new_tp, current_atr100);
+                     string msg = StringFormat("[AUTO TRADER - TRAIL TP EXTENDED]\nSymbol: %s\nTicket: #%d (SELL)\nAction: TP Extended (Cycle %d)\nNew TP: %.5f",
+                                               sym, tkt, g_tracking_list[i].trail_cycle, new_tp);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);
-                     PrintFormat("Auto Trail TP Extended (Cycle %d) for SELL #%d | New TP: %.5f",
-                                 g_tracking_list[i].trail_cycle, tkt, new_tp);
+                     PrintFormat("Auto Trail TP Extended for SELL #%d | New TP: %.5f", tkt, new_tp);
                   }
                }
             }
          }
       }
    }
+}
+
+//+------------------------------------------------------------------+
+//| SYMBOL MATCHER HELPER                                            |
+//+------------------------------------------------------------------+
+string FindExactOrMarketWatchSymbol(string input_sym)
+{
+   StringTrimLeft(input_sym);
+   StringTrimRight(input_sym);
+   if(input_sym == "") return "";
+   
+   if(SymbolInfoInteger(input_sym, SYMBOL_SELECT)) return input_sym;
+   if(SymbolSelect(input_sym, true)) return input_sym;
+   
+   int total_symbols = SymbolsTotal(false);
+   string input_upper = input_sym;
+   StringToUpper(input_upper);
+   
+   for(int i = 0; i < total_symbols; i++)
+   {
+      string cur_name = SymbolName(i, false);
+      string cur_upper = cur_name;
+      StringToUpper(cur_upper);
+      
+      if(cur_upper == input_upper || StringFind(cur_upper, input_upper) >= 0)
+      {
+         SymbolSelect(cur_name, true);
+         return cur_name;
+      }
+   }
+   return "";
 }
 
 //+------------------------------------------------------------------+
@@ -529,7 +562,7 @@ void CreateRect(string name, int x, int y, int w, int h, color bg_color, color b
    ObjectSetInteger(0, name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
 }
 
-void CreateLabel(string name, int x, int y, string text, color clr, int font_size = 9, bool bold = false)
+void CreateLabel(string name, int x, int y, string text, color clr, int font_size = 8, bool bold = false)
 {
    name = g_prefix + name;
    if(ObjectFind(0, name) < 0)
@@ -580,7 +613,7 @@ void CreateEdit(string name, int x, int y, int w, int h, string text, color bg_c
       ObjectSetInteger(0, name, OBJPROP_READONLY, false);
       ObjectSetInteger(0, name, OBJPROP_ALIGN, ALIGN_CENTER);
       ObjectSetString(0, name, OBJPROP_FONT, "Segoe UI Semibold");
-      ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
+      ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 8);
       ObjectSetString(0, name, OBJPROP_TEXT, text);
    }
    ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
@@ -601,8 +634,8 @@ void CreateDashboardUI()
    
    int root_x = 20;
    int root_y = 20;
-   int win_w  = 540;
-   int win_h  = 460;
+   int win_w  = 840;
+   int win_h  = 540;
    
    // Outer Pitch-black window
    CreateRect("WIN_BG", root_x, root_y, win_w, win_h, CLR_PANEL_BG, CLR_BORDER_HARD);
@@ -610,113 +643,206 @@ void CreateDashboardUI()
    // Top header
    CreateRect("WIN_TOP", root_x, root_y, win_w, 36, CLR_CARD_BG, CLR_BORDER_HARD);
    CreateLabel("WIN_TITLE", root_x + 14, root_y + 9, "ENGULFING AUTO TRADER", CLR_TEXT_PURE, 10, true);
-   CreateLabel("WIN_TAG", root_x + 220, root_y + 10, "[REALTIME TICK & TRAIL ENGINE]", CLR_CYAN_NEON, 8, true);
+   CreateLabel("WIN_TAG", root_x + 220, root_y + 10, "[MULTI-RULE REALTIME TICK ENGINE]", CLR_CYAN_NEON, 8, true);
    
-   // Status Badge
-   string status_txt = g_auto_trading_enabled ? "ACTIVE" : "PAUSED";
-   color status_bg  = g_auto_trading_enabled ? CLR_POWER_ON_BG : CLR_POWER_OFF_BG;
-   color status_clr = g_auto_trading_enabled ? CLR_BULL_NEON : CLR_BEAR_NEON;
-   CreateButton("BTN_TOGGLE_POWER", root_x + win_w - 95, root_y + 6, 82, 24, status_txt, status_bg, status_clr, status_clr);
+   // Master Status Badge
+   string status_txt = g_master_power_enabled ? "ALL ACTIVE" : "ALL PAUSED";
+   color status_bg  = g_master_power_enabled ? CLR_POWER_ON_BG : CLR_POWER_OFF_BG;
+   color status_clr = g_master_power_enabled ? CLR_BULL_NEON : CLR_BEAR_NEON;
+   CreateButton("BTN_TOGGLE_MASTER", root_x + win_w - 115, root_y + 6, 100, 24, status_txt, status_bg, status_clr, status_clr);
    
-   // Row 1: Direction Toggle Buttons
-   int row1_y = root_y + 48;
-   CreateRect("CARD_DIR", root_x + 14, row1_y, win_w - 28, 48, CLR_CARD_BG, CLR_BORDER_HARD);
-   CreateLabel("LBL_DIR", root_x + 24, row1_y + 16, "DIRECTION:", CLR_TEXT_MED, 8, true);
+   // ================= SECTION 1: FORM DECK (TOP) =================
+   int form_deck_y = root_y + 44;
+   CreateRect("CARD_FORM_DECK", root_x + 14, form_deck_y, win_w - 28, 175, CLR_CARD_BG, CLR_BORDER_HARD);
    
-   color btn_both_bg = (g_trade_direction == TRADE_DIR_BOTH) ? CLR_TAB_ACTIVE_BG : CLR_PANEL_BG;
-   color btn_both_cl = (g_trade_direction == TRADE_DIR_BOTH) ? CLR_CYAN_NEON : CLR_TEXT_MED;
-   color btn_buy_bg  = (g_trade_direction == TRADE_DIR_BUY) ? CLR_POWER_ON_BG : CLR_PANEL_BG;
-   color btn_buy_cl  = (g_trade_direction == TRADE_DIR_BUY) ? CLR_BULL_NEON : CLR_TEXT_MED;
-   color btn_sell_bg = (g_trade_direction == TRADE_DIR_SELL) ? CLR_POWER_OFF_BG : CLR_PANEL_BG;
-   color btn_sell_cl = (g_trade_direction == TRADE_DIR_SELL) ? CLR_BEAR_NEON : CLR_TEXT_MED;
+   string form_header_txt = (g_editing_rule_idx >= 0) ? StringFormat("EDIT RULE #%d CONFIGURATION", g_editing_rule_idx + 1) : "ADD NEW AUTO TRADER RULE";
+   color form_header_clr = (g_editing_rule_idx >= 0) ? CLR_GOLD_NEON : CLR_CYAN_NEON;
+   CreateLabel("LBL_FORM_HEADER", root_x + 24, form_deck_y + 8, form_header_txt, form_header_clr, 9, true);
    
-   CreateButton("BTN_DIR_BOTH", root_x + 120, row1_y + 11, 120, 26, "BUY & SELL", btn_both_bg, btn_both_cl, btn_both_cl);
-   CreateButton("BTN_DIR_BUY",  root_x + 248, row1_y + 11, 120, 26, "BUY ONLY",  btn_buy_bg,  btn_buy_cl,  btn_buy_cl);
-   CreateButton("BTN_DIR_SELL", root_x + 376, row1_y + 11, 120, 26, "SELL ONLY", btn_sell_bg, btn_sell_cl, btn_sell_cl);
+   // Row A: Symbol & Direction Toggle Buttons (y = form_deck_y + 30)
+   int row_a_y = form_deck_y + 30;
+   CreateLabel("LBL_SYM", root_x + 24, row_a_y + 4, "SYMBOL:", CLR_TEXT_PURE, 8, true);
+   string default_sym = (g_editing_rule_idx >= 0 && g_editing_rule_idx < ArraySize(g_rules)) ? g_rules[g_editing_rule_idx].symbol : _Symbol;
+   CreateEdit("INP_SYM", root_x + 120, row_a_y, 110, 22, default_sym, CLR_CANVAS_BG, CLR_CYAN_NEON);
    
-   // Row 2: Strategy Inputs (Form Grid Rapi & Sejajar)
-   int row2_y = row1_y + 56;
-   CreateRect("CARD_INPUTS", root_x + 14, row2_y, win_w - 28, 195, CLR_CARD_BG, CLR_BORDER_HARD);
+   CreateLabel("LBL_DIR", root_x + 250, row_a_y + 4, "DIRECTION:", CLR_TEXT_MED, 8, true);
+   color btn_both_bg = (g_form_direction == TRADE_DIR_BOTH) ? CLR_TAB_ACTIVE_BG : CLR_PANEL_BG;
+   color btn_both_cl = (g_form_direction == TRADE_DIR_BOTH) ? CLR_CYAN_NEON : CLR_TEXT_MED;
+   color btn_buy_bg  = (g_form_direction == TRADE_DIR_BUY) ? CLR_POWER_ON_BG : CLR_PANEL_BG;
+   color btn_buy_cl  = (g_form_direction == TRADE_DIR_BUY) ? CLR_BULL_NEON : CLR_TEXT_MED;
+   color btn_sell_bg = (g_form_direction == TRADE_DIR_SELL) ? CLR_POWER_OFF_BG : CLR_PANEL_BG;
+   color btn_sell_cl = (g_form_direction == TRADE_DIR_SELL) ? CLR_BEAR_NEON : CLR_TEXT_MED;
    
-   // Definisi Kolom Sejajar:
-   // Kolom 1 (Kiri): Label di x = root_x + 24, Kontrol di x = root_x + 148, Lebar Kontrol = 110
-   // Kolom 2 (Kanan): Label di x = root_x + 276, Kontrol di x = root_x + 396, Lebar Kontrol = 110
+   CreateButton("BTN_DIR_BOTH", root_x + 330, row_a_y, 90, 22, "BUY & SELL", btn_both_bg, btn_both_cl, btn_both_cl);
+   CreateButton("BTN_DIR_BUY",  root_x + 426, row_a_y, 80, 22, "BUY ONLY",  btn_buy_bg,  btn_buy_cl,  btn_buy_cl);
+   CreateButton("BTN_DIR_SELL", root_x + 512, row_a_y, 80, 22, "SELL ONLY", btn_sell_bg, btn_sell_cl, btn_sell_cl);
    
-   // Baris A: Risk Reward & Timeframe (y = row2_y + 14)
-   int form_r1_y = row2_y + 14;
-   CreateLabel("LBL_RR", root_x + 24, form_r1_y + 4, "RISK REWARD (1:X):", CLR_TEXT_PURE, 8, true);
-   CreateEdit("INP_RR", root_x + 148, form_r1_y, 110, 22, DoubleToString(g_risk_reward_ratio, 2), CLR_CANVAS_BG, CLR_CYAN_NEON);
+   // Row B: Risk Reward, Timeframe, Lot Mode & Lot Value (y = form_deck_y + 60)
+   int row_b_y = form_deck_y + 60;
+   CreateLabel("LBL_RR", root_x + 24, row_b_y + 4, "RISK REWARD:", CLR_TEXT_PURE, 8, true);
+   double default_rr = (g_editing_rule_idx >= 0 && g_editing_rule_idx < ArraySize(g_rules)) ? g_rules[g_editing_rule_idx].risk_reward_ratio : InpRiskRewardRatio;
+   CreateEdit("INP_RR", root_x + 120, row_b_y, 110, 22, DoubleToString(default_rr, 2), CLR_CANVAS_BG, CLR_CYAN_NEON);
    
-   CreateLabel("LBL_TF", root_x + 276, form_r1_y + 4, "TIMEFRAME (MIN):", CLR_TEXT_PURE, 8, true);
-   int tf_min = (int)g_timeframe;
-   if(g_timeframe == PERIOD_M1) tf_min = 1;
-   else if(g_timeframe == PERIOD_M5) tf_min = 5;
-   else if(g_timeframe == PERIOD_M15) tf_min = 15;
-   else if(g_timeframe == PERIOD_M30) tf_min = 30;
-   else if(g_timeframe == PERIOD_H1) tf_min = 60;
-   else if(g_timeframe == PERIOD_H4) tf_min = 240;
-   else if(g_timeframe == PERIOD_D1) tf_min = 1440;
-   CreateEdit("INP_TF", root_x + 396, form_r1_y, 110, 22, IntegerToString(tf_min), CLR_CANVAS_BG, CLR_CYAN_NEON);
+   CreateLabel("LBL_TF", root_x + 250, row_b_y + 4, "TIMEFRAME (M):", CLR_TEXT_PURE, 8, true);
+   int tf_min = 5;
+   if(g_editing_rule_idx >= 0 && g_editing_rule_idx < ArraySize(g_rules))
+   {
+      ENUM_TIMEFRAMES tf_val = g_rules[g_editing_rule_idx].timeframe;
+      if(tf_val == PERIOD_M1) tf_min = 1;
+      else if(tf_val == PERIOD_M5) tf_min = 5;
+      else if(tf_val == PERIOD_M15) tf_min = 15;
+      else if(tf_val == PERIOD_M30) tf_min = 30;
+      else if(tf_val == PERIOD_H1) tf_min = 60;
+      else if(tf_val == PERIOD_H4) tf_min = 240;
+      else if(tf_val == PERIOD_D1) tf_min = 1440;
+   }
+   CreateEdit("INP_TF", root_x + 360, row_b_y, 80, 22, IntegerToString(tf_min), CLR_CANVAS_BG, CLR_CYAN_NEON);
    
-   // Baris B: Lot Mode & Nilai Lot (y = row2_y + 48)
-   int form_r2_y = row2_y + 48;
-   CreateLabel("LBL_LOT_MODE", root_x + 24, form_r2_y + 4, "LOT MODE:", CLR_TEXT_PURE, 8, true);
-   string lot_mode_str = (g_lot_mode == LOT_FIXED) ? "FIXED LOT" : "% RISK / SL";
-   color lot_mode_clr = (g_lot_mode == LOT_FIXED) ? CLR_CYAN_NEON : CLR_GOLD_NEON;
-   CreateButton("BTN_TOGGLE_LOT_MODE", root_x + 148, form_r2_y, 110, 22, lot_mode_str, CLR_CANVAS_BG, lot_mode_clr, CLR_BORDER_HARD);
+   CreateLabel("LBL_LOT_MODE", root_x + 460, row_b_y + 4, "LOT MODE:", CLR_TEXT_PURE, 8, true);
+   string lot_mode_str = (g_form_lot_mode == LOT_FIXED) ? "FIXED LOT" : "% RISK / SL";
+   color lot_mode_clr = (g_form_lot_mode == LOT_FIXED) ? CLR_CYAN_NEON : CLR_GOLD_NEON;
+   CreateButton("BTN_TOGGLE_LOT_MODE", root_x + 540, row_b_y, 90, 22, lot_mode_str, CLR_CANVAS_BG, lot_mode_clr, CLR_BORDER_HARD);
    
-   string lot_lbl_str = (g_lot_mode == LOT_FIXED) ? "LOT VALUE:" : "% RISK:";
-   double lot_val_disp = (g_lot_mode == LOT_FIXED) ? g_fixed_lot : g_risk_pct;
-   CreateLabel("LBL_LOT_VAL", root_x + 276, form_r2_y + 4, lot_lbl_str, CLR_TEXT_PURE, 8, true);
-   CreateEdit("INP_LOT", root_x + 396, form_r2_y, 110, 22, DoubleToString(lot_val_disp, 2), CLR_CANVAS_BG, CLR_TEXT_PURE);
+   double default_lot = (g_editing_rule_idx >= 0 && g_editing_rule_idx < ArraySize(g_rules)) ? g_rules[g_editing_rule_idx].lot_value : ((g_form_lot_mode == LOT_FIXED) ? InpFixedLot : InpRiskPercent);
+   CreateEdit("INP_LOT", root_x + 640, row_b_y, 70, 22, DoubleToString(default_lot, 2), CLR_CANVAS_BG, CLR_TEXT_PURE);
    
-   // Baris C: Auto Trail Toggle & Parameter Trailing (y = row2_y + 82)
-   int form_r3_y = row2_y + 82;
-   CreateLabel("LBL_TRAIL", root_x + 24, form_r3_y + 4, "AUTO TRAIL:", CLR_TEXT_PURE, 8, true);
-   string trail_mode_str = g_enable_trail ? "ON" : "OFF";
-   color trail_mode_clr = g_enable_trail ? CLR_GOLD_NEON : CLR_TEXT_MED;
-   CreateButton("BTN_TOGGLE_TRAIL", root_x + 148, form_r3_y, 110, 22, trail_mode_str, CLR_CANVAS_BG, trail_mode_clr, CLR_BORDER_HARD);
+   // Row C: Auto Trail, Sisa %, Min ATR, Buy Harga <, Sell Harga > (y = form_deck_y + 90)
+   int row_c_y = form_deck_y + 90;
+   CreateLabel("LBL_TRAIL", root_x + 24, row_c_y + 4, "AUTO TRAIL:", CLR_TEXT_PURE, 8, true);
+   string trail_mode_str = g_form_trail_on ? "ON" : "OFF";
+   color trail_mode_clr = g_form_trail_on ? CLR_GOLD_NEON : CLR_TEXT_MED;
+   CreateButton("BTN_TOGGLE_TRAIL", root_x + 120, row_c_y, 50, 22, trail_mode_str, CLR_CANVAS_BG, trail_mode_clr, CLR_BORDER_HARD);
    
-   CreateLabel("LBL_TRAIL_PCT", root_x + 276, form_r3_y + 4, "SISA TP (%):", CLR_TEXT_MED, 8, true);
-   CreateEdit("INP_TRAIL_PCT", root_x + 396, form_r3_y, 110, 22, DoubleToString(g_trail_trigger_pct, 1), CLR_CANVAS_BG, CLR_GOLD_NEON);
+   CreateLabel("LBL_TRAIL_PCT", root_x + 180, row_c_y + 4, "SISA TP%:", CLR_TEXT_MED, 8, true);
+   double default_trail_pct = (g_editing_rule_idx >= 0 && g_editing_rule_idx < ArraySize(g_rules)) ? g_rules[g_editing_rule_idx].trail_trigger_pct : InpTrailTriggerPct;
+   CreateEdit("INP_TRAIL_PCT", root_x + 245, row_c_y, 45, 22, DoubleToString(default_trail_pct, 1), CLR_CANVAS_BG, CLR_GOLD_NEON);
    
-   // Baris D: Min ATR Multiplier & Reserved/Helper (y = row2_y + 116)
-   int form_r4_y = row2_y + 116;
-   CreateLabel("LBL_ATR_MULT_LBL", root_x + 24, form_r4_y + 4, "MIN ATR (X):", CLR_TEXT_MED, 8, true);
-   CreateEdit("INP_ATR_MULT", root_x + 148, form_r4_y, 110, 22, DoubleToString(g_atr_multiplier, 1), CLR_CANVAS_BG, CLR_CYAN_NEON);
+   CreateLabel("LBL_ATR_MULT_LBL", root_x + 300, row_c_y + 4, "MIN ATR:", CLR_TEXT_MED, 8, true);
+   double default_atr_mult = (g_editing_rule_idx >= 0 && g_editing_rule_idx < ArraySize(g_rules)) ? g_rules[g_editing_rule_idx].atr_multiplier : InpATRMultiplier;
+   CreateEdit("INP_ATR_MULT", root_x + 360, row_c_y, 45, 22, DoubleToString(default_atr_mult, 1), CLR_CANVAS_BG, CLR_CYAN_NEON);
    
-   // Baris E: Filter Harga Buy & Filter Harga Sell (y = row2_y + 150)
-   int form_r5_y = row2_y + 150;
-   CreateLabel("LBL_BULL_MAX", root_x + 24, form_r5_y + 4, "BUY HARGA < :", CLR_BULL_NEON, 8, true);
-   string str_bmax = (g_bull_price_max > 0) ? DoubleToString(g_bull_price_max, _Digits) : "ALL";
-   CreateEdit("INP_BULL_MAX", root_x + 148, form_r5_y, 110, 22, str_bmax, CLR_CANVAS_BG, CLR_TEXT_PURE);
+   CreateLabel("LBL_BULL_MAX", root_x + 420, row_c_y + 4, "BUY < :", CLR_BULL_NEON, 8, true);
+   string default_bmax = "ALL";
+   if(g_editing_rule_idx >= 0 && g_editing_rule_idx < ArraySize(g_rules) && g_rules[g_editing_rule_idx].bull_price_max > 0)
+      default_bmax = DoubleToString(g_rules[g_editing_rule_idx].bull_price_max, 5);
+   CreateEdit("INP_BULL_MAX", root_x + 475, row_c_y, 80, 22, default_bmax, CLR_CANVAS_BG, CLR_TEXT_PURE);
    
-   CreateLabel("LBL_BEAR_MIN", root_x + 276, form_r5_y + 4, "SELL HARGA > :", CLR_BEAR_NEON, 8, true);
-   string str_smin = (g_bear_price_min > 0) ? DoubleToString(g_bear_price_min, _Digits) : "ALL";
-   CreateEdit("INP_BEAR_MIN", root_x + 396, form_r5_y, 110, 22, str_smin, CLR_CANVAS_BG, CLR_TEXT_PURE);
+   CreateLabel("LBL_BEAR_MIN", root_x + 565, row_c_y + 4, "SELL > :", CLR_BEAR_NEON, 8, true);
+   string default_smin = "ALL";
+   if(g_editing_rule_idx >= 0 && g_editing_rule_idx < ArraySize(g_rules) && g_rules[g_editing_rule_idx].bear_price_min > 0)
+      default_smin = DoubleToString(g_rules[g_editing_rule_idx].bear_price_min, 5);
+   CreateEdit("INP_BEAR_MIN", root_x + 620, row_c_y, 80, 22, default_smin, CLR_CANVAS_BG, CLR_TEXT_PURE);
    
-   // Row 3: Action Buttons
-   int row3_y = row2_y + 205;
-   CreateButton("BTN_SAVE_CONFIG", root_x + 14, row3_y, win_w - 28, 28, "APPLY & SAVE SETTINGS", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
+   // Row D: Form Action Buttons (y = form_deck_y + 125)
+   int row_d_y = form_deck_y + 125;
+   if(g_editing_rule_idx >= 0)
+   {
+      CreateButton("BTN_SUBMIT_RULE", root_x + 24, row_d_y, 450, 26, "UPDATE RULE #" + IntegerToString(g_editing_rule_idx + 1), CLR_TAB_ACTIVE_BG, CLR_GOLD_NEON, CLR_GOLD_NEON);
+      CreateButton("BTN_CANCEL_EDIT", root_x + 485, row_d_y, 225, 26, "CANCEL EDIT", CLR_CARD_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
+   }
+   else
+   {
+      CreateButton("BTN_SUBMIT_RULE", root_x + 24, row_d_y, win_w - 48, 26, "+ ADD AUTO TRADER RULE", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
+   }
    
-   // Row 4: Live Info Terminal Preview
-   int row4_y = row3_y + 36;
-   CreateRect("CARD_INFO", root_x + 14, row4_y, win_w - 28, 80, CLR_CANVAS_BG, CLR_BORDER_HARD);
+   // ================= SECTION 2: RULES TABLE (BOTTOM) =================
+   int table_y = form_deck_y + 185;
+   CreateRect("CARD_TABLE", root_x + 14, table_y, win_w - 28, 290, CLR_CANVAS_BG, CLR_BORDER_HARD);
    
-   string live_dir_str = (g_trade_direction == TRADE_DIR_BOTH) ? "BUY & SELL" : ((g_trade_direction == TRADE_DIR_BUY) ? "BUY ONLY" : "SELL ONLY");
-   string info_line1 = StringFormat("Engine: %s | Ratio: 1:%.2f RR | Timeframe: %s", live_dir_str, g_risk_reward_ratio, EnumToString(g_timeframe));
-   string info_line2 = StringFormat("Auto Trail: %s (Sisa %.1f%% TP, Min %.1fx ATR) | Open: %d trade(s)", g_enable_trail ? "ON" : "OFF", g_trail_trigger_pct, g_atr_multiplier, CountOpenPositions(_Symbol));
+   // Table Header Bar
+   CreateRect("TH_BG", root_x + 14, table_y, win_w - 28, 24, CLR_CARD_BG, CLR_BORDER_HARD);
+   CreateLabel("TH_NO",     root_x + 24,  table_y + 5, "NO",        CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_SYM",    root_x + 55,  table_y + 5, "SYMBOL",    CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_DIR",    root_x + 135, table_y + 5, "DIRECTION", CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_LOT",    root_x + 215, table_y + 5, "LOT / RISK",CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_RR",     root_x + 295, table_y + 5, "RR RATIO",  CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_TF",     root_x + 360, table_y + 5, "TF",        CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_FILTER", root_x + 400, table_y + 5, "PRICE BOUNDS", CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_TRAIL",  root_x + 555, table_y + 5, "AUTO TRAIL",CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_STATUS", root_x + 655, table_y + 5, "STATUS",    CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_ACT",    root_x + 730, table_y + 5, "ACTIONS",   CLR_TEXT_MED, 8, true);
    
-   CreateLabel("INFO_L1", root_x + 24, row4_y + 14, info_line1, CLR_TEXT_PURE, 8, false);
-   CreateLabel("INFO_L2", root_x + 24, row4_y + 36, info_line2, CLR_GOLD_NEON, 8, true);
-   CreateLabel("INFO_L3", root_x + 24, row4_y + 56, "*Auto executes per tick; Trails SL to BE and extends TP when ATR >= multiplier", CLR_TEXT_MED, 7, false);
-   
+   UpdateDashboardUI();
    ChartRedraw();
 }
 
 void UpdateDashboardUI()
 {
-   CreateDashboardUI();
+   int root_x = 20;
+   int root_y = 20;
+   int win_w  = 840;
+   int table_y = root_y + 44 + 185;
+   int start_y = table_y + 28;
+   
+   // Clean previous rows
+   ObjectsDeleteAll(0, g_prefix + "ROW_");
+   ObjectsDeleteAll(0, g_prefix + "BTN_EDIT_RULE_");
+   ObjectsDeleteAll(0, g_prefix + "BTN_DEL_RULE_");
+   ObjectsDeleteAll(0, g_prefix + "BTN_TOGGLE_RULE_");
+   
+   int total_rules = ArraySize(g_rules);
+   
+   if(total_rules == 0)
+   {
+      CreateLabel("ROW_EMPTY", root_x + 300, start_y + 20, "Belum ada aturan Auto Trader. Tambahkan rule di atas!", CLR_TEXT_MED, 9, false);
+      ChartRedraw();
+      return;
+   }
+   
+   for(int i = 0; i < total_rules && i < 6; i++)
+   {
+      int cur_y = start_y + (i * 42);
+      string r_pfx = StringFormat("ROW_%d_", i);
+      bool is_editing = (g_editing_rule_idx == i);
+      
+      color row_bg = is_editing ? CLR_ROW_SELECTED : ((i % 2 == 0) ? CLR_CARD_BG : CLR_PANEL_BG);
+      CreateRect(r_pfx + "BG", root_x + 20, cur_y, win_w - 40, 38, row_bg, is_editing ? CLR_GOLD_NEON : CLR_BORDER_SOFT);
+      
+      // No
+      CreateLabel(r_pfx + "NO", root_x + 26, cur_y + 11, StringFormat("#%d", i + 1), CLR_TEXT_PURE, 8, true);
+      
+      // Symbol
+      CreateLabel(r_pfx + "SYM", root_x + 55, cur_y + 11, g_rules[i].symbol, CLR_TEXT_PURE, 9, true);
+      
+      // Direction
+      string dir_str = "BUY & SELL";
+      color  dir_clr = CLR_CYAN_NEON;
+      if(g_rules[i].direction == TRADE_DIR_BUY)  { dir_str = "BUY ONLY";  dir_clr = CLR_BULL_NEON; }
+      if(g_rules[i].direction == TRADE_DIR_SELL) { dir_str = "SELL ONLY"; dir_clr = CLR_BEAR_NEON; }
+      CreateLabel(r_pfx + "DIR", root_x + 135, cur_y + 11, dir_str, dir_clr, 8, true);
+      
+      // Lot
+      string lot_str = (g_rules[i].lot_mode == LOT_FIXED) ? DoubleToString(g_rules[i].lot_value, 2) + " Lot" : DoubleToString(g_rules[i].lot_value, 1) + "% Risk";
+      CreateLabel(r_pfx + "LOT", root_x + 215, cur_y + 11, lot_str, CLR_TEXT_PURE, 8, false);
+      
+      // RR
+      CreateLabel(r_pfx + "RR", root_x + 295, cur_y + 11, StringFormat("1:%.2f", g_rules[i].risk_reward_ratio), CLR_CYAN_NEON, 8, true);
+      
+      // TF
+      string str_tf = StringSubstr(EnumToString(g_rules[i].timeframe), 7);
+      CreateLabel(r_pfx + "TF", root_x + 360, cur_y + 11, "[" + str_tf + "]", CLR_GOLD_NEON, 8, true);
+      
+      // Filter Bounds
+      string b_str = (g_rules[i].bull_price_max > 0) ? StringFormat("B<%.5f", g_rules[i].bull_price_max) : "B:ALL";
+      string s_str = (g_rules[i].bear_price_min > 0) ? StringFormat("S>%.5f", g_rules[i].bear_price_min) : "S:ALL";
+      CreateLabel(r_pfx + "FLT", root_x + 400, cur_y + 11, b_str + " | " + s_str, CLR_TEXT_MED, 7, false);
+      
+      // Auto Trail
+      string trail_str = g_rules[i].enable_trail ? StringFormat("ON (%.1f%%, %.1fx)", g_rules[i].trail_trigger_pct, g_rules[i].atr_multiplier) : "OFF";
+      CreateLabel(r_pfx + "TRL", root_x + 555, cur_y + 11, trail_str, g_rules[i].enable_trail ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, false);
+      
+      // Status Toggle Button
+      string r_status_txt = g_rules[i].active ? "ACTIVE" : "PAUSED";
+      color  r_status_bg  = g_rules[i].active ? CLR_POWER_ON_BG : CLR_POWER_OFF_BG;
+      color  r_status_clr = g_rules[i].active ? CLR_BULL_NEON : CLR_BEAR_NEON;
+      CreateButton("BTN_TOGGLE_RULE_" + IntegerToString(i), root_x + 650, cur_y + 8, 65, 22, r_status_txt, r_status_bg, r_status_clr, r_status_clr);
+      
+      // Actions: Edit and Delete
+      CreateButton("BTN_EDIT_RULE_" + IntegerToString(i), root_x + 725, cur_y + 8, 45, 22, "EDIT", is_editing ? CLR_TAB_ACTIVE_BG : CLR_CARD_BG, is_editing ? CLR_GOLD_NEON : CLR_CYAN_NEON, is_editing ? CLR_GOLD_NEON : CLR_BORDER_HARD);
+      CreateButton("BTN_DEL_RULE_"  + IntegerToString(i), root_x + 775, cur_y + 8, 40, 22, "DEL",  C'34,8,18', CLR_BEAR_NEON, CLR_BEAR_NEON);
+   }
+   
+   ChartRedraw();
 }
 
 void DestroyDashboardUI()
@@ -730,64 +856,85 @@ void DestroyDashboardUI()
 //+------------------------------------------------------------------+
 void SaveStateToFile()
 {
-   string filename = "EAT_State_" + _Symbol + "_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".bin";
+   string filename = "EAT_MultiRules_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".bin";
    int handle = FileOpen(filename, FILE_WRITE|FILE_BIN);
    if(handle != INVALID_HANDLE)
    {
-      FileWriteInteger(handle, g_auto_trading_enabled ? 1 : 0);
-      FileWriteInteger(handle, (int)g_trade_direction);
-      FileWriteDouble(handle, g_risk_reward_ratio);
-      FileWriteInteger(handle, (int)g_timeframe);
-      FileWriteInteger(handle, (int)g_lot_mode);
-      FileWriteDouble(handle, g_fixed_lot);
-      FileWriteDouble(handle, g_risk_pct);
-      FileWriteDouble(handle, g_bull_price_max);
-      FileWriteDouble(handle, g_bear_price_min);
-      FileWriteInteger(handle, g_enable_trail ? 1 : 0);
-      FileWriteDouble(handle, g_trail_trigger_pct);
-      FileWriteDouble(handle, g_atr_multiplier);
+      FileWriteInteger(handle, g_master_power_enabled ? 1 : 0);
+      
+      int total_rules = ArraySize(g_rules);
+      FileWriteInteger(handle, total_rules);
+      
+      for(int i = 0; i < total_rules; i++)
+      {
+         FileWriteString(handle, g_rules[i].symbol);
+         FileWriteInteger(handle, (int)g_rules[i].direction);
+         FileWriteDouble(handle, g_rules[i].risk_reward_ratio);
+         FileWriteInteger(handle, (int)g_rules[i].timeframe);
+         FileWriteInteger(handle, (int)g_rules[i].lot_mode);
+         FileWriteDouble(handle, g_rules[i].lot_value);
+         FileWriteInteger(handle, g_rules[i].enable_trail ? 1 : 0);
+         FileWriteDouble(handle, g_rules[i].trail_trigger_pct);
+         FileWriteDouble(handle, g_rules[i].atr_multiplier);
+         FileWriteDouble(handle, g_rules[i].bull_price_max);
+         FileWriteDouble(handle, g_rules[i].bear_price_min);
+         FileWriteInteger(handle, g_rules[i].max_trades);
+         FileWriteInteger(handle, g_rules[i].active ? 1 : 0);
+      }
       FileClose(handle);
    }
 }
 
 void LoadStateFromFile()
 {
-   string filename = "EAT_State_" + _Symbol + "_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".bin";
+   string filename = "EAT_MultiRules_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".bin";
    if(!FileIsExist(filename))
    {
-      // Default from Inputs
-      g_auto_trading_enabled = true;
-      g_trade_direction      = InpTradeDirection;
-      g_risk_reward_ratio    = InpRiskRewardRatio;
-      g_timeframe            = InpTimeframe;
-      g_lot_mode             = InpLotMode;
-      g_fixed_lot            = InpFixedLot;
-      g_risk_pct             = InpRiskPercent;
-      g_bull_price_max       = InpBullishPriceMax;
-      g_bear_price_min       = InpBearishPriceMin;
-      g_max_open_trades      = InpMaxOpenTrades;
-      g_enable_trail         = InpEnableTrail;
-      g_trail_trigger_pct    = InpTrailTriggerPct;
-      g_atr_multiplier       = InpATRMultiplier;
+      // Default initial rule for current chart
+      ArrayResize(g_rules, 1);
+      g_rules[0].symbol            = _Symbol;
+      g_rules[0].direction         = InpTradeDirection;
+      g_rules[0].risk_reward_ratio = InpRiskRewardRatio;
+      g_rules[0].timeframe         = InpTimeframe;
+      g_rules[0].lot_mode          = InpLotMode;
+      g_rules[0].lot_value         = (InpLotMode == LOT_FIXED) ? InpFixedLot : InpRiskPercent;
+      g_rules[0].enable_trail      = InpEnableTrail;
+      g_rules[0].trail_trigger_pct = InpTrailTriggerPct;
+      g_rules[0].atr_multiplier    = InpATRMultiplier;
+      g_rules[0].bull_price_max    = 0.0;
+      g_rules[0].bear_price_min    = 0.0;
+      g_rules[0].max_trades        = InpMaxOpenTrades;
+      g_rules[0].active            = true;
+      g_rules[0].last_bull_bar     = 0;
+      g_rules[0].last_bear_bar     = 0;
       return;
    }
    
    int handle = FileOpen(filename, FILE_READ|FILE_BIN);
    if(handle != INVALID_HANDLE)
    {
-      g_auto_trading_enabled = (FileReadInteger(handle) == 1);
-      g_trade_direction      = (ENUM_TRADE_DIRECTION)FileReadInteger(handle);
-      g_risk_reward_ratio    = FileReadDouble(handle);
-      g_timeframe            = (ENUM_TIMEFRAMES)FileReadInteger(handle);
-      g_lot_mode             = (ENUM_LOT_MODE)FileReadInteger(handle);
-      g_fixed_lot            = FileReadDouble(handle);
-      g_risk_pct             = FileReadDouble(handle);
-      g_bull_price_max       = FileReadDouble(handle);
-      g_bear_price_min       = FileReadDouble(handle);
-      g_max_open_trades      = InpMaxOpenTrades;
-      g_enable_trail         = (FileReadInteger(handle) == 1);
-      g_trail_trigger_pct    = FileReadDouble(handle);
-      g_atr_multiplier       = FileReadDouble(handle);
+      g_master_power_enabled = (FileReadInteger(handle) == 1);
+      int total_rules = FileReadInteger(handle);
+      ArrayResize(g_rules, total_rules);
+      
+      for(int i = 0; i < total_rules; i++)
+      {
+         g_rules[i].symbol            = FileReadString(handle);
+         g_rules[i].direction         = (ENUM_TRADE_DIRECTION)FileReadInteger(handle);
+         g_rules[i].risk_reward_ratio = FileReadDouble(handle);
+         g_rules[i].timeframe         = (ENUM_TIMEFRAMES)FileReadInteger(handle);
+         g_rules[i].lot_mode          = (ENUM_LOT_MODE)FileReadInteger(handle);
+         g_rules[i].lot_value         = FileReadDouble(handle);
+         g_rules[i].enable_trail      = (FileReadInteger(handle) == 1);
+         g_rules[i].trail_trigger_pct = FileReadDouble(handle);
+         g_rules[i].atr_multiplier    = FileReadDouble(handle);
+         g_rules[i].bull_price_max    = FileReadDouble(handle);
+         g_rules[i].bear_price_min    = FileReadDouble(handle);
+         g_rules[i].max_trades        = FileReadInteger(handle);
+         g_rules[i].active            = (FileReadInteger(handle) == 1);
+         g_rules[i].last_bull_bar     = 0;
+         g_rules[i].last_bear_bar     = 0;
+      }
       FileClose(handle);
    }
 }
@@ -808,8 +955,7 @@ int OnInit()
    
    CreateDashboardUI();
    
-   PrintFormat("EngulfingAutoTrader Initialized | Direction: %s | RR 1:%.2f | TF: %s | Trail: %s",
-               EnumToString(g_trade_direction), g_risk_reward_ratio, EnumToString(g_timeframe), g_enable_trail ? "ON" : "OFF");
+   PrintFormat("EngulfingAutoTrader Initialized | Multi-Rules Active: %d rules loaded", ArraySize(g_rules));
    return(INIT_SUCCEEDED);
 }
 
@@ -833,209 +979,287 @@ void OnChartEvent(const int id,
 {
    if(id == CHARTEVENT_OBJECT_CLICK)
    {
-      // Toggle Power
-      if(sparam == g_prefix + "BTN_TOGGLE_POWER")
+      // Toggle Master Power
+      if(sparam == g_prefix + "BTN_TOGGLE_MASTER")
       {
-         g_auto_trading_enabled = !g_auto_trading_enabled;
-         UpdateDashboardUI();
+         g_master_power_enabled = !g_master_power_enabled;
+         CreateDashboardUI();
          return;
       }
-      // Direction buttons
+      // Form Direction buttons
       else if(sparam == g_prefix + "BTN_DIR_BOTH")
       {
-         g_trade_direction = TRADE_DIR_BOTH;
-         UpdateDashboardUI();
+         g_form_direction = TRADE_DIR_BOTH;
+         CreateDashboardUI();
          return;
       }
       else if(sparam == g_prefix + "BTN_DIR_BUY")
       {
-         g_trade_direction = TRADE_DIR_BUY;
-         UpdateDashboardUI();
+         g_form_direction = TRADE_DIR_BUY;
+         CreateDashboardUI();
          return;
       }
       else if(sparam == g_prefix + "BTN_DIR_SELL")
       {
-         g_trade_direction = TRADE_DIR_SELL;
-         UpdateDashboardUI();
+         g_form_direction = TRADE_DIR_SELL;
+         CreateDashboardUI();
          return;
       }
-      // Toggle Lot Mode
+      // Form Toggle Lot Mode
       else if(sparam == g_prefix + "BTN_TOGGLE_LOT_MODE")
       {
-         if(g_lot_mode == LOT_FIXED)
-            g_lot_mode = LOT_RISK_PCT;
+         if(g_form_lot_mode == LOT_FIXED)
+            g_form_lot_mode = LOT_RISK_PCT;
          else
-            g_lot_mode = LOT_FIXED;
+            g_form_lot_mode = LOT_FIXED;
             
          CreateDashboardUI();
          return;
       }
-      // Toggle Auto Trail SL & TP
+      // Form Toggle Auto Trail
       else if(sparam == g_prefix + "BTN_TOGGLE_TRAIL")
       {
-         g_enable_trail = !g_enable_trail;
+         g_form_trail_on = !g_form_trail_on;
          CreateDashboardUI();
          return;
       }
-      // Apply & Save Config
-      else if(sparam == g_prefix + "BTN_SAVE_CONFIG")
+      // Form Cancel Edit
+      else if(sparam == g_prefix + "BTN_CANCEL_EDIT")
       {
-         double new_rr = StringToDouble(ObjectGetString(0, g_prefix + "INP_RR", OBJPROP_TEXT));
-         if(new_rr > 0) g_risk_reward_ratio = new_rr;
-         
-         int new_tf_val = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_TF", OBJPROP_TEXT));
-         if(new_tf_val == 1) g_timeframe = PERIOD_M1;
-         else if(new_tf_val == 5) g_timeframe = PERIOD_M5;
-         else if(new_tf_val == 15) g_timeframe = PERIOD_M15;
-         else if(new_tf_val == 30) g_timeframe = PERIOD_M30;
-         else if(new_tf_val == 60) g_timeframe = PERIOD_H1;
-         else if(new_tf_val == 240) g_timeframe = PERIOD_H4;
-         else if(new_tf_val == 1440) g_timeframe = PERIOD_D1;
-         
-         double new_lot_val = StringToDouble(ObjectGetString(0, g_prefix + "INP_LOT", OBJPROP_TEXT));
-         if(new_lot_val > 0)
+         g_editing_rule_idx = -1;
+         CreateDashboardUI();
+         return;
+      }
+      // Form Add or Update Rule
+      else if(sparam == g_prefix + "BTN_SUBMIT_RULE")
+      {
+         string raw_sym = ObjectGetString(0, g_prefix + "INP_SYM", OBJPROP_TEXT);
+         string valid_sym = FindExactOrMarketWatchSymbol(raw_sym);
+         if(valid_sym == "")
          {
-            if(g_lot_mode == LOT_FIXED) g_fixed_lot = new_lot_val;
-            else g_risk_pct = new_lot_val;
+            Alert("Simbol '" + raw_sym + "' tidak ditemukan di Market Watch!");
+            return;
          }
          
-         double new_trail_pct = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_PCT", OBJPROP_TEXT));
-         if(new_trail_pct > 0) g_trail_trigger_pct = new_trail_pct;
+         double rr_val = StringToDouble(ObjectGetString(0, g_prefix + "INP_RR", OBJPROP_TEXT));
+         if(rr_val <= 0) rr_val = 2.0;
          
-         double new_atr_mult = StringToDouble(ObjectGetString(0, g_prefix + "INP_ATR_MULT", OBJPROP_TEXT));
-         if(new_atr_mult > 0) g_atr_multiplier = new_atr_mult;
+         int tf_input = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_TF", OBJPROP_TEXT));
+         ENUM_TIMEFRAMES tf_val = PERIOD_M5;
+         if(tf_input == 1) tf_val = PERIOD_M1;
+         else if(tf_input == 5) tf_val = PERIOD_M5;
+         else if(tf_input == 15) tf_val = PERIOD_M15;
+         else if(tf_input == 30) tf_val = PERIOD_M30;
+         else if(tf_input == 60) tf_val = PERIOD_H1;
+         else if(tf_input == 240) tf_val = PERIOD_H4;
+         else if(tf_input == 1440) tf_val = PERIOD_D1;
+         
+         double lot_val = StringToDouble(ObjectGetString(0, g_prefix + "INP_LOT", OBJPROP_TEXT));
+         if(lot_val <= 0) lot_val = (g_form_lot_mode == LOT_FIXED) ? 0.01 : 1.0;
+         
+         double trail_pct = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_PCT", OBJPROP_TEXT));
+         if(trail_pct <= 0) trail_pct = 5.0;
+         
+         double atr_mult = StringToDouble(ObjectGetString(0, g_prefix + "INP_ATR_MULT", OBJPROP_TEXT));
+         if(atr_mult <= 0) atr_mult = 2.0;
          
          string str_bmax = ObjectGetString(0, g_prefix + "INP_BULL_MAX", OBJPROP_TEXT);
          StringTrimLeft(str_bmax); StringTrimRight(str_bmax); StringToUpper(str_bmax);
-         if(str_bmax == "" || str_bmax == "ALL" || str_bmax == "BEBAS" || str_bmax == "FREE") g_bull_price_max = 0.0;
-         else g_bull_price_max = StringToDouble(str_bmax);
+         double bmax_val = (str_bmax == "" || str_bmax == "ALL" || str_bmax == "BEBAS") ? 0.0 : StringToDouble(str_bmax);
          
          string str_smin = ObjectGetString(0, g_prefix + "INP_BEAR_MIN", OBJPROP_TEXT);
          StringTrimLeft(str_smin); StringTrimRight(str_smin); StringToUpper(str_smin);
-         if(str_smin == "" || str_smin == "ALL" || str_smin == "BEBAS" || str_smin == "FREE") g_bear_price_min = 0.0;
-         else g_bear_price_min = StringToDouble(str_smin);
+         double smin_val = (str_smin == "" || str_smin == "ALL" || str_smin == "BEBAS") ? 0.0 : StringToDouble(str_smin);
          
+         int target_idx = g_editing_rule_idx;
+         if(target_idx < 0)
+         {
+            target_idx = ArraySize(g_rules);
+            ArrayResize(g_rules, target_idx + 1);
+            g_rules[target_idx].active = true;
+         }
+         
+         g_rules[target_idx].symbol            = valid_sym;
+         g_rules[target_idx].direction         = g_form_direction;
+         g_rules[target_idx].risk_reward_ratio = rr_val;
+         g_rules[target_idx].timeframe         = tf_val;
+         g_rules[target_idx].lot_mode          = g_form_lot_mode;
+         g_rules[target_idx].lot_value         = lot_val;
+         g_rules[target_idx].enable_trail      = g_form_trail_on;
+         g_rules[target_idx].trail_trigger_pct = trail_pct;
+         g_rules[target_idx].atr_multiplier    = atr_mult;
+         g_rules[target_idx].bull_price_max    = bmax_val;
+         g_rules[target_idx].bear_price_min    = smin_val;
+         g_rules[target_idx].max_trades        = InpMaxOpenTrades;
+         g_rules[target_idx].last_bull_bar     = 0;
+         g_rules[target_idx].last_bear_bar     = 0;
+         
+         g_editing_rule_idx = -1;
          SaveStateToFile();
-         UpdateDashboardUI();
-         Alert("Pengaturan Engulfing Auto Trader berhasil disimpan & diterapkan!");
+         CreateDashboardUI();
+         Alert(StringFormat("Auto Trader Rule untuk %s berhasil disimpan!", valid_sym));
          return;
+      }
+      
+      // Dynamic Table Action Buttons (Edit, Delete, Toggle Active)
+      int total_rules = ArraySize(g_rules);
+      for(int i = 0; i < total_rules; i++)
+      {
+         // Edit button
+         if(sparam == g_prefix + "BTN_EDIT_RULE_" + IntegerToString(i))
+         {
+            g_editing_rule_idx = i;
+            g_form_direction   = g_rules[i].direction;
+            g_form_lot_mode    = g_rules[i].lot_mode;
+            g_form_trail_on    = g_rules[i].enable_trail;
+            CreateDashboardUI();
+            return;
+         }
+         // Delete button
+         else if(sparam == g_prefix + "BTN_DEL_RULE_" + IntegerToString(i))
+         {
+            for(int d = i; d < total_rules - 1; d++)
+               g_rules[d] = g_rules[d + 1];
+            ArrayResize(g_rules, total_rules - 1);
+            
+            if(g_editing_rule_idx == i) g_editing_rule_idx = -1;
+            else if(g_editing_rule_idx > i) g_editing_rule_idx--;
+            
+            SaveStateToFile();
+            CreateDashboardUI();
+            return;
+         }
+         // Toggle Active/Paused button
+         else if(sparam == g_prefix + "BTN_TOGGLE_RULE_" + IntegerToString(i))
+         {
+            g_rules[i].active = !g_rules[i].active;
+            SaveStateToFile();
+            UpdateDashboardUI();
+            return;
+         }
       }
    }
 }
 
 //+------------------------------------------------------------------+
-//| Expert tick function (Instant Execution on Engulfing Break)      |
+//| Expert tick function (Multi-Rule Realtime Tick Scanning)         |
 //+------------------------------------------------------------------+
 void OnTick()
 {
-   if(!g_auto_trading_enabled) return;
-   
-   string sym = _Symbol;
-   ENUM_TIMEFRAMES tf = g_timeframe;
+   if(!g_master_power_enabled) return;
    
    // 1. Process active position trailing SL & TP
    ProcessAutoTrailSLTP();
    
-   if(g_max_open_trades > 0 && CountOpenPositions(sym) >= g_max_open_trades)
-      return;
-      
-   if(!m_symbol_info.Name(sym)) return;
-   m_symbol_info.RefreshRates();
+   int total_rules = ArraySize(g_rules);
+   if(total_rules == 0) return;
    
-   double ask = m_symbol_info.Ask();
-   double bid = m_symbol_info.Bid();
-   double spread = ask - bid;
-   int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
-   
-   datetime cur_bar_time = (datetime)SeriesInfoInteger(sym, tf, SERIES_LASTBAR_DATE);
-   
-   double atr_50 = 0.0;
-   double broken_level = 0.0;
-   double cur_price = 0.0;
-   
-   // 1. CHECK BUY (Strong Bullish Break)
-   if(g_trade_direction == TRADE_DIR_BOTH || g_trade_direction == TRADE_DIR_BUY)
+   for(int r = 0; r < total_rules; r++)
    {
-      if(IsStrongBullishEngulfingBreak(sym, tf, atr_50, broken_level, cur_price))
+      if(!g_rules[r].active) continue;
+      
+      string sym = g_rules[r].symbol;
+      ENUM_TIMEFRAMES tf = g_rules[r].timeframe;
+      
+      if(g_rules[r].max_trades > 0 && CountOpenPositions(sym) >= g_rules[r].max_trades)
+         continue;
+         
+      if(!m_symbol_info.Name(sym)) continue;
+      m_symbol_info.RefreshRates();
+      
+      double ask = m_symbol_info.Ask();
+      double bid = m_symbol_info.Bid();
+      double spread = ask - bid;
+      int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+      
+      datetime cur_bar_time = (datetime)SeriesInfoInteger(sym, tf, SERIES_LASTBAR_DATE);
+      
+      double atr_50 = 0.0;
+      double broken_level = 0.0;
+      double cur_price = 0.0;
+      
+      // A. CHECK BUY (Strong Bullish Break)
+      if(g_rules[r].direction == TRADE_DIR_BOTH || g_rules[r].direction == TRADE_DIR_BUY)
       {
-         // Price boundary filter
-         if(g_bull_price_max <= 0.0 || cur_price < g_bull_price_max)
+         if(IsStrongBullishEngulfingBreak(sym, tf, atr_50, broken_level, cur_price))
          {
-            if(g_last_bull_trade_bar != cur_bar_time)
+            if(g_rules[r].bull_price_max <= 0.0 || cur_price < g_rules[r].bull_price_max)
             {
-               g_last_bull_trade_bar = cur_bar_time;
-               
-               // SL = Low Candle Sebelumnya - 50% ATR
-               double sl_price = broken_level - atr_50;
-               double sl_dist  = ask - sl_price;
-               
-               if(sl_dist > 0)
+               if(g_rules[r].last_bull_bar != cur_bar_time)
                {
-                  // TP = Ask + (SL Distance * RR)
-                  double tp_price = ask + (sl_dist * g_risk_reward_ratio);
+                  g_rules[r].last_bull_bar = cur_bar_time;
                   
-                  sl_price = NormalizeDouble(sl_price, digits);
-                  tp_price = NormalizeDouble(tp_price, digits);
-                  double lots = CalculateLotSize(sym, ask, sl_price);
+                  double sl_price = broken_level - atr_50;
+                  double sl_dist  = ask - sl_price;
                   
-                  if(m_trade.Buy(lots, sym, ask, sl_price, tp_price, "Engulfing Buy (RR 1:" + DoubleToString(g_risk_reward_ratio, 1) + ")"))
+                  if(sl_dist > 0)
                   {
-                     ulong deal_tkt = m_trade.ResultOrder();
-                     double atr100 = atr_50 * 2.0; // 100% ATR of entry
-                     RegisterPositionTracking(deal_tkt, atr100, ask, tp_price);
+                     double tp_price = ask + (sl_dist * g_rules[r].risk_reward_ratio);
+                     sl_price = NormalizeDouble(sl_price, digits);
+                     tp_price = NormalizeDouble(tp_price, digits);
+                     double lots = CalculateLotSize(sym, g_rules[r].lot_mode, g_rules[r].lot_value, ask, sl_price);
                      
-                     string msg = StringFormat("[AUTO TRADER - ORDER OPENED]\nSymbol: %s (M%d)\nTicket: #%d (BUY)\nLot: %.2f | Ask: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)\n100%% ATR Awal: %.5f",
-                                               sym, (int)g_timeframe, deal_tkt, lots, ask, sl_price, tp_price, g_risk_reward_ratio, atr100);
-                     if(InpEnableSoundAlerts) Alert(msg);
-                     if(InpEnablePushAlerts)  SendNotification(msg);
-                     
-                     PrintFormat("BUY Executed: #%d | Lot: %.2f | Ask: %.5f | SL: %.5f | TP: %.5f (RR 1:%.2f) | ATR100: %.5f",
-                                 deal_tkt, lots, ask, sl_price, tp_price, g_risk_reward_ratio, atr100);
+                     if(m_trade.Buy(lots, sym, ask, sl_price, tp_price, "Engulfing Buy (RR 1:" + DoubleToString(g_rules[r].risk_reward_ratio, 1) + ")"))
+                     {
+                        ulong deal_tkt = m_trade.ResultOrder();
+                        double atr100 = atr_50 * 2.0;
+                        if(g_rules[r].enable_trail)
+                        {
+                           RegisterPositionTracking(deal_tkt, sym, tf, atr100, ask, tp_price, g_rules[r].trail_trigger_pct, g_rules[r].atr_multiplier);
+                        }
+                        
+                        string msg = StringFormat("[AUTO TRADER - ORDER OPENED]\nSymbol: %s (%s)\nTicket: #%d (BUY)\nLot: %.2f | Ask: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)\n100%% ATR Awal: %.5f",
+                                                  sym, EnumToString(tf), deal_tkt, lots, ask, sl_price, tp_price, g_rules[r].risk_reward_ratio, atr100);
+                        if(InpEnableSoundAlerts) Alert(msg);
+                        if(InpEnablePushAlerts)  SendNotification(msg);
+                        
+                        PrintFormat("BUY Executed: #%d | %s | Lot: %.2f | Ask: %.5f | SL: %.5f | TP: %.5f (RR 1:%.2f)",
+                                    deal_tkt, sym, lots, ask, sl_price, tp_price, g_rules[r].risk_reward_ratio);
+                     }
                   }
                }
             }
          }
       }
-   }
-   
-   // 2. CHECK SELL (Strong Bearish Break)
-   if(g_trade_direction == TRADE_DIR_BOTH || g_trade_direction == TRADE_DIR_SELL)
-   {
-      if(IsStrongBearishEngulfingBreak(sym, tf, atr_50, broken_level, cur_price))
+      
+      // B. CHECK SELL (Strong Bearish Break)
+      if(g_rules[r].direction == TRADE_DIR_BOTH || g_rules[r].direction == TRADE_DIR_SELL)
       {
-         // Price boundary filter
-         if(g_bear_price_min <= 0.0 || cur_price > g_bear_price_min)
+         if(IsStrongBearishEngulfingBreak(sym, tf, atr_50, broken_level, cur_price))
          {
-            if(g_last_bear_trade_bar != cur_bar_time)
+            if(g_rules[r].bear_price_min <= 0.0 || cur_price > g_rules[r].bear_price_min)
             {
-               g_last_bear_trade_bar = cur_bar_time;
-               
-               // SL = High Candle Sebelumnya + 50% ATR + Spread
-               double sl_price = broken_level + atr_50 + spread;
-               double sl_dist  = sl_price - bid;
-               
-               if(sl_dist > 0)
+               if(g_rules[r].last_bear_bar != cur_bar_time)
                {
-                  // TP = Bid - (SL Distance * RR)
-                  double tp_price = bid - (sl_dist * g_risk_reward_ratio);
+                  g_rules[r].last_bear_bar = cur_bar_time;
                   
-                  sl_price = NormalizeDouble(sl_price, digits);
-                  tp_price = NormalizeDouble(tp_price, digits);
-                  double lots = CalculateLotSize(sym, bid, sl_price);
+                  double sl_price = broken_level + atr_50 + spread;
+                  double sl_dist  = sl_price - bid;
                   
-                  if(m_trade.Sell(lots, sym, bid, sl_price, tp_price, "Engulfing Sell (RR 1:" + DoubleToString(g_risk_reward_ratio, 1) + ")"))
+                  if(sl_dist > 0)
                   {
-                     ulong deal_tkt = m_trade.ResultOrder();
-                     double atr100 = atr_50 * 2.0; // 100% ATR of entry
-                     RegisterPositionTracking(deal_tkt, atr100, bid, tp_price);
+                     double tp_price = bid - (sl_dist * g_rules[r].risk_reward_ratio);
+                     sl_price = NormalizeDouble(sl_price, digits);
+                     tp_price = NormalizeDouble(tp_price, digits);
+                     double lots = CalculateLotSize(sym, g_rules[r].lot_mode, g_rules[r].lot_value, bid, sl_price);
                      
-                     string msg = StringFormat("[AUTO TRADER - ORDER OPENED]\nSymbol: %s (M%d)\nTicket: #%d (SELL)\nLot: %.2f | Bid: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)\n100%% ATR Awal: %.5f",
-                                               sym, (int)g_timeframe, deal_tkt, lots, bid, sl_price, tp_price, g_risk_reward_ratio, atr100);
-                     if(InpEnableSoundAlerts) Alert(msg);
-                     if(InpEnablePushAlerts)  SendNotification(msg);
-                     
-                     PrintFormat("SELL Executed: #%d | Lot: %.2f | Bid: %.5f | SL: %.5f | TP: %.5f (RR 1:%.2f) | ATR100: %.5f",
-                                 deal_tkt, lots, bid, sl_price, tp_price, g_risk_reward_ratio, atr100);
+                     if(m_trade.Sell(lots, sym, bid, sl_price, tp_price, "Engulfing Sell (RR 1:" + DoubleToString(g_rules[r].risk_reward_ratio, 1) + ")"))
+                     {
+                        ulong deal_tkt = m_trade.ResultOrder();
+                        double atr100 = atr_50 * 2.0;
+                        if(g_rules[r].enable_trail)
+                        {
+                           RegisterPositionTracking(deal_tkt, sym, tf, atr100, bid, tp_price, g_rules[r].trail_trigger_pct, g_rules[r].atr_multiplier);
+                        }
+                        
+                        string msg = StringFormat("[AUTO TRADER - ORDER OPENED]\nSymbol: %s (%s)\nTicket: #%d (SELL)\nLot: %.2f | Bid: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)\n100%% ATR Awal: %.5f",
+                                                  sym, EnumToString(tf), deal_tkt, lots, bid, sl_price, tp_price, g_rules[r].risk_reward_ratio, atr100);
+                        if(InpEnableSoundAlerts) Alert(msg);
+                        if(InpEnablePushAlerts)  SendNotification(msg);
+                        
+                        PrintFormat("SELL Executed: #%d | %s | Lot: %.2f | Bid: %.5f | SL: %.5f | TP: %.5f (RR 1:%.2f)",
+                                    deal_tkt, sym, lots, bid, sl_price, tp_price, g_rules[r].risk_reward_ratio);
+                     }
                   }
                }
             }
