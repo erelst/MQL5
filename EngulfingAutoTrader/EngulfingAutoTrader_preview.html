@@ -199,7 +199,7 @@
       font-size: 12px;
       font-weight: 800;
       color: var(--text-pure);
-      width: 120px;
+      width: 130px;
       flex-shrink: 0;
     }
 
@@ -364,10 +364,10 @@
           </div>
         </div>
 
-        <!-- Kolom Kanan: Manajemen Lot & Filter Harga -->
+        <!-- Kolom Kanan: Manajemen Lot & Auto Trail Engine -->
         <div class="card">
           <div class="card-title">
-            <span>2. LOT SIZE & FILTER HARGA</span>
+            <span>2. LOT SIZE & TRAIL ENGINE</span>
           </div>
 
           <div class="form-row">
@@ -381,6 +381,11 @@
           <div class="form-row" id="row-lot">
             <span class="form-label" id="lbl-lot">LOT SIZE:</span>
             <input type="text" value="0.01" id="inp-lotvalue">
+          </div>
+
+          <div class="form-row">
+            <span class="form-label" style="color:var(--gold-bright);">AUTO TRAIL SL & TP:</span>
+            <button class="btn-toggle active-both" id="btn-trail-toggle" onclick="toggleTrail()" style="width:100%;">ON (SISA 5% TP)</button>
           </div>
 
           <div class="form-row">
@@ -405,16 +410,17 @@
       <!-- Live Calculation Simulation Box -->
       <div class="card" style="margin-bottom: 0;">
         <div class="card-title">
-          <span>3. SIMULASI ENGINE EKSEKUSI REALTIME</span>
-          <span style="font-size: 11px; color: var(--gold-bright);">TICK-LEVEL SL/TP ENGINE</span>
+          <span>3. SIMULASI AUTO TRAIL SL (BE) & TRAIL TP ENGINE</span>
+          <span style="font-size: 11px; color: var(--gold-bright);" id="trail-status-tag">AUTO TRAIL ENGINE: ACTIVE</span>
         </div>
 
         <div class="notif-terminal" id="sim-terminal">
           Symbol: <span class="hl-title">EURUSD</span> | TF: <span class="hl-title" id="disp-tf">M5</span> | Mode: <span class="hl-title" id="disp-dir">BUY & SELL</span><br>
-          Target Ratio: <span class="hl-title" id="disp-rr">1:2.0 RR</span> | Buffer SL: <span class="hl-atr">50% ATR(14)</span><br>
+          Target Ratio: <span class="hl-title" id="disp-rr">1:2.0 RR</span> | Buffer SL Awal: <span class="hl-atr">50% ATR(14)</span><br>
           ----------------------------------------------------------------<br>
-          <span class="hl-bull">[BUY BREAK]</span> : SL = Low[1] - 50% ATR &nbsp;|&nbsp; TP = Ask + (Jarak_SL * <span id="disp-rr-buy">2.0</span>)<br>
-          <span class="hl-bear">[SELL BREAK]</span>: SL = High[1] + 50% ATR + Spread &nbsp;|&nbsp; TP = Bid - (Jarak_SL * <span id="disp-rr-sell">2.0</span>)
+          🛡️ <strong>Auto Trail SL (Pemicu 1)</strong>: Saat sisa 5% ke TP $\rightarrow$ SL dikunci ke <span class="hl-title">BE (Open ± Spread)</span><br>
+          🚀 <strong>Auto Trail TP (Volatilitas)</strong>: Jika ATR Realtime $\ge$ <span class="hl-atr">2x (100% ATR Awal)</span> $\rightarrow$ TP diperpanjang <span class="hl-title">+1x Target</span><br>
+          🔒 <strong>Auto Trail SL (Pemicu 2+)</strong>: Saat sisa 5% ke TP baru $\rightarrow$ SL dikunci ke <span class="hl-bull">Harga TP Sebelumnya</span>
         </div>
       </div>
     </div>
@@ -422,6 +428,7 @@
 
   <script>
     let isRunning = true;
+    let isTrailOn = true;
     let currentDir = 'BOTH';
 
     function setDir(dir) {
@@ -457,6 +464,23 @@
       }
     }
 
+    function toggleTrail() {
+      isTrailOn = !isTrailOn;
+      const btn = document.getElementById('btn-trail-toggle');
+      const tag = document.getElementById('trail-status-tag');
+      if (isTrailOn) {
+        btn.className = 'btn-toggle active-both';
+        btn.innerText = 'ON (SISA 5% TP)';
+        tag.innerText = 'AUTO TRAIL ENGINE: ACTIVE';
+        tag.style.color = 'var(--gold-bright)';
+      } else {
+        btn.className = 'btn-toggle';
+        btn.innerText = 'OFF';
+        tag.innerText = 'AUTO TRAIL ENGINE: OFF';
+        tag.style.color = 'var(--text-med)';
+      }
+    }
+
     function updateLiveCalculation() {
       const rr = document.getElementById('inp-rr').value || '2.0';
       const tfText = document.getElementById('inp-tf').options[document.getElementById('inp-tf').selectedIndex].text.split(' ')[0];
@@ -468,13 +492,11 @@
       document.getElementById('disp-tf').innerText = tfText;
       document.getElementById('disp-dir').innerText = dirText;
       document.getElementById('disp-rr').innerText = `1:${rr} RR`;
-      document.getElementById('disp-rr-buy').innerText = rr;
-      document.getElementById('disp-rr-sell').innerText = rr;
     }
 
     function saveSettings() {
       const rr = document.getElementById('inp-rr').value;
-      alert(`Pengaturan Berhasil Disimpan:\n- Arah: ${currentDir}\n- Risk-to-Reward: 1:${rr}\n- Timeframe: M${document.getElementById('inp-tf').value}\n- Auto-Trading: ${isRunning ? 'ACTIVE' : 'PAUSED'}`);
+      alert(`Pengaturan Berhasil Disimpan:\n- Arah: ${currentDir}\n- Risk-to-Reward: 1:${rr}\n- Timeframe: M${document.getElementById('inp-tf').value}\n- Auto Trail SL & TP: ${isTrailOn ? 'ON' : 'OFF'}\n- Auto-Trading: ${isRunning ? 'ACTIVE' : 'PAUSED'}`);
     }
   </script>
 </body>
