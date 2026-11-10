@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Engulfing Auto Trader Dashboard Preview</title>
+  <style>
+    :root {
+      /* Pitch-dark obsidian & pure black container palette */
+      --canvas-bg: #000000;
+      --surface-1: #050608;
+      --surface-2: #080a0e;
+      --surface-3: #10131b;
+      --surface-highlight: #182030;
+      
+      --border-soft: #1c2436;
+      --border-hard: #2a3752;
+      --border-accent: #00e5ff;
+
+      /* Ultra-bright text palette */
+      --text-pure: #ffffff;
+      --text-high: #f0f6fc;
+      --text-med: #b4c6e7;
+      --text-dim: #7a8ea8;
+
+      /* High-Vibrancy Neon Accents (Matched 1:1 with MQL5 constants) */
+      --cyan-bright: #00e5ff;
+      --cyan-bg: rgba(0, 229, 255, 0.12);
+      
+      --bull-bright: #00e676;
+      --bull-bg: rgba(0, 230, 118, 0.12);
+      --bull-border: #00e676;
+
+      --bear-bright: #ff2e4d;
+      --bear-bg: rgba(255, 46, 77, 0.14);
+      --bear-border: #ff2e4d;
+
+      --gold-bright: #ffb300;
+      --gold-bg: rgba(255, 179, 0, 0.12);
+      --gold-border: #ffb300;
+
+      --tab-active-bg: #221508;
+      --row-selected-bg: #1a150d;
+      --row-alt-bg: #121822;
+
+      /* Elevation Shadow */
+      --text-outline: 
+        0 1px 2px rgba(2, 6, 23, 0.95),
+        0 0 1px rgba(15, 23, 42, 0.9),
+        0 0 8px rgba(0, 0, 0, 0.8);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif; }
+    
+    body {
+      background-color: var(--canvas-bg);
+      color: var(--text-high);
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      text-shadow: var(--text-outline);
+    }
+
+    .app-container {
+      width: 780px;
+      background: var(--surface-1);
+      border: 1px solid var(--border-hard);
+      border-radius: 12px;
+      box-shadow: 0 0 40px rgba(0, 229, 255, 0.08), 0 30px 70px rgba(0, 0, 0, 0.95);
+      overflow: hidden;
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      background: var(--surface-2);
+      border-bottom: 2px solid var(--border-hard);
+    }
+
+    .brand {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.8px;
+      color: var(--text-pure);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-tag {
+      font-size: 10px;
+      padding: 3px 8px;
+      background: rgba(0, 229, 255, 0.15);
+      color: var(--cyan-bright);
+      border: 1px solid var(--cyan-bright);
+      border-radius: 4px;
+      font-weight: 800;
+      letter-spacing: 1px;
+    }
+
+    .status-badge {
+      font-size: 11px;
+      font-weight: 800;
+      padding: 5px 12px;
+      border-radius: 4px;
+      border: 1px solid var(--bull-border);
+      background: var(--bull-bg);
+      color: var(--bull-bright);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .status-badge.off {
+      border-color: var(--bear-border);
+      background: var(--bear-bg);
+      color: var(--bear-bright);
+    }
+
+    .pulse-dot {
+      width: 7px;
+      height: 7px;
+      background: currentColor;
+      border-radius: 50%;
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    .main-body { padding: 20px; }
+
+    .grid-2col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--surface-3);
+      border: 1px solid var(--border-hard);
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7);
+      margin-bottom: 16px;
+    }
+
+    .card-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--cyan-bright);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-soft);
+      padding-bottom: 8px;
+    }
+
+    .form-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      gap: 8px;
+    }
+
+    .form-label {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text-pure);
+      width: 120px;
+      flex-shrink: 0;
+    }
+
+    input, select {
+      background: var(--canvas-bg);
+      border: 1px solid var(--border-hard);
+      color: var(--text-pure);
+      padding: 7px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      width: 100%;
+      outline: none;
+      transition: all 0.15s;
+      text-shadow: var(--text-outline);
+    }
+
+    input:focus, select:focus {
+      border-color: var(--cyan-bright);
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.35);
+    }
+
+    .dir-toggle-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+      width: 100%;
+    }
+
+    .btn-toggle {
+      padding: 7px 4px;
+      font-size: 11px;
+      font-weight: 900;
+      border-radius: 5px;
+      border: 1px solid var(--border-hard);
+      background: var(--surface-2);
+      color: var(--text-med);
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+      user-select: none;
+    }
+
+    .btn-toggle.active-both {
+      background: var(--tab-active-bg);
+      color: var(--cyan-bright);
+      border-color: var(--cyan-bright);
+      box-shadow: 0 0 8px rgba(0, 229, 255, 0.25);
+    }
+
+    .btn-toggle.active-buy {
+      background: var(--bull-bg);
+      color: var(--bull-bright);
+      border-color: var(--bull-border);
+      box-shadow: 0 0 8px rgba(0, 230, 118, 0.25);
+    }
+
+    .btn-toggle.active-sell {
+      background: var(--bear-bg);
+      color: var(--bear-bright);
+      border-color: var(--bear-border);
+      box-shadow: 0 0 8px rgba(255, 46, 77, 0.25);
+    }
+
+    .btn {
+      padding: 9px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.6px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      text-transform: uppercase;
+      text-shadow: var(--text-outline);
+      width: 100%;
+    }
+
+    .btn-blue {
+      background: var(--tab-active-bg);
+      color: var(--cyan-bright);
+      border-color: var(--cyan-bright);
+    }
+    .btn-blue:hover {
+      background: rgba(0, 229, 255, 0.24);
+      box-shadow: 0 0 14px rgba(0, 229, 255, 0.4);
+    }
+
+    .notif-terminal {
+      background: #000000;
+      border: 1px solid var(--border-hard);
+      border-left: 3px solid var(--cyan-bright);
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-family: "Courier New", Courier, monospace;
+      font-size: 11px;
+      line-height: 1.6;
+      color: var(--text-pure);
+      text-shadow: var(--text-outline);
+    }
+
+    .hl-title { color: var(--cyan-bright); font-weight: bold; }
+    .hl-bull { color: var(--bull-bright); font-weight: bold; }
+    .hl-bear { color: var(--bear-bright); font-weight: bold; }
+    .hl-atr { color: var(--gold-bright); font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <div class="app-container">
+    <div class="top-bar">
+      <div class="brand">
+        <span>⚡ ENGULFING AUTO TRADER</span>
+        <span class="brand-tag">ON-CHART AUTO EXECUTION</span>
+      </div>
+      <div class="status-badge" id="status-badge" onclick="togglePower()">
+        <span class="pulse-dot"></span> <span id="status-text">STATUS: ACTIVE</span>
+      </div>
+    </div>
+
+    <div class="main-body">
+      <div class="grid-2col">
+        <!-- Kolom Kiri: Arah Trading & Target RR -->
+        <div class="card">
+          <div class="card-title">
+            <span>1. ARAH TRADING & TARGET RR</span>
+          </div>
+
+          <div class="form-row" style="flex-direction: column; align-items: flex-start; margin-bottom: 12px;">
+            <span class="form-label" style="width:100%; margin-bottom: 6px;">ARAH TRADING:</span>
+            <div class="dir-toggle-group">
+              <button class="btn-toggle active-both" id="dir-both" onclick="setDir('BOTH')">BUY & SELL</button>
+              <button class="btn-toggle" id="dir-buy" onclick="setDir('BUY')">BUY ONLY</button>
+              <button class="btn-toggle" id="dir-sell" onclick="setDir('SELL')">SELL ONLY</button>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <span class="form-label">RISK REWARD (1:X):</span>
+            <input type="text" value="2.0" id="inp-rr" placeholder="Contoh: 1.5, 2.0, 2.5" oninput="updateLiveCalculation()">
+          </div>
+
+          <div class="form-row">
+            <span class="form-label">TIMEFRAME (MIN):</span>
+            <select id="inp-tf" onchange="updateLiveCalculation()">
+              <option value="1">M1 (1 Menit)</option>
+              <option value="5" selected>M5 (5 Menit)</option>
+              <option value="15">M15 (15 Menit)</option>
+              <option value="30">M30 (30 Menit)</option>
+              <option value="60">H1 (1 Jam)</option>
+              <option value="240">H4 (4 Jam)</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <span class="form-label">MAX POSISI:</span>
+            <input type="number" value="1" id="inp-maxtrades">
+          </div>
+        </div>
+
+        <!-- Kolom Kanan: Manajemen Lot & Filter Harga -->
+        <div class="card">
+          <div class="card-title">
+            <span>2. LOT SIZE & FILTER HARGA</span>
+          </div>
+
+          <div class="form-row">
+            <span class="form-label">LOT MODE:</span>
+            <select id="inp-lotmode" onchange="toggleLotInput()">
+              <option value="FIXED">FIXED LOT SIZE</option>
+              <option value="RISK">% RISK PER TRADE</option>
+            </select>
+          </div>
+
+          <div class="form-row" id="row-lot">
+            <span class="form-label" id="lbl-lot">LOT SIZE:</span>
+            <input type="text" value="0.01" id="inp-lotvalue">
+          </div>
+
+          <div class="form-row">
+            <span class="form-label" style="color:var(--bull-bright);">BUY HARGA &lt; :</span>
+            <input type="text" placeholder="Isi harga / 'ALL' utk Bebas" id="inp-bull-max" value="ALL">
+          </div>
+
+          <div class="form-row">
+            <span class="form-label" style="color:var(--bear-bright);">SELL HARGA &gt; :</span>
+            <input type="text" placeholder="Isi harga / 'ALL' utk Bebas" id="inp-bear-min" value="ALL">
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Button -->
+      <div style="margin-bottom: 16px;">
+        <button class="btn btn-blue" onclick="saveSettings()">
+          💾 APPLY & SAVE SETTINGS
+        </button>
+      </div>
+
+      <!-- Live Calculation Simulation Box -->
+      <div class="card" style="margin-bottom: 0;">
+        <div class="card-title">
+          <span>3. SIMULASI ENGINE EKSEKUSI REALTIME</span>
+          <span style="font-size: 11px; color: var(--gold-bright);">TICK-LEVEL SL/TP ENGINE</span>
+        </div>
+
+        <div class="notif-terminal" id="sim-terminal">
+          Symbol: <span class="hl-title">EURUSD</span> | TF: <span class="hl-title" id="disp-tf">M5</span> | Mode: <span class="hl-title" id="disp-dir">BUY & SELL</span><br>
+          Target Ratio: <span class="hl-title" id="disp-rr">1:2.0 RR</span> | Buffer SL: <span class="hl-atr">50% ATR(14)</span><br>
+          ----------------------------------------------------------------<br>
+          🟢 <strong>BUY BREAK</strong> : SL = Low[1] - 50% ATR &nbsp;|&nbsp; TP = Ask + (Jarak_SL * <span id="disp-rr-buy">2.0</span>)<br>
+          🔴 <strong>SELL BREAK</strong>: SL = High[1] + 50% ATR + Spread &nbsp;|&nbsp; TP = Bid - (Jarak_SL * <span id="disp-rr-sell">2.0</span>)
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let isRunning = true;
+    let currentDir = 'BOTH';
+
+    function setDir(dir) {
+      currentDir = dir;
+      document.getElementById('dir-both').className = 'btn-toggle' + (dir === 'BOTH' ? ' active-both' : '');
+      document.getElementById('dir-buy').className = 'btn-toggle' + (dir === 'BUY' ? ' active-buy' : '');
+      document.getElementById('dir-sell').className = 'btn-toggle' + (dir === 'SELL' ? ' active-sell' : '');
+      updateLiveCalculation();
+    }
+
+    function toggleLotInput() {
+      const mode = document.getElementById('inp-lotmode').value;
+      if (mode === 'FIXED') {
+        document.getElementById('lbl-lot').innerText = 'LOT SIZE:';
+        document.getElementById('inp-lotvalue').value = '0.01';
+      } else {
+        document.getElementById('lbl-lot').innerText = '% RISK:';
+        document.getElementById('inp-lotvalue').value = '1.0';
+      }
+    }
+
+    function togglePower() {
+      isRunning = !isRunning;
+      const badge = document.getElementById('status-badge');
+      const text = document.getElementById('status-text');
+
+      if (isRunning) {
+        badge.className = 'status-badge';
+        text.innerText = 'STATUS: ACTIVE';
+      } else {
+        badge.className = 'status-badge off';
+        text.innerText = 'STATUS: PAUSED';
+      }
+    }
+
+    function updateLiveCalculation() {
+      const rr = document.getElementById('inp-rr').value || '2.0';
+      const tfText = document.getElementById('inp-tf').options[document.getElementById('inp-tf').selectedIndex].text.split(' ')[0];
+      
+      let dirText = 'BUY & SELL';
+      if (currentDir === 'BUY') dirText = 'BUY ONLY';
+      if (currentDir === 'SELL') dirText = 'SELL ONLY';
+
+      document.getElementById('disp-tf').innerText = tfText;
+      document.getElementById('disp-dir').innerText = dirText;
+      document.getElementById('disp-rr').innerText = `1:${rr} RR`;
+      document.getElementById('disp-rr-buy').innerText = rr;
+      document.getElementById('disp-rr-sell').innerText = rr;
+    }
+
+    function saveSettings() {
+      const rr = document.getElementById('inp-rr').value;
+      alert(`Pengaturan Berhasil Disimpan:\n- Arah: ${currentDir}\n- Risk-to-Reward: 1:${rr}\n- Timeframe: M${document.getElementById('inp-tf').value}\n- Auto-Trading: ${isRunning ? 'ACTIVE' : 'PAUSED'}`);
+    }
+  </script>
+</body>
+</html>
