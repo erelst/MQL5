@@ -384,8 +384,12 @@
           </div>
 
           <div class="form-row">
-            <span class="form-label" style="color:var(--gold-bright);">AUTO TRAIL SL & TP:</span>
-            <button class="btn-toggle active-both" id="btn-trail-toggle" onclick="toggleTrail()" style="width:100%;">ON (SISA 5% TP)</button>
+            <span class="form-label" style="color:var(--gold-bright);">AUTO TRAIL:</span>
+            <button class="btn-toggle active-both" id="btn-trail-toggle" onclick="toggleTrail()" style="width:70px;">ON</button>
+            <span class="form-label" style="width:70px; text-align:right;">SISA %:</span>
+            <input type="text" value="5.0" id="inp-trail-pct" style="width:55px;" oninput="updateLiveCalculation()">
+            <span class="form-label" style="width:75px; text-align:right;">MIN ATR:</span>
+            <input type="text" value="2.0" id="inp-atr-mult" style="width:55px;" oninput="updateLiveCalculation()">
           </div>
 
           <div class="form-row">
@@ -470,7 +474,7 @@
       const tag = document.getElementById('trail-status-tag');
       if (isTrailOn) {
         btn.className = 'btn-toggle active-both';
-        btn.innerText = 'ON (SISA 5% TP)';
+        btn.innerText = 'ON';
         tag.innerText = 'AUTO TRAIL ENGINE: ACTIVE';
         tag.style.color = 'var(--gold-bright)';
       } else {
@@ -479,10 +483,13 @@
         tag.innerText = 'AUTO TRAIL ENGINE: OFF';
         tag.style.color = 'var(--text-med)';
       }
+      updateLiveCalculation();
     }
 
     function updateLiveCalculation() {
       const rr = document.getElementById('inp-rr').value || '2.0';
+      const trailPct = document.getElementById('inp-trail-pct').value || '5.0';
+      const atrMult = document.getElementById('inp-atr-mult').value || '2.0';
       const tfText = document.getElementById('inp-tf').options[document.getElementById('inp-tf').selectedIndex].text.split(' ')[0];
       
       let dirText = 'BUY & SELL';
@@ -492,11 +499,32 @@
       document.getElementById('disp-tf').innerText = tfText;
       document.getElementById('disp-dir').innerText = dirText;
       document.getElementById('disp-rr').innerText = `1:${rr} RR`;
+      
+      const simBox = document.getElementById('sim-terminal');
+      if (isTrailOn) {
+        simBox.innerHTML = `
+          Symbol: <span class="hl-title">EURUSD</span> | TF: <span class="hl-title">${tfText}</span> | Mode: <span class="hl-title">${dirText}</span><br>
+          Target Ratio: <span class="hl-title">1:${rr} RR</span> | Buffer SL Awal: <span class="hl-atr">50% ATR(14)</span><br>
+          ----------------------------------------------------------------<br>
+          🛡️ <strong>Auto Trail SL (Pemicu 1)</strong>: Saat sisa ${trailPct}% ke TP &rarr; SL dikunci ke <span class="hl-title">BE (Open &plusmn; Spread)</span><br>
+          🚀 <strong>Auto Trail TP (Volatilitas)</strong>: Jika ATR Realtime &ge; <span class="hl-atr">${atrMult}x (100% ATR Awal)</span> &rarr; TP diperpanjang <span class="hl-title">+1x Target</span><br>
+          🔒 <strong>Auto Trail SL (Pemicu 2+)</strong>: Saat sisa ${trailPct}% ke TP baru &rarr; SL dikunci ke <span class="hl-bull">Harga TP Sebelumnya</span>
+        `;
+      } else {
+        simBox.innerHTML = `
+          Symbol: <span class="hl-title">EURUSD</span> | TF: <span class="hl-title">${tfText}</span> | Mode: <span class="hl-title">${dirText}</span><br>
+          Target Ratio: <span class="hl-title">1:${rr} RR</span> | Buffer SL Awal: <span class="hl-atr">50% ATR(14)</span><br>
+          ----------------------------------------------------------------<br>
+          🛑 <strong>Auto Trail Engine: OFF</strong> (Take Profit & Stop Loss tetap di level awal sampai selesai).
+        `;
+      }
     }
 
     function saveSettings() {
       const rr = document.getElementById('inp-rr').value;
-      alert(`Pengaturan Berhasil Disimpan:\n- Arah: ${currentDir}\n- Risk-to-Reward: 1:${rr}\n- Timeframe: M${document.getElementById('inp-tf').value}\n- Auto Trail SL & TP: ${isTrailOn ? 'ON' : 'OFF'}\n- Auto-Trading: ${isRunning ? 'ACTIVE' : 'PAUSED'}`);
+      const trailPct = document.getElementById('inp-trail-pct').value;
+      const atrMult = document.getElementById('inp-atr-mult').value;
+      alert(`Pengaturan Berhasil Disimpan:\n- Arah: ${currentDir}\n- Risk-to-Reward: 1:${rr}\n- Timeframe: M${document.getElementById('inp-tf').value}\n- Auto Trail: ${isTrailOn ? 'ON' : 'OFF'} (Sisa ${trailPct}%, Min ${atrMult}x ATR)\n- Auto-Trading: ${isRunning ? 'ACTIVE' : 'PAUSED'}`);
     }
   </script>
 </body>

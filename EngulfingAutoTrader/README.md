@@ -38,6 +38,13 @@ Panel visual di chart memudahkan Anda memantau dan mengubah strategi tanpa perlu
 - **Master Power Button**: Saklar `ACTIVE` / `PAUSED` untuk mengontrol eksekusi auto-trading secara instan.
 - **Auto Persistence**: Setiap perubahan setting di panel chart otomatis disimpan ke file lokal dan tidak akan ter-reset saat chart berganti timeframe atau terminal MT5 di-restart.
 
+### 4. Notifikasi Realtime Spesifik Auto Trader
+EA mengirimkan alert pop-up dan push notifikasi ke HP Anda pada momen penting eksekusi:
+- **`[AUTO TRADER - ORDER OPENED]`**: Muncul saat posisi Buy/Sell berhasil dieksekusi dengan info lot, harga ask/bid, SL awal, TP awal, rasio RR, dan nilai 100% ATR acuan.
+- **`[AUTO TRADER - TRAIL SL BE]`**: Muncul saat harga mencapai sisa persentase target dan Stop Loss berhasil dipindahkan ke Break-Even (bebas risiko).
+- **`[AUTO TRADER - TRAIL TP EXTENDED]`**: Muncul saat volatilitas pasar meledak ($\ge$ Multiplier ATR) dan target Take Profit berhasil diperpanjang +1x target.
+- **`[AUTO TRADER - TRAIL SL LOCKED]`**: Muncul saat harga mendekati target baru dan Stop Loss berhasil dikunci di harga Take Profit sebelumnya.
+
 ---
 
 ## Parameter Input Dasar
@@ -57,5 +64,7 @@ Panel visual di chart memudahkan Anda memantau dan mengubah strategi tanpa perlu
 | `InpATRPeriod` | `14` | Periode ATR untuk kalkulasi buffer SL |
 | `InpBullishPriceMax` | `0.0` | Filter batas harga Buy `< X` (`0` / `ALL` = Bebas) |
 | `InpBearishPriceMin` | `0.0` | Filter batas harga Sell `> Y` (`0` / `ALL` = Bebas) |
+| `InpEnablePushAlerts` | `true` | Kirim notifikasi push ke aplikasi MT5 mobile di HP |
+| `InpEnableSoundAlerts` | `true` | Bunyikan suara / pop-up alert di terminal MT5 |
 | `InpMagicNumber` | `882201` | ID unik transaksi EA |
 | `InpSlippage` | `10` | Toleransi slippage (Points) |
