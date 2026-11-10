@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Multi-Symbol Manager"
 #property link      "https://github.com/1jehuang/jcode"
-#property version   "2.00"
+#property version   "2.10"
 #property description "Multi-Rule Auto Execution EA on Realtime Strong Engulfing Break with Auto Trail SL (BE) & Volatility Trail TP Engine"
 
 #include <Trade\Trade.mqh>
@@ -118,11 +118,12 @@ CSymbolInfo          m_symbol_info;
 string               g_prefix = "EAT_";
 bool                 g_master_power_enabled = true;
 
-// Active Form Editing States
-ENUM_TRADE_DIRECTION g_form_direction  = TRADE_DIR_BOTH;
-ENUM_LOT_MODE        g_form_lot_mode   = LOT_FIXED;
-bool                 g_form_trail_on   = true;
-int                  g_editing_rule_idx = -1; // -1 = Add mode, >=0 = Edit mode
+// Active Form & Preview States
+ENUM_TRADE_DIRECTION g_form_direction   = TRADE_DIR_BOTH;
+ENUM_LOT_MODE        g_form_lot_mode    = LOT_FIXED;
+bool                 g_form_trail_on    = true;
+int                  g_selected_rule_idx = 0;  // Index of rule currently previewed (>=0)
+int                  g_editing_rule_idx  = -1; // -1 = Add mode, >=0 = Edit mode
 
 // Rules Storage
 AutoTraderRule       g_rules[];
@@ -131,6 +132,7 @@ SPositionTracking    g_tracking_list[];
 // Forward declarations
 void CreateDashboardUI();
 void UpdateDashboardUI();
+void UpdatePreviewTerminalBox();
 void DestroyDashboardUI();
 void SaveStateToFile();
 void LoadStateFromFile();
@@ -176,7 +178,7 @@ bool IsStrongBullishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf,
    if(CopyRates(sym, tf, 0, 3, rates) < 3) return false;
    
    double cur_open  = rates[0].open;
-   double cur_close = rates[0].close; // live realtime tick price
+   double cur_close = rates[0].close;
    double cur_high  = rates[0].high;
    double cur_low   = rates[0].low;
    double prev_open = rates[1].open;
@@ -213,7 +215,7 @@ bool IsStrongBearishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf,
    if(CopyRates(sym, tf, 0, 3, rates) < 3) return false;
    
    double cur_open  = rates[0].open;
-   double cur_close = rates[0].close; // live realtime tick price
+   double cur_close = rates[0].close;
    double cur_high  = rates[0].high;
    double cur_low   = rates[0].low;
    double prev_open = rates[1].open;
@@ -651,21 +653,25 @@ void CreateDashboardUI()
    color status_clr = g_master_power_enabled ? CLR_BULL_NEON : CLR_BEAR_NEON;
    CreateButton("BTN_TOGGLE_MASTER", root_x + win_w - 115, root_y + 6, 100, 24, status_txt, status_bg, status_clr, status_clr);
    
-   // ================= SECTION 1: FORM DECK (TOP) =================
-   int form_deck_y = root_y + 44;
-   CreateRect("CARD_FORM_DECK", root_x + 14, form_deck_y, win_w - 28, 175, CLR_CARD_BG, CLR_BORDER_HARD);
+   // ================= SECTION 1: SIDE-BY-SIDE UPPER DECK =================
+   int upper_y = root_y + 44;
+   int form_w  = 410;
+   int prev_w  = win_w - form_w - 36;
+   int prev_x  = root_x + form_w + 22;
    
-   string form_header_txt = (g_editing_rule_idx >= 0) ? StringFormat("EDIT RULE #%d CONFIGURATION", g_editing_rule_idx + 1) : "ADD NEW AUTO TRADER RULE";
+   // 1A. Form Deck (Kiri)
+   CreateRect("CARD_FORM_DECK", root_x + 14, upper_y, form_w, 205, CLR_CARD_BG, CLR_BORDER_HARD);
+   
+   string form_header_txt = (g_editing_rule_idx >= 0) ? StringFormat("EDIT RULE #%d CONFIGURATION", g_editing_rule_idx + 1) : "ADD AUTO TRADER RULE";
    color form_header_clr = (g_editing_rule_idx >= 0) ? CLR_GOLD_NEON : CLR_CYAN_NEON;
-   CreateLabel("LBL_FORM_HEADER", root_x + 24, form_deck_y + 8, form_header_txt, form_header_clr, 9, true);
+   CreateLabel("LBL_FORM_HEADER", root_x + 22, upper_y + 8, form_header_txt, form_header_clr, 9, true);
    
-   // Row A: Symbol & Direction Toggle Buttons (y = form_deck_y + 30)
-   int row_a_y = form_deck_y + 30;
-   CreateLabel("LBL_SYM", root_x + 24, row_a_y + 4, "SYMBOL:", CLR_TEXT_PURE, 8, true);
+   // Row A: Symbol & Direction Toggle Buttons (y = upper_y + 28)
+   int row_a_y = upper_y + 28;
+   CreateLabel("LBL_SYM", root_x + 22, row_a_y + 3, "SYMBOL:", CLR_TEXT_PURE, 8, true);
    string default_sym = (g_editing_rule_idx >= 0 && g_editing_rule_idx < ArraySize(g_rules)) ? g_rules[g_editing_rule_idx].symbol : _Symbol;
-   CreateEdit("INP_SYM", root_x + 120, row_a_y, 110, 22, default_sym, CLR_CANVAS_BG, CLR_CYAN_NEON);
+   CreateEdit("INP_SYM", root_x + 95, row_a_y, 75, 20, default_sym, CLR_CANVAS_BG, CLR_CYAN_NEON);
    
-   CreateLabel("LBL_DIR", root_x + 250, row_a_y + 4, "DIRECTION:", CLR_TEXT_MED, 8, true);
    color btn_both_bg = (g_form_direction == TRADE_DIR_BOTH) ? CLR_TAB_ACTIVE_BG : CLR_PANEL_BG;
    color btn_both_cl = (g_form_direction == TRADE_DIR_BOTH) ? CLR_CYAN_NEON : CLR_TEXT_MED;
    color btn_buy_bg  = (g_form_direction == TRADE_DIR_BUY) ? CLR_POWER_ON_BG : CLR_PANEL_BG;
@@ -673,17 +679,17 @@ void CreateDashboardUI()
    color btn_sell_bg = (g_form_direction == TRADE_DIR_SELL) ? CLR_POWER_OFF_BG : CLR_PANEL_BG;
    color btn_sell_cl = (g_form_direction == TRADE_DIR_SELL) ? CLR_BEAR_NEON : CLR_TEXT_MED;
    
-   CreateButton("BTN_DIR_BOTH", root_x + 330, row_a_y, 90, 22, "BUY & SELL", btn_both_bg, btn_both_cl, btn_both_cl);
-   CreateButton("BTN_DIR_BUY",  root_x + 426, row_a_y, 80, 22, "BUY ONLY",  btn_buy_bg,  btn_buy_cl,  btn_buy_cl);
-   CreateButton("BTN_DIR_SELL", root_x + 512, row_a_y, 80, 22, "SELL ONLY", btn_sell_bg, btn_sell_cl, btn_sell_cl);
+   CreateButton("BTN_DIR_BOTH", root_x + 178, row_a_y, 78, 20, "BUY & SELL", btn_both_bg, btn_both_cl, btn_both_cl);
+   CreateButton("BTN_DIR_BUY",  root_x + 260, row_a_y, 74, 20, "BUY ONLY",  btn_buy_bg,  btn_buy_cl,  btn_buy_cl);
+   CreateButton("BTN_DIR_SELL", root_x + 338, row_a_y, 76, 20, "SELL ONLY", btn_sell_bg, btn_sell_cl, btn_sell_cl);
    
-   // Row B: Risk Reward, Timeframe, Lot Mode & Lot Value (y = form_deck_y + 60)
-   int row_b_y = form_deck_y + 60;
-   CreateLabel("LBL_RR", root_x + 24, row_b_y + 4, "RISK REWARD:", CLR_TEXT_PURE, 8, true);
+   // Row B: Risk Reward & Timeframe (y = upper_y + 54)
+   int row_b_y = upper_y + 54;
+   CreateLabel("LBL_RR", root_x + 22, row_b_y + 3, "RR RATIO:", CLR_TEXT_PURE, 8, true);
    double default_rr = (g_editing_rule_idx >= 0 && g_editing_rule_idx < ArraySize(g_rules)) ? g_rules[g_editing_rule_idx].risk_reward_ratio : InpRiskRewardRatio;
-   CreateEdit("INP_RR", root_x + 120, row_b_y, 110, 22, DoubleToString(default_rr, 2), CLR_CANVAS_BG, CLR_CYAN_NEON);
+   CreateEdit("INP_RR", root_x + 95, row_b_y, 85, 20, DoubleToString(default_rr, 2), CLR_CANVAS_BG, CLR_CYAN_NEON);
    
-   CreateLabel("LBL_TF", root_x + 250, row_b_y + 4, "TIMEFRAME (M):", CLR_TEXT_PURE, 8, true);
+   CreateLabel("LBL_TF", root_x + 195, row_b_y + 3, "TF (MIN):", CLR_TEXT_PURE, 8, true);
    int tf_min = 5;
    if(g_editing_rule_idx >= 0 && g_editing_rule_idx < ArraySize(g_rules))
    {
@@ -696,58 +702,69 @@ void CreateDashboardUI()
       else if(tf_val == PERIOD_H4) tf_min = 240;
       else if(tf_val == PERIOD_D1) tf_min = 1440;
    }
-   CreateEdit("INP_TF", root_x + 360, row_b_y, 80, 22, IntegerToString(tf_min), CLR_CANVAS_BG, CLR_CYAN_NEON);
+   CreateEdit("INP_TF", root_x + 260, row_b_y, 154, 20, IntegerToString(tf_min), CLR_CANVAS_BG, CLR_CYAN_NEON);
    
-   CreateLabel("LBL_LOT_MODE", root_x + 460, row_b_y + 4, "LOT MODE:", CLR_TEXT_PURE, 8, true);
+   // Row C: Lot Mode & Lot Value (y = upper_y + 80)
+   int row_c_y = upper_y + 80;
+   CreateLabel("LBL_LOT_MODE", root_x + 22, row_c_y + 3, "LOT MODE:", CLR_TEXT_PURE, 8, true);
    string lot_mode_str = (g_form_lot_mode == LOT_FIXED) ? "FIXED LOT" : "% RISK / SL";
    color lot_mode_clr = (g_form_lot_mode == LOT_FIXED) ? CLR_CYAN_NEON : CLR_GOLD_NEON;
-   CreateButton("BTN_TOGGLE_LOT_MODE", root_x + 540, row_b_y, 90, 22, lot_mode_str, CLR_CANVAS_BG, lot_mode_clr, CLR_BORDER_HARD);
+   CreateButton("BTN_TOGGLE_LOT_MODE", root_x + 95, row_c_y, 85, 20, lot_mode_str, CLR_CANVAS_BG, lot_mode_clr, CLR_BORDER_HARD);
    
+   CreateLabel("LBL_LOT_VAL", root_x + 195, row_c_y + 3, "VALUE:", CLR_TEXT_PURE, 8, true);
    double default_lot = (g_editing_rule_idx >= 0 && g_editing_rule_idx < ArraySize(g_rules)) ? g_rules[g_editing_rule_idx].lot_value : ((g_form_lot_mode == LOT_FIXED) ? InpFixedLot : InpRiskPercent);
-   CreateEdit("INP_LOT", root_x + 640, row_b_y, 70, 22, DoubleToString(default_lot, 2), CLR_CANVAS_BG, CLR_TEXT_PURE);
+   CreateEdit("INP_LOT", root_x + 260, row_c_y, 154, 20, DoubleToString(default_lot, 2), CLR_CANVAS_BG, CLR_TEXT_PURE);
    
-   // Row C: Auto Trail, Sisa %, Min ATR, Buy Harga <, Sell Harga > (y = form_deck_y + 90)
-   int row_c_y = form_deck_y + 90;
-   CreateLabel("LBL_TRAIL", root_x + 24, row_c_y + 4, "AUTO TRAIL:", CLR_TEXT_PURE, 8, true);
+   // Row D: Auto Trail Toggle & Parameters (y = upper_y + 106)
+   int row_d_y = upper_y + 106;
+   CreateLabel("LBL_TRAIL", root_x + 22, row_d_y + 3, "AUTO TRAIL:", CLR_TEXT_PURE, 8, true);
    string trail_mode_str = g_form_trail_on ? "ON" : "OFF";
    color trail_mode_clr = g_form_trail_on ? CLR_GOLD_NEON : CLR_TEXT_MED;
-   CreateButton("BTN_TOGGLE_TRAIL", root_x + 120, row_c_y, 50, 22, trail_mode_str, CLR_CANVAS_BG, trail_mode_clr, CLR_BORDER_HARD);
+   CreateButton("BTN_TOGGLE_TRAIL", root_x + 95, row_d_y, 42, 20, trail_mode_str, CLR_CANVAS_BG, trail_mode_clr, CLR_BORDER_HARD);
    
-   CreateLabel("LBL_TRAIL_PCT", root_x + 180, row_c_y + 4, "SISA TP%:", CLR_TEXT_MED, 8, true);
+   CreateLabel("LBL_TRAIL_PCT", root_x + 145, row_d_y + 3, "SISA%:", CLR_TEXT_MED, 7, true);
    double default_trail_pct = (g_editing_rule_idx >= 0 && g_editing_rule_idx < ArraySize(g_rules)) ? g_rules[g_editing_rule_idx].trail_trigger_pct : InpTrailTriggerPct;
-   CreateEdit("INP_TRAIL_PCT", root_x + 245, row_c_y, 45, 22, DoubleToString(default_trail_pct, 1), CLR_CANVAS_BG, CLR_GOLD_NEON);
+   CreateEdit("INP_TRAIL_PCT", root_x + 185, row_d_y, 45, 20, DoubleToString(default_trail_pct, 1), CLR_CANVAS_BG, CLR_GOLD_NEON);
    
-   CreateLabel("LBL_ATR_MULT_LBL", root_x + 300, row_c_y + 4, "MIN ATR:", CLR_TEXT_MED, 8, true);
+   CreateLabel("LBL_ATR_MULT_LBL", root_x + 240, row_d_y + 3, "MIN ATR:", CLR_TEXT_MED, 7, true);
    double default_atr_mult = (g_editing_rule_idx >= 0 && g_editing_rule_idx < ArraySize(g_rules)) ? g_rules[g_editing_rule_idx].atr_multiplier : InpATRMultiplier;
-   CreateEdit("INP_ATR_MULT", root_x + 360, row_c_y, 45, 22, DoubleToString(default_atr_mult, 1), CLR_CANVAS_BG, CLR_CYAN_NEON);
+   CreateEdit("INP_ATR_MULT", root_x + 295, row_d_y, 45, 20, DoubleToString(default_atr_mult, 1), CLR_CANVAS_BG, CLR_CYAN_NEON);
    
-   CreateLabel("LBL_BULL_MAX", root_x + 420, row_c_y + 4, "BUY < :", CLR_BULL_NEON, 8, true);
+   // Row E: Filter Harga Buy & Filter Harga Sell (y = upper_y + 132)
+   int row_e_y = upper_y + 132;
+   CreateLabel("LBL_BULL_MAX", root_x + 22, row_e_y + 3, "BUY < :", CLR_BULL_NEON, 8, true);
    string default_bmax = "ALL";
    if(g_editing_rule_idx >= 0 && g_editing_rule_idx < ArraySize(g_rules) && g_rules[g_editing_rule_idx].bull_price_max > 0)
       default_bmax = DoubleToString(g_rules[g_editing_rule_idx].bull_price_max, 5);
-   CreateEdit("INP_BULL_MAX", root_x + 475, row_c_y, 80, 22, default_bmax, CLR_CANVAS_BG, CLR_TEXT_PURE);
+   CreateEdit("INP_BULL_MAX", root_x + 72, row_e_y, 108, 20, default_bmax, CLR_CANVAS_BG, CLR_TEXT_PURE);
    
-   CreateLabel("LBL_BEAR_MIN", root_x + 565, row_c_y + 4, "SELL > :", CLR_BEAR_NEON, 8, true);
+   CreateLabel("LBL_BEAR_MIN", root_x + 195, row_e_y + 3, "SELL > :", CLR_BEAR_NEON, 8, true);
    string default_smin = "ALL";
    if(g_editing_rule_idx >= 0 && g_editing_rule_idx < ArraySize(g_rules) && g_rules[g_editing_rule_idx].bear_price_min > 0)
       default_smin = DoubleToString(g_rules[g_editing_rule_idx].bear_price_min, 5);
-   CreateEdit("INP_BEAR_MIN", root_x + 620, row_c_y, 80, 22, default_smin, CLR_CANVAS_BG, CLR_TEXT_PURE);
+   CreateEdit("INP_BEAR_MIN", root_x + 260, row_e_y, 154, 20, default_smin, CLR_CANVAS_BG, CLR_TEXT_PURE);
    
-   // Row D: Form Action Buttons (y = form_deck_y + 125)
-   int row_d_y = form_deck_y + 125;
+   // Row F: Form Action Buttons (y = upper_y + 162)
+   int row_f_y = upper_y + 162;
    if(g_editing_rule_idx >= 0)
    {
-      CreateButton("BTN_SUBMIT_RULE", root_x + 24, row_d_y, 450, 26, "UPDATE RULE #" + IntegerToString(g_editing_rule_idx + 1), CLR_TAB_ACTIVE_BG, CLR_GOLD_NEON, CLR_GOLD_NEON);
-      CreateButton("BTN_CANCEL_EDIT", root_x + 485, row_d_y, 225, 26, "CANCEL EDIT", CLR_CARD_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
+      CreateButton("BTN_SUBMIT_RULE", root_x + 22, row_f_y, 240, 26, "UPDATE RULE #" + IntegerToString(g_editing_rule_idx + 1), CLR_TAB_ACTIVE_BG, CLR_GOLD_NEON, CLR_GOLD_NEON);
+      CreateButton("BTN_CANCEL_EDIT", root_x + 270, row_f_y, 144, 26, "CANCEL EDIT", CLR_CARD_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
    }
    else
    {
-      CreateButton("BTN_SUBMIT_RULE", root_x + 24, row_d_y, win_w - 48, 26, "+ ADD AUTO TRADER RULE", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
+      CreateButton("BTN_SUBMIT_RULE", root_x + 22, row_f_y, form_w - 18, 26, "+ ADD AUTO TRADER RULE", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
    }
    
+   // 1B. Live Simulation & Active Settings Box (Kanan)
+   CreateRect("CARD_SIM_BOX", prev_x, upper_y, prev_w, 205, CLR_CANVAS_BG, CLR_BORDER_HARD);
+   CreateRect("SIM_BOX_TOP", prev_x, upper_y, prev_w, 24, CLR_CARD_BG, CLR_BORDER_HARD);
+   CreateLabel("SIM_BOX_TITLE", prev_x + 10, upper_y + 5, "ACTIVE SETTINGS & TRAIL SIMULATION", CLR_CYAN_NEON, 8, true);
+   CreateLabel("SIM_BOX_TAG", prev_x + prev_w - 95, upper_y + 5, "[LIVE ENGINE]", CLR_GOLD_NEON, 8, true);
+   
    // ================= SECTION 2: RULES TABLE (BOTTOM) =================
-   int table_y = form_deck_y + 185;
-   CreateRect("CARD_TABLE", root_x + 14, table_y, win_w - 28, 290, CLR_CANVAS_BG, CLR_BORDER_HARD);
+   int table_y = upper_y + 215;
+   CreateRect("CARD_TABLE", root_x + 14, table_y, win_w - 28, 260, CLR_CANVAS_BG, CLR_BORDER_HARD);
    
    // Table Header Bar
    CreateRect("TH_BG", root_x + 14, table_y, win_w - 28, 24, CLR_CARD_BG, CLR_BORDER_HARD);
@@ -762,16 +779,98 @@ void CreateDashboardUI()
    CreateLabel("TH_STATUS", root_x + 655, table_y + 5, "STATUS",    CLR_TEXT_MED, 8, true);
    CreateLabel("TH_ACT",    root_x + 730, table_y + 5, "ACTIONS",   CLR_TEXT_MED, 8, true);
    
+   UpdatePreviewTerminalBox();
    UpdateDashboardUI();
    ChartRedraw();
 }
 
+void UpdatePreviewTerminalBox()
+{
+   int root_x  = 20;
+   int root_y  = 20;
+   int win_w   = 840;
+   int upper_y = root_y + 44;
+   int form_w  = 410;
+   int prev_w  = win_w - form_w - 36;
+   int prev_x  = root_x + form_w + 22;
+   int line_y  = upper_y + 32;
+   
+   // Clean previous preview labels
+   ObjectsDeleteAll(0, g_prefix + "SIM_L");
+   
+   string prev_sym   = _Symbol;
+   string prev_dir   = "BUY & SELL";
+   string prev_tf    = "M5";
+   double prev_rr    = 2.0;
+   string prev_lot   = "0.01 Lot";
+   bool   prev_trail = true;
+   double prev_pct   = 5.0;
+   double prev_atr_m = 2.0;
+   string prev_rule_tag = "[FORM INPUT]";
+   
+   int total_rules = ArraySize(g_rules);
+   if(g_editing_rule_idx >= 0 && g_editing_rule_idx < total_rules)
+   {
+      int idx = g_editing_rule_idx;
+      prev_sym   = g_rules[idx].symbol;
+      prev_tf    = StringSubstr(EnumToString(g_rules[idx].timeframe), 7);
+      prev_rr    = g_rules[idx].risk_reward_ratio;
+      prev_lot   = (g_rules[idx].lot_mode == LOT_FIXED) ? DoubleToString(g_rules[idx].lot_value, 2) + " Lot" : DoubleToString(g_rules[idx].lot_value, 1) + "% Risk";
+      prev_trail = g_rules[idx].enable_trail;
+      prev_pct   = g_rules[idx].trail_trigger_pct;
+      prev_atr_m = g_rules[idx].atr_multiplier;
+      if(g_rules[idx].direction == TRADE_DIR_BUY)  prev_dir = "BUY ONLY";
+      else if(g_rules[idx].direction == TRADE_DIR_SELL) prev_dir = "SELL ONLY";
+      prev_rule_tag = StringFormat("[RULE #%d EDIT]", idx + 1);
+   }
+   else if(g_selected_rule_idx >= 0 && g_selected_rule_idx < total_rules)
+   {
+      int idx = g_selected_rule_idx;
+      prev_sym   = g_rules[idx].symbol;
+      prev_tf    = StringSubstr(EnumToString(g_rules[idx].timeframe), 7);
+      prev_rr    = g_rules[idx].risk_reward_ratio;
+      prev_lot   = (g_rules[idx].lot_mode == LOT_FIXED) ? DoubleToString(g_rules[idx].lot_value, 2) + " Lot" : DoubleToString(g_rules[idx].lot_value, 1) + "% Risk";
+      prev_trail = g_rules[idx].enable_trail;
+      prev_pct   = g_rules[idx].trail_trigger_pct;
+      prev_atr_m = g_rules[idx].atr_multiplier;
+      if(g_rules[idx].direction == TRADE_DIR_BUY)  prev_dir = "BUY ONLY";
+      else if(g_rules[idx].direction == TRADE_DIR_SELL) prev_dir = "SELL ONLY";
+      prev_rule_tag = StringFormat("[RULE #%d PREVIEW]", idx + 1);
+   }
+   
+   string l1 = StringFormat("Target: %s (%s) | %s | %s", prev_sym, prev_tf, prev_dir, prev_rule_tag);
+   string l2 = StringFormat("Rasio RR: 1:%.2f | Mode Lot: %s | SL Buffer: 50%% ATR(14)", prev_rr, prev_lot);
+   string l3 = "-------------------------------------------------------------";
+   
+   CreateLabel("SIM_L1", prev_x + 10, line_y, l1, CLR_TEXT_PURE, 8, true);
+   CreateLabel("SIM_L2", prev_x + 10, line_y + 18, l2, CLR_CYAN_NEON, 8, false);
+   CreateLabel("SIM_L3", prev_x + 10, line_y + 32, l3, CLR_BORDER_HARD, 7, false);
+   
+   if(prev_trail)
+   {
+      string l4 = StringFormat("Auto Trail SL (BE): Sisa %.1f%% ke TP -> Kunci SL ke BE (Open +- Spread)", prev_pct);
+      string l5 = StringFormat("Volatility Trail TP: Realtime ATR >= %.1fx ATR Entry -> TP +1x Target", prev_atr_m);
+      string l6 = StringFormat("Profit Lock (Cycle 2+): Sisa %.1f%% ke TP baru -> SL dikunci di Prev TP", prev_pct);
+      
+      CreateLabel("SIM_L4", prev_x + 10, line_y + 46, l4, CLR_GOLD_NEON, 8, true);
+      CreateLabel("SIM_L5", prev_x + 10, line_y + 68, l5, CLR_CYAN_NEON, 8, false);
+      CreateLabel("SIM_L6", prev_x + 10, line_y + 90, l6, CLR_BULL_NEON, 8, true);
+      CreateLabel("SIM_L7", prev_x + 10, line_y + 112, "*Klik baris rule di tabel bawah untuk mengganti preview setting", CLR_TEXT_MED, 7, false);
+   }
+   else
+   {
+      CreateLabel("SIM_L4", prev_x + 10, line_y + 50, "Auto Trail Engine: OFF", CLR_BEAR_NEON, 8, true);
+      CreateLabel("SIM_L5", prev_x + 10, line_y + 72, "Take Profit & Stop Loss tetap di level awal tanpa trailing.", CLR_TEXT_MED, 8, false);
+      CreateLabel("SIM_L6", prev_x + 10, line_y + 112, "*Klik baris rule di tabel bawah untuk mengganti preview setting", CLR_TEXT_MED, 7, false);
+   }
+}
+
 void UpdateDashboardUI()
 {
-   int root_x = 20;
-   int root_y = 20;
-   int win_w  = 840;
-   int table_y = root_y + 44 + 185;
+   int root_x  = 20;
+   int root_y  = 20;
+   int win_w   = 840;
+   int table_y = root_y + 44 + 215;
    int start_y = table_y + 28;
    
    // Clean previous rows
@@ -789,14 +888,14 @@ void UpdateDashboardUI()
       return;
    }
    
-   for(int i = 0; i < total_rules && i < 6; i++)
+   for(int i = 0; i < total_rules && i < 5; i++)
    {
       int cur_y = start_y + (i * 42);
       string r_pfx = StringFormat("ROW_%d_", i);
-      bool is_editing = (g_editing_rule_idx == i);
+      bool is_selected = (g_selected_rule_idx == i || g_editing_rule_idx == i);
       
-      color row_bg = is_editing ? CLR_ROW_SELECTED : ((i % 2 == 0) ? CLR_CARD_BG : CLR_PANEL_BG);
-      CreateRect(r_pfx + "BG", root_x + 20, cur_y, win_w - 40, 38, row_bg, is_editing ? CLR_GOLD_NEON : CLR_BORDER_SOFT);
+      color row_bg = is_selected ? CLR_ROW_SELECTED : ((i % 2 == 0) ? CLR_CARD_BG : CLR_PANEL_BG);
+      CreateRect(r_pfx + "BG", root_x + 20, cur_y, win_w - 40, 38, row_bg, is_selected ? CLR_GOLD_NEON : CLR_BORDER_SOFT);
       
       // No
       CreateLabel(r_pfx + "NO", root_x + 26, cur_y + 11, StringFormat("#%d", i + 1), CLR_TEXT_PURE, 8, true);
@@ -838,7 +937,7 @@ void UpdateDashboardUI()
       CreateButton("BTN_TOGGLE_RULE_" + IntegerToString(i), root_x + 650, cur_y + 8, 65, 22, r_status_txt, r_status_bg, r_status_clr, r_status_clr);
       
       // Actions: Edit and Delete
-      CreateButton("BTN_EDIT_RULE_" + IntegerToString(i), root_x + 725, cur_y + 8, 45, 22, "EDIT", is_editing ? CLR_TAB_ACTIVE_BG : CLR_CARD_BG, is_editing ? CLR_GOLD_NEON : CLR_CYAN_NEON, is_editing ? CLR_GOLD_NEON : CLR_BORDER_HARD);
+      CreateButton("BTN_EDIT_RULE_" + IntegerToString(i), root_x + 725, cur_y + 8, 45, 22, "EDIT", is_selected ? CLR_TAB_ACTIVE_BG : CLR_CARD_BG, is_selected ? CLR_GOLD_NEON : CLR_CYAN_NEON, is_selected ? CLR_GOLD_NEON : CLR_BORDER_HARD);
       CreateButton("BTN_DEL_RULE_"  + IntegerToString(i), root_x + 775, cur_y + 8, 40, 22, "DEL",  C'34,8,18', CLR_BEAR_NEON, CLR_BEAR_NEON);
    }
    
@@ -890,7 +989,6 @@ void LoadStateFromFile()
    string filename = "EAT_MultiRules_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".bin";
    if(!FileIsExist(filename))
    {
-      // Default initial rule for current chart
       ArrayResize(g_rules, 1);
       g_rules[0].symbol            = _Symbol;
       g_rules[0].direction         = InpTradeDirection;
@@ -1094,24 +1192,39 @@ void OnChartEvent(const int id,
          g_rules[target_idx].last_bull_bar     = 0;
          g_rules[target_idx].last_bear_bar     = 0;
          
-         g_editing_rule_idx = -1;
+         g_selected_rule_idx = target_idx;
+         g_editing_rule_idx  = -1;
          SaveStateToFile();
          CreateDashboardUI();
          Alert(StringFormat("Auto Trader Rule untuk %s berhasil disimpan!", valid_sym));
          return;
       }
       
-      // Dynamic Table Action Buttons (Edit, Delete, Toggle Active)
+      // Dynamic Table Action Buttons (Edit, Delete, Toggle Active, Select Row for Preview)
       int total_rules = ArraySize(g_rules);
       for(int i = 0; i < total_rules; i++)
       {
-         // Edit button
-         if(sparam == g_prefix + "BTN_EDIT_RULE_" + IntegerToString(i))
+         string r_pfx = StringFormat("ROW_%d_", i);
+         // Click anywhere on row background or labels to preview
+         if(sparam == g_prefix + r_pfx + "BG" || sparam == g_prefix + r_pfx + "SYM" || 
+            sparam == g_prefix + r_pfx + "NO" || sparam == g_prefix + r_pfx + "DIR" ||
+            sparam == g_prefix + r_pfx + "LOT" || sparam == g_prefix + r_pfx + "RR" ||
+            sparam == g_prefix + r_pfx + "TF" || sparam == g_prefix + r_pfx + "FLT" ||
+            sparam == g_prefix + r_pfx + "TRL")
          {
-            g_editing_rule_idx = i;
-            g_form_direction   = g_rules[i].direction;
-            g_form_lot_mode    = g_rules[i].lot_mode;
-            g_form_trail_on    = g_rules[i].enable_trail;
+            g_selected_rule_idx = i;
+            UpdatePreviewTerminalBox();
+            UpdateDashboardUI();
+            return;
+         }
+         // Edit button
+         else if(sparam == g_prefix + "BTN_EDIT_RULE_" + IntegerToString(i))
+         {
+            g_editing_rule_idx  = i;
+            g_selected_rule_idx = i;
+            g_form_direction    = g_rules[i].direction;
+            g_form_lot_mode     = g_rules[i].lot_mode;
+            g_form_trail_on     = g_rules[i].enable_trail;
             CreateDashboardUI();
             return;
          }
@@ -1125,6 +1238,10 @@ void OnChartEvent(const int id,
             if(g_editing_rule_idx == i) g_editing_rule_idx = -1;
             else if(g_editing_rule_idx > i) g_editing_rule_idx--;
             
+            if(g_selected_rule_idx >= ArraySize(g_rules))
+               g_selected_rule_idx = ArraySize(g_rules) - 1;
+            if(g_selected_rule_idx < 0) g_selected_rule_idx = 0;
+            
             SaveStateToFile();
             CreateDashboardUI();
             return;
@@ -1133,7 +1250,9 @@ void OnChartEvent(const int id,
          else if(sparam == g_prefix + "BTN_TOGGLE_RULE_" + IntegerToString(i))
          {
             g_rules[i].active = !g_rules[i].active;
+            g_selected_rule_idx = i;
             SaveStateToFile();
+            UpdatePreviewTerminalBox();
             UpdateDashboardUI();
             return;
          }
