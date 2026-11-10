@@ -393,8 +393,15 @@ void CreateDashboardUI()
    else if(g_timeframe == PERIOD_D1) tf_min = 1440;
    CreateEdit("INP_TF", root_x + 400, row2_y + 10, 80, 22, IntegerToString(tf_min), CLR_CANVAS_BG, CLR_CYAN_NEON);
    
-   CreateLabel("LBL_LOT", root_x + 24, row2_y + 48, "LOT SIZE / RISK %:", CLR_TEXT_PURE, 8, true);
-   CreateEdit("INP_LOT", root_x + 160, row2_y + 44, 80, 22, DoubleToString(g_fixed_lot, 2), CLR_CANVAS_BG, CLR_TEXT_PURE);
+   CreateLabel("LBL_LOT_MODE", root_x + 24, row2_y + 48, "LOT MODE:", CLR_TEXT_PURE, 8, true);
+   string lot_mode_str = (g_lot_mode == LOT_FIXED) ? "FIXED LOT" : "% RISK / SL";
+   color lot_mode_clr = (g_lot_mode == LOT_FIXED) ? CLR_CYAN_NEON : CLR_GOLD_NEON;
+   CreateButton("BTN_TOGGLE_LOT_MODE", root_x + 120, row2_y + 44, 110, 22, lot_mode_str, CLR_CANVAS_BG, lot_mode_clr, CLR_BORDER_HARD);
+   
+   string lot_lbl_str = (g_lot_mode == LOT_FIXED) ? "LOT VALUE:" : "% RISK:";
+   double lot_val_disp = (g_lot_mode == LOT_FIXED) ? g_fixed_lot : g_risk_pct;
+   CreateLabel("LBL_LOT_VAL", root_x + 245, row2_y + 48, lot_lbl_str, CLR_TEXT_PURE, 8, true);
+   CreateEdit("INP_LOT", root_x + 340, row2_y + 44, 140, 22, DoubleToString(lot_val_disp, 2), CLR_CANVAS_BG, CLR_TEXT_PURE);
    
    CreateLabel("LBL_BULL_MAX", root_x + 24, row2_y + 82, "BUY HARGA < :", CLR_BULL_NEON, 8, true);
    string str_bmax = (g_bull_price_max > 0) ? DoubleToString(g_bull_price_max, _Digits) : "ALL";
@@ -559,6 +566,17 @@ void OnChartEvent(const int id,
          UpdateDashboardUI();
          return;
       }
+      // Toggle Lot Mode (Fixed vs % Risk)
+      else if(sparam == g_prefix + "BTN_TOGGLE_LOT_MODE")
+      {
+         if(g_lot_mode == LOT_FIXED)
+            g_lot_mode = LOT_RISK_PCT;
+         else
+            g_lot_mode = LOT_FIXED;
+            
+         CreateDashboardUI();
+         return;
+      }
       // Apply & Save Config
       else if(sparam == g_prefix + "BTN_SAVE_CONFIG")
       {
@@ -574,8 +592,12 @@ void OnChartEvent(const int id,
          else if(new_tf_val == 240) g_timeframe = PERIOD_H4;
          else if(new_tf_val == 1440) g_timeframe = PERIOD_D1;
          
-         double new_lot = StringToDouble(ObjectGetString(0, g_prefix + "INP_LOT", OBJPROP_TEXT));
-         if(new_lot > 0) g_fixed_lot = new_lot;
+         double new_lot_val = StringToDouble(ObjectGetString(0, g_prefix + "INP_LOT", OBJPROP_TEXT));
+         if(new_lot_val > 0)
+         {
+            if(g_lot_mode == LOT_FIXED) g_fixed_lot = new_lot_val;
+            else g_risk_pct = new_lot_val;
+         }
          
          string str_bmax = ObjectGetString(0, g_prefix + "INP_BULL_MAX", OBJPROP_TEXT);
          StringTrimLeft(str_bmax); StringTrimRight(str_bmax); StringToUpper(str_bmax);
