@@ -43,6 +43,8 @@ struct AutoTraderRule
    string               bear_price_filter; // e.g. "> 1.0900", ">= 1.0910", "4040-4078", "ALL"
    int                  max_orders;        // 1 = 1x open then paused, 0/-1 = Unlimited
    int                  entry_multiplier;  // Number of positions to open per trigger (1 = 1 order)
+   int                  delay_seconds;     // Delay in seconds (5 = default, 0 = instant)
+   bool                 delay_is_tf_close; // true = wait for TF candle close, false = seconds delay
    int                  orders_opened_count; // Tracks total opened orders for this rule lifecycle
    bool                 active;
    datetime             last_bull_bar;
@@ -71,6 +73,8 @@ input ENUM_TRADE_DIRECTION InpTradeDirection   = TRADE_DIR_BOTH; // Default Dire
 input double               InpRiskRewardRatio  = 2.0;            // Default RR Ratio (1:RR)
 input int                  InpMaxOrders        = 1;              // Default Max Orders (1 = 1x open then paused, 0 = Unlimited)
 input int                  InpEntryMultiplier  = 1;              // Default Entry Multiplier (Multi-Position per Trigger)
+input int                  InpDelaySeconds     = 5;              // Default Entry Delay Seconds (0 = Instant)
+input bool                 InpDelayIsTfClose   = false;          // Default Entry Delay Mode (false = Seconds, true = TF Close)
 input int                  InpSlippage         = 10;             // Max Slippage (Points)
 input ulong                InpMagicNumber      = 882201;         // Magic Number
 
@@ -133,6 +137,8 @@ double               g_form_trail_pct   = 5.0;
 double               g_form_atr_mult    = 1.5;
 int                  g_form_max_orders  = 1;
 int                  g_form_entry_mult  = 1;
+int                  g_form_delay_sec   = 5;
+bool                 g_form_delay_close = false;
 string               g_form_bmax        = "ALL";
 string               g_form_smin        = "ALL";
 
