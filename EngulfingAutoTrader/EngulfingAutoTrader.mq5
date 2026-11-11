@@ -1475,8 +1475,13 @@ void OnTick()
       // Check max orders limit (e.g. max_orders = 1 means 1x open then paused)
       if(g_rules[r].max_orders > 0 && g_rules[r].orders_opened_count >= g_rules[r].max_orders)
       {
-         g_rules[r].active = false; // Auto pause
-         PrintFormat("Auto Trader Rule #%d (%s) paused: reached max orders limit (%d)", r + 1, g_rules[r].symbol, g_rules[r].max_orders);
+         if(g_rules[r].active)
+         {
+            g_rules[r].active = false; // Auto pause
+            SaveStateToFile();
+            UpdateDashboardUI();
+            PrintFormat("Auto Trader Rule #%d (%s) auto-paused: reached max orders limit (%d)", r + 1, g_rules[r].symbol, g_rules[r].max_orders);
+         }
          continue;
       }
       
@@ -1522,6 +1527,7 @@ void OnTick()
                      {
                         ulong deal_tkt = m_trade.ResultOrder();
                         g_rules[r].orders_opened_count++;
+                        SaveStateToFile();
                         
                         double atr100 = atr_50 * 2.0;
                         if(g_rules[r].enable_trail)
@@ -1565,6 +1571,7 @@ void OnTick()
                      {
                         ulong deal_tkt = m_trade.ResultOrder();
                         g_rules[r].orders_opened_count++;
+                        SaveStateToFile();
                         
                         double atr100 = atr_50 * 2.0;
                         if(g_rules[r].enable_trail)
