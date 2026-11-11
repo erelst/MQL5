@@ -908,6 +908,9 @@ void UpdateDashboardUI()
    ObjectsDeleteAll(0, g_prefix + "BTN_EDIT_RULE_");
    ObjectsDeleteAll(0, g_prefix + "BTN_DEL_RULE_");
    ObjectsDeleteAll(0, g_prefix + "BTN_TOGGLE_RULE_");
+   ObjectsDeleteAll(0, g_prefix + "BTN_RULES_PREV");
+   ObjectsDeleteAll(0, g_prefix + "BTN_RULES_NEXT");
+   ObjectsDeleteAll(0, g_prefix + "LBL_RULES_PAGE");
    
    int total_rules = ArraySize(g_rules);
    
@@ -918,13 +921,21 @@ void UpdateDashboardUI()
       return;
    }
    
-   for(int i = 0; i < total_rules && i < 5; i++)
+   int max_pages = (total_rules + RULES_PER_PAGE - 1) / RULES_PER_PAGE;
+   if(g_rules_page >= max_pages) g_rules_page = max_pages - 1;
+   if(g_rules_page < 0) g_rules_page = 0;
+   
+   int start_idx = g_rules_page * RULES_PER_PAGE;
+   int end_idx   = start_idx + RULES_PER_PAGE;
+   if(end_idx > total_rules) end_idx = total_rules;
+   
+   for(int i = start_idx, r = 0; i < end_idx; i++, r++)
    {
-      int cur_y = start_y + (i * 38);
+      int cur_y = start_y + (r * 38);
       string r_pfx = StringFormat("ROW_%d_", i);
       bool is_selected = (g_selected_rule_idx == i || g_editing_rule_idx == i);
       
-      color row_bg = is_selected ? CLR_ROW_SELECTED : ((i % 2 == 0) ? CLR_CARD_BG : CLR_PANEL_BG);
+      color row_bg = is_selected ? CLR_ROW_SELECTED : ((r % 2 == 0) ? CLR_CARD_BG : CLR_PANEL_BG);
       CreateRect(r_pfx + "BG", root_x + 20, cur_y, win_w - 40, 32, row_bg, is_selected ? CLR_GOLD_NEON : CLR_BORDER_SOFT);
       
       CreateLabel(r_pfx + "NO", root_x + 24, cur_y + 9, StringFormat("#%d", i + 1), CLR_TEXT_PURE, 8, true);
@@ -972,6 +983,15 @@ void UpdateDashboardUI()
       
       CreateButton("BTN_EDIT_RULE_" + IntegerToString(i), root_x + 740, cur_y + 5, 42, 22, "EDIT", is_selected ? CLR_TAB_ACTIVE_BG : CLR_CARD_BG, is_selected ? CLR_GOLD_NEON : CLR_CYAN_NEON, is_selected ? CLR_GOLD_NEON : CLR_BORDER_HARD);
       CreateButton("BTN_DEL_RULE_"  + IntegerToString(i), root_x + 786, cur_y + 5, 38, 22, "DEL",  C'34,8,18', CLR_BEAR_NEON, CLR_BEAR_NEON);
+   }
+   
+   // Render pagination buttons dynamically if rules exceed RULES_PER_PAGE
+   if(max_pages > 1)
+   {
+      int pag_y = table_y + 224;
+      CreateButton("BTN_RULES_PREV", root_x + win_w - 180, pag_y, 50, 20, "< PREV", CLR_CARD_BG, g_rules_page > 0 ? CLR_CYAN_NEON : CLR_TEXT_MED, CLR_BORDER_HARD);
+      CreateLabel("LBL_RULES_PAGE", root_x + win_w - 120, pag_y + 3, StringFormat("Hal %d/%d", g_rules_page + 1, max_pages), CLR_TEXT_PURE, 8, true);
+      CreateButton("BTN_RULES_NEXT", root_x + win_w - 65, pag_y, 50, 20, "NEXT >", CLR_CARD_BG, g_rules_page < max_pages - 1 ? CLR_CYAN_NEON : CLR_TEXT_MED, CLR_BORDER_HARD);
    }
    
    ChartRedraw();
@@ -1238,6 +1258,20 @@ void OnChartEvent(const int id,
          g_form_bmax       = "ALL";
          g_form_smin       = "ALL";
          g_editing_rule_idx = -1;
+         CreateDashboardUI();
+         return;
+      }
+      else if(sparam == g_prefix + "BTN_RULES_PREV")
+      {
+         if(g_rules_page > 0) g_rules_page--;
+         CreateDashboardUI();
+         return;
+      }
+      else if(sparam == g_prefix + "BTN_RULES_NEXT")
+      {
+         int total_rules = ArraySize(g_rules);
+         int max_pages = (total_rules + RULES_PER_PAGE - 1) / RULES_PER_PAGE;
+         if(g_rules_page < max_pages - 1) g_rules_page++;
          CreateDashboardUI();
          return;
       }
