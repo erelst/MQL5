@@ -745,7 +745,8 @@ void CreateDashboardUI()
    string max_ord_str = (g_form_max_orders <= 0) ? "UNL" : IntegerToString(g_form_max_orders);
    CreateEdit("INP_MAX_ORD", root_x + 295, row_c_y, 45, 20, max_ord_str, CLR_CANVAS_BG, CLR_GOLD_NEON);
    
-   CreateButton("BTN_TOGGLE_MAX_ORD", root_x + 344, row_c_y, 70, 20, (g_form_max_orders <= 0 ? "UNL" : "1X->PAUSE"), CLR_PANEL_BG, CLR_CYAN_NEON, CLR_BORDER_HARD);
+   string max_btn_lbl = (g_form_max_orders <= 0) ? "UNL" : IntegerToString(g_form_max_orders) + "->PAUSE";
+   CreateButton("BTN_TOGGLE_MAX_ORD", root_x + 344, row_c_y, 70, 20, max_btn_lbl, CLR_PANEL_BG, CLR_CYAN_NEON, CLR_BORDER_HARD);
    
    // Row D: Auto Trail Toggle & Parameters (y = upper_y + 106)
    int row_d_y = upper_y + 106;
