@@ -173,6 +173,7 @@ int OnInit()
    ChartSetInteger(0, CHART_SHOW_GRID, false);
    ChartSetInteger(0, CHART_EVENT_OBJECT_CREATE, true);
    ChartSetInteger(0, CHART_EVENT_OBJECT_DELETE, true);
+   ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
    
    CreateDashboardUI();
    UpdateDashboardUI();
