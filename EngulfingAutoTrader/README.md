@@ -12,21 +12,20 @@ Berbeda dengan EA konvensional yang hanya memiliki satu pasang pengaturan, Engul
 - **Kombinasi Skenario pada Simbol yang Sama**:
   - *Skenario A*: Buy EURUSD dengan lot kecil (0.01) saat harga murah `< 1.0820` (RR 1:2.0).
   - *Skenario B*: Sell EURUSD dengan lot besar (0.05) saat harga jenuh `> 1.0950` (RR 1:3.0).
-- **Tabel Daftar Aturan**: Menampilkan simbol, arah, lot/risk %, rasio RR, timeframe, filter harga, status trailing, status aktif (`ACTIVE` / `PAUSED`), serta tombol **`EDIT`** dan **`DEL`**.
-- **Mode Edit Cepat**: Mengklik `EDIT` pada baris tertentu akan memuat nilai rule ke form atas, mengubah tombol menjadi `UPDATE RULE #N` dan menyediakan tombol `CANCEL EDIT`.
+- **Tabel Daftar Aturan**: Menampilkan simbol, arah, lot/risk %, rasio RR, timeframe, Max Orders, filter harga, status trailing, status aktif (`ACTIVE` / `PAUSED`), serta tombol **`EDIT`** dan **`DEL`**.
+- **Mode Edit Cepat & Persistent Form**: Mengklik `EDIT` memuat nilai rule ke form atas. Setelah menekan Add/Update, form **tidak ter-reset** sehingga memudahkan input beruntun. Tombol **`DEFAULT`** disediakan untuk mengembalikan form ke setelan awal.
 
 ---
 
-### 2. Deteksi Strong Engulfing Realtime Tick
-- **Tanpa Menunggu Bar Close**: Eksekusi instan seketika candle live menembus High candle sebelumnya (Bullish Break) atau menembus Low candle sebelumnya (Bearish Break).
-- **Syarat Validitas Pola**:
-  - *Bullish Break*: Candle sebelumnya Bearish, candle saat ini Bullish & menembus High candle lalu, Low candle saat ini $\le$ Low candle lalu, dan rasio body candle saat ini lebih dominan.
-  - *Bearish Break*: Candle sebelumnya Bullish, candle saat ini Bearish & menembus Low candle lalu, High candle saat ini $\ge$ High candle lalu, dan rasio body candle saat ini lebih dominan.
-- **Buffer Stop Loss Otomatis**:
-  - Buy SL = `Low Candle Sebelumnya - 50% ATR(14)`
-  - Sell SL = `High Candle Sebelumnya + 50% ATR(14) + Spread Realtime`
-- **Target Take Profit**:
-  - $\text{TP} = \text{Entry Price} \pm (\text{Jarak SL} \times \text{Risk Reward Ratio})$
+### 2. Flexible Price Bounds & Max Orders Control
+- **Filter Harga Fleksibel (`<`, `>`, `<=`, `>=`, Rentang `Min-Max`)**:
+  - Mendukung operator pembanding secara langsung (cth: `< 1.0850`, `<= 1.0820`, `>= 1.0910`, `> 1.0900`).
+  - Mendukung format rentang harga (cth: `4040-4078`).
+  - **Strict Validation**: Angka mentah tanpa operator atau tanpa rentang akan ditolak dengan *Alert* peringatan.
+  - **Dynamic Form**: Kolom Price Bounds menyesuaikan otomatis (jika `BUY ONLY` hanya tampil Buy Bound, jika `SELL ONLY` hanya tampil Sell Bound).
+- **Max Orders / Batas Open Order**:
+  - `1` (Default): Rule membuka 1x order, lalu otomatis berstatus **`PAUSED`** setelah tereksekusi.
+  - `UNL` / `0`: Tanpa batas (*unlimited*), terus aktif membuka order setiap kali pola Engulfing valid muncul.
 
 ---
 
