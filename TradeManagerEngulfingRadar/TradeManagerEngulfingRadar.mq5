@@ -840,11 +840,22 @@ void ApplyBulkSL(double sl_price)
       ulong tkt = PositionGetTicket(i);
       if(tkt > 0 && IsOrderSelected(tkt))
       {
+         string sym = PositionGetString(POSITION_SYMBOL);
+         int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+         double norm_sl = NormalizeDouble(sl_price, digits);
+         
          if(m_position.SelectByTicket(tkt))
          {
             double cur_tp = m_position.TakeProfit();
-            if(m_trade.PositionModify(tkt, sl_price, cur_tp))
+            m_trade.SetExpertMagicNumber(PositionGetInteger(POSITION_MAGIC));
+            if(m_trade.PositionModify(tkt, norm_sl, cur_tp))
+            {
                modified_count++;
+            }
+            else
+            {
+               PrintFormat("Failed to modify SL for Position #%d. Retcode: %d, Err: %d", tkt, m_trade.ResultRetcode(), GetLastError());
+            }
          }
       }
    }
@@ -855,6 +866,10 @@ void ApplyBulkSL(double sl_price)
       ulong tkt = OrderGetTicket(i);
       if(tkt > 0 && IsOrderSelected(tkt))
       {
+         string sym = OrderGetString(ORDER_SYMBOL);
+         int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+         double norm_sl = NormalizeDouble(sl_price, digits);
+         
          if(m_order.Select(tkt))
          {
             double cur_price = m_order.PriceOpen();
@@ -862,8 +877,15 @@ void ApplyBulkSL(double sl_price)
             ENUM_ORDER_TYPE_TIME type_time = m_order.TypeTime();
             datetime expiration = m_order.TimeExpiration();
             
-            if(m_trade.OrderModify(tkt, cur_price, sl_price, cur_tp, type_time, expiration))
+            m_trade.SetExpertMagicNumber(OrderGetInteger(ORDER_MAGIC));
+            if(m_trade.OrderModify(tkt, cur_price, norm_sl, cur_tp, type_time, expiration))
+            {
                modified_count++;
+            }
+            else
+            {
+               PrintFormat("Failed to modify SL for Order #%d. Retcode: %d, Err: %d", tkt, m_trade.ResultRetcode(), GetLastError());
+            }
          }
       }
    }
@@ -881,11 +903,22 @@ void ApplyBulkTP(double tp_price)
       ulong tkt = PositionGetTicket(i);
       if(tkt > 0 && IsOrderSelected(tkt))
       {
+         string sym = PositionGetString(POSITION_SYMBOL);
+         int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+         double norm_tp = NormalizeDouble(tp_price, digits);
+         
          if(m_position.SelectByTicket(tkt))
          {
             double cur_sl = m_position.StopLoss();
-            if(m_trade.PositionModify(tkt, cur_sl, tp_price))
+            m_trade.SetExpertMagicNumber(PositionGetInteger(POSITION_MAGIC));
+            if(m_trade.PositionModify(tkt, cur_sl, norm_tp))
+            {
                modified_count++;
+            }
+            else
+            {
+               PrintFormat("Failed to modify TP for Position #%d. Retcode: %d, Err: %d", tkt, m_trade.ResultRetcode(), GetLastError());
+            }
          }
       }
    }
@@ -896,6 +929,10 @@ void ApplyBulkTP(double tp_price)
       ulong tkt = OrderGetTicket(i);
       if(tkt > 0 && IsOrderSelected(tkt))
       {
+         string sym = OrderGetString(ORDER_SYMBOL);
+         int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+         double norm_tp = NormalizeDouble(tp_price, digits);
+         
          if(m_order.Select(tkt))
          {
             double cur_price = m_order.PriceOpen();
@@ -903,8 +940,15 @@ void ApplyBulkTP(double tp_price)
             ENUM_ORDER_TYPE_TIME type_time = m_order.TypeTime();
             datetime expiration = m_order.TimeExpiration();
             
-            if(m_trade.OrderModify(tkt, cur_price, cur_sl, tp_price, type_time, expiration))
+            m_trade.SetExpertMagicNumber(OrderGetInteger(ORDER_MAGIC));
+            if(m_trade.OrderModify(tkt, cur_price, cur_sl, norm_tp, type_time, expiration))
+            {
                modified_count++;
+            }
+            else
+            {
+               PrintFormat("Failed to modify TP for Order #%d. Retcode: %d, Err: %d", tkt, m_trade.ResultRetcode(), GetLastError());
+            }
          }
       }
    }
