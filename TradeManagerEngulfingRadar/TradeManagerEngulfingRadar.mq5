@@ -406,6 +406,7 @@ void OnChartEvent(const int id,
                AddRadarSymbol(matched_sym, tf, has_bull, b_max, has_bear, s_min, InpDefaultATRPeriod);
             }
             
+            SaveStateToFile();
             CreateDashboardUI();
             UpdateDashboardUI();
          }
