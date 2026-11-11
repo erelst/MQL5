@@ -945,7 +945,19 @@ void UpdateDashboardUI()
       string max_ord_disp = (g_rules[i].max_orders <= 0) ? "UNL" : IntegerToString(g_rules[i].max_orders);
       CreateLabel(r_pfx + "MAX", root_x + 385, cur_y + 9, max_ord_disp, CLR_TEXT_PURE, 8, true);
       
-      string f_str = "B:" + g_rules[i].bull_price_filter + " | S:" + g_rules[i].bear_price_filter;
+      string f_str = "";
+      if(g_rules[i].direction == TRADE_DIR_BUY)
+      {
+         f_str = "B:" + g_rules[i].bull_price_filter;
+      }
+      else if(g_rules[i].direction == TRADE_DIR_SELL)
+      {
+         f_str = "S:" + g_rules[i].bear_price_filter;
+      }
+      else
+      {
+         f_str = "B:" + g_rules[i].bull_price_filter + " | S:" + g_rules[i].bear_price_filter;
+      }
       CreateLabel(r_pfx + "FLT", root_x + 430, cur_y + 9, f_str, CLR_TEXT_MED, 7, false);
       
       string trail_str = g_rules[i].enable_trail ? StringFormat("ON (%.1f%%, %.1fx)", g_rules[i].trail_trigger_pct, g_rules[i].atr_multiplier) : "OFF";
