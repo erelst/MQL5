@@ -783,12 +783,20 @@ void CheckAutoBETriggers()
                   else if(g_auto_be_list[i].offset_mode == BE_OFFSET_CUSTOM_POINTS)
                      new_sl = open_price + (g_auto_be_list[i].custom_points * point);
                      
+                  int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+                  new_sl = NormalizeDouble(new_sl, digits);
+                  
                   if(new_sl > cur_sl)
                   {
+                     m_trade.SetExpertMagicNumber(m_position.Magic());
                      if(m_trade.PositionModify(ticket, new_sl, cur_tp))
                      {
                         PrintFormat("Auto-BE executed for BUY Position #%d at SL: %.5f", ticket, new_sl);
                         g_auto_be_list[i].active = false; // Executed
+                     }
+                     else
+                     {
+                        PrintFormat("Auto-BE failed for BUY Position #%d. Retcode: %d, Err: %d", ticket, m_trade.ResultRetcode(), GetLastError());
                      }
                   }
                   else g_auto_be_list[i].active = false;
@@ -806,12 +814,20 @@ void CheckAutoBETriggers()
                   else if(g_auto_be_list[i].offset_mode == BE_OFFSET_CUSTOM_POINTS)
                      new_sl = open_price - (g_auto_be_list[i].custom_points * point);
                      
+                  int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+                  new_sl = NormalizeDouble(new_sl, digits);
+                  
                   if(cur_sl == 0 || new_sl < cur_sl)
                   {
+                     m_trade.SetExpertMagicNumber(m_position.Magic());
                      if(m_trade.PositionModify(ticket, new_sl, cur_tp))
                      {
                         PrintFormat("Auto-BE executed for SELL Position #%d at SL: %.5f", ticket, new_sl);
                         g_auto_be_list[i].active = false; // Executed
+                     }
+                     else
+                     {
+                        PrintFormat("Auto-BE failed for SELL Position #%d. Retcode: %d, Err: %d", ticket, m_trade.ResultRetcode(), GetLastError());
                      }
                   }
                   else g_auto_be_list[i].active = false;
