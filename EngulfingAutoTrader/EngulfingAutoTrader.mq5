@@ -1125,21 +1125,49 @@ void OnChartEvent(const int id,
          CreateDashboardUI();
          return;
       }
-      else if(sparam == g_prefix + "BTN_DIR_BOTH")
+      else if(sparam == g_prefix + "BTN_DIR_BOTH" || sparam == g_prefix + "BTN_DIR_BUY" || sparam == g_prefix + "BTN_DIR_SELL")
       {
-         g_form_direction = TRADE_DIR_BOTH;
-         CreateDashboardUI();
-         return;
-      }
-      else if(sparam == g_prefix + "BTN_DIR_BUY")
-      {
-         g_form_direction = TRADE_DIR_BUY;
-         CreateDashboardUI();
-         return;
-      }
-      else if(sparam == g_prefix + "BTN_DIR_SELL")
-      {
-         g_form_direction = TRADE_DIR_SELL;
+         // Capture current form edits before switching direction
+         string cur_sym = ObjectGetString(0, g_prefix + "INP_SYM", OBJPROP_TEXT);
+         if(cur_sym != "") g_form_sym = cur_sym;
+         
+         double cur_rr = StringToDouble(ObjectGetString(0, g_prefix + "INP_RR", OBJPROP_TEXT));
+         if(cur_rr > 0) g_form_rr = cur_rr;
+         
+         double cur_lot = StringToDouble(ObjectGetString(0, g_prefix + "INP_LOT", OBJPROP_TEXT));
+         if(cur_lot > 0) g_form_lot_val = cur_lot;
+         
+         double cur_tpct = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_PCT", OBJPROP_TEXT));
+         if(cur_tpct > 0) g_form_trail_pct = cur_tpct;
+         
+         double cur_amult = StringToDouble(ObjectGetString(0, g_prefix + "INP_ATR_MULT", OBJPROP_TEXT));
+         if(cur_amult > 0) g_form_atr_mult = cur_amult;
+         
+         int cur_mord = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MAX_ORD", OBJPROP_TEXT));
+         if(cur_mord >= 0) g_form_max_orders = cur_mord;
+         
+         if(g_form_direction == TRADE_DIR_BOTH)
+         {
+            string b_val = ObjectGetString(0, g_prefix + "INP_BULL_MAX", OBJPROP_TEXT);
+            if(b_val != "") g_form_bmax = b_val;
+            string s_val = ObjectGetString(0, g_prefix + "INP_BEAR_MIN", OBJPROP_TEXT);
+            if(s_val != "") g_form_smin = s_val;
+         }
+         else if(g_form_direction == TRADE_DIR_BUY)
+         {
+            string b_val = ObjectGetString(0, g_prefix + "INP_BULL_MAX", OBJPROP_TEXT);
+            if(b_val != "") g_form_bmax = b_val;
+         }
+         else if(g_form_direction == TRADE_DIR_SELL)
+         {
+            string s_val = ObjectGetString(0, g_prefix + "INP_BEAR_MIN", OBJPROP_TEXT);
+            if(s_val != "") g_form_smin = s_val;
+         }
+         
+         if(sparam == g_prefix + "BTN_DIR_BOTH") g_form_direction = TRADE_DIR_BOTH;
+         else if(sparam == g_prefix + "BTN_DIR_BUY") g_form_direction = TRADE_DIR_BUY;
+         else if(sparam == g_prefix + "BTN_DIR_SELL") g_form_direction = TRADE_DIR_SELL;
+         
          CreateDashboardUI();
          return;
       }
