@@ -824,8 +824,9 @@ void CreateDashboardUI()
    CreateLabel("TH_LOT",    root_x + 210, table_y + 6, "LOT/RISK",  CLR_TEXT_MED, 8, true);
    CreateLabel("TH_RR",     root_x + 285, table_y + 6, "RR",        CLR_TEXT_MED, 8, true);
    CreateLabel("TH_TF",     root_x + 340, table_y + 6, "TF",        CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_MAX",    root_x + 385, table_y + 6, "MAX",       CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_FILTER", root_x + 430, table_y + 6, "PRICE BOUNDS", CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_MAX",    root_x + 375,  table_y + 6, "MAX",       CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_MULT",   root_x + 415,  table_y + 6, "MULT",      CLR_GOLD_NEON, 8, true);
+   CreateLabel("TH_FILTER", root_x + 455,  table_y + 6, "PRICE BOUNDS", CLR_TEXT_MED, 8, true);
    CreateLabel("TH_TRAIL",  root_x + 575, table_y + 6, "AUTO TRAIL",CLR_TEXT_MED, 8, true);
    CreateLabel("TH_STATUS", root_x + 680, table_y + 6, "STATUS",    CLR_TEXT_MED, 8, true);
    CreateLabel("TH_ACT",    root_x + 750, table_y + 6, "ACTIONS",   CLR_TEXT_MED, 8, true);
@@ -964,7 +965,10 @@ void UpdateDashboardUI()
       CreateLabel(r_pfx + "TF", root_x + 340, cur_y + 9, "[" + str_tf + "]", CLR_GOLD_NEON, 8, true);
       
       string max_ord_disp = (g_rules[i].max_orders <= 0) ? "UNL" : IntegerToString(g_rules[i].max_orders);
-      CreateLabel(r_pfx + "MAX", root_x + 385, cur_y + 9, max_ord_disp, CLR_TEXT_PURE, 8, true);
+      CreateLabel(r_pfx + "MAX", root_x + 375, cur_y + 9, max_ord_disp, CLR_TEXT_PURE, 8, true);
+      
+      int mult_disp = (g_rules[i].entry_multiplier <= 0) ? 1 : g_rules[i].entry_multiplier;
+      CreateLabel(r_pfx + "MULT", root_x + 415, cur_y + 9, IntegerToString(mult_disp) + "x", CLR_GOLD_NEON, 8, true);
       
       string f_str = "";
       if(g_rules[i].direction == TRADE_DIR_BUY)
@@ -979,7 +983,7 @@ void UpdateDashboardUI()
       {
          f_str = "B:" + g_rules[i].bull_price_filter + " | S:" + g_rules[i].bear_price_filter;
       }
-      CreateLabel(r_pfx + "FLT", root_x + 430, cur_y + 9, f_str, CLR_TEXT_MED, 7, false);
+      CreateLabel(r_pfx + "FLT", root_x + 455, cur_y + 9, f_str, CLR_TEXT_MED, 7, false);
       
       string trail_str = g_rules[i].enable_trail ? StringFormat("ON (%.1f%%, %.1fx)", g_rules[i].trail_trigger_pct, g_rules[i].atr_multiplier) : "OFF";
       CreateLabel(r_pfx + "TRL", root_x + 575, cur_y + 9, trail_str, g_rules[i].enable_trail ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, false);
