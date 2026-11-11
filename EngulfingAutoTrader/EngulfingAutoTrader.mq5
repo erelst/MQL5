@@ -135,6 +135,8 @@ string               g_form_smin        = "ALL";
 
 int                  g_selected_rule_idx = 0;
 int                  g_editing_rule_idx  = -1; // -1 = Add mode, >=0 = Edit mode
+int                  g_rules_page        = 0;
+const int            RULES_PER_PAGE      = 5;
 
 AutoTraderRule       g_rules[];
 SPositionTracking    g_tracking_list[];
