@@ -745,7 +745,7 @@ void CreateDashboardUI()
    string max_ord_str = (g_form_max_orders <= 0) ? "UNL" : IntegerToString(g_form_max_orders);
    CreateEdit("INP_MAX_ORD", root_x + 295, row_c_y, 45, 20, max_ord_str, CLR_CANVAS_BG, CLR_GOLD_NEON);
    
-   string max_btn_lbl = (g_form_max_orders <= 0) ? "UNL" : IntegerToString(g_form_max_orders) + "->PAUSE";
+   string max_btn_lbl = (g_form_max_orders <= 0) ? "UNL" : IntegerToString(g_form_max_orders) + "x PAUSE";
    CreateButton("BTN_TOGGLE_MAX_ORD", root_x + 344, row_c_y, 70, 20, max_btn_lbl, CLR_PANEL_BG, CLR_CYAN_NEON, CLR_BORDER_HARD);
    
    // Row D: Auto Trail Toggle & Parameters (y = upper_y + 106)
@@ -1185,7 +1185,20 @@ void OnChartEvent(const int id,
       }
       else if(sparam == g_prefix + "BTN_TOGGLE_LOT_MODE")
       {
-         g_form_lot_mode = (g_form_lot_mode == LOT_FIXED) ? LOT_RISK_PCT : LOT_FIXED;
+         // Read current input value before switching
+         double cur_lot = StringToDouble(ObjectGetString(0, g_prefix + "INP_LOT", OBJPROP_TEXT));
+         if(cur_lot > 0) g_form_lot_val = cur_lot;
+         
+         if(g_form_lot_mode == LOT_FIXED)
+         {
+            g_form_lot_mode = LOT_RISK_PCT;
+            g_form_lot_val = 1.0; // Default Risk%
+         }
+         else
+         {
+            g_form_lot_mode = LOT_FIXED;
+            g_form_lot_val = 0.01; // Default Fixed Lot
+         }
          CreateDashboardUI();
          return;
       }
