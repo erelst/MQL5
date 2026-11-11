@@ -42,6 +42,7 @@ struct AutoTraderRule
    string               bull_price_filter; // e.g. "< 1.0850", "<= 1.0820", "4040-4078", "ALL"
    string               bear_price_filter; // e.g. "> 1.0900", ">= 1.0910", "4040-4078", "ALL"
    int                  max_orders;        // 1 = 1x open then paused, 0/-1 = Unlimited
+   int                  entry_multiplier;  // Number of positions to open per trigger (1 = 1 order)
    int                  orders_opened_count; // Tracks total opened orders for this rule lifecycle
    bool                 active;
    datetime             last_bull_bar;
@@ -69,6 +70,7 @@ input group "=== DEFAULT NEW RULE SETTINGS ==="
 input ENUM_TRADE_DIRECTION InpTradeDirection   = TRADE_DIR_BOTH; // Default Direction
 input double               InpRiskRewardRatio  = 2.0;            // Default RR Ratio (1:RR)
 input int                  InpMaxOrders        = 1;              // Default Max Orders (1 = 1x open then paused, 0 = Unlimited)
+input int                  InpEntryMultiplier  = 1;              // Default Entry Multiplier (Multi-Position per Trigger)
 input int                  InpSlippage         = 10;             // Max Slippage (Points)
 input ulong                InpMagicNumber      = 882201;         // Magic Number
 
@@ -130,6 +132,7 @@ bool                 g_form_trail_on    = true;
 double               g_form_trail_pct   = 5.0;
 double               g_form_atr_mult    = 1.5;
 int                  g_form_max_orders  = 1;
+int                  g_form_entry_mult  = 1;
 string               g_form_bmax        = "ALL";
 string               g_form_smin        = "ALL";
 
@@ -752,16 +755,21 @@ void CreateDashboardUI()
    
    // Row D: Auto Trail Toggle & Parameters (y = upper_y + 106)
    int row_d_y = upper_y + 106;
-   CreateLabel("LBL_TRAIL", root_x + 22, row_d_y + 3, "AUTO TRAIL:", CLR_TEXT_PURE, 8, true);
+   CreateLabel("LBL_TRAIL", root_x + 22, row_d_y + 3, "TRAIL:", CLR_TEXT_PURE, 8, true);
    string trail_mode_str = g_form_trail_on ? "ON" : "OFF";
    color trail_mode_clr = g_form_trail_on ? CLR_GOLD_NEON : CLR_TEXT_MED;
-   CreateButton("BTN_TOGGLE_TRAIL", root_x + 95, row_d_y, 42, 20, trail_mode_str, CLR_CANVAS_BG, trail_mode_clr, CLR_BORDER_HARD);
+   CreateButton("BTN_TOGGLE_TRAIL", root_x + 65, row_d_y, 38, 20, trail_mode_str, CLR_CANVAS_BG, trail_mode_clr, CLR_BORDER_HARD);
    
-   CreateLabel("LBL_TRAIL_PCT", root_x + 145, row_d_y + 3, "SISA%:", CLR_TEXT_MED, 7, true);
-   CreateEdit("INP_TRAIL_PCT", root_x + 185, row_d_y, 45, 20, DoubleToString(g_form_trail_pct, 1), CLR_CANVAS_BG, CLR_GOLD_NEON);
+   CreateLabel("LBL_TRAIL_PCT", root_x + 108, row_d_y + 3, "TP%:", CLR_TEXT_MED, 7, true);
+   CreateEdit("INP_TRAIL_PCT", root_x + 138, row_d_y, 40, 20, DoubleToString(g_form_trail_pct, 1), CLR_CANVAS_BG, CLR_GOLD_NEON);
    
-   CreateLabel("LBL_ATR_MULT_LBL", root_x + 240, row_d_y + 3, "MIN ATR:", CLR_TEXT_MED, 7, true);
-   CreateEdit("INP_ATR_MULT", root_x + 295, row_d_y, 45, 20, DoubleToString(g_form_atr_mult, 1), CLR_CANVAS_BG, CLR_CYAN_NEON);
+   CreateLabel("LBL_ATR_MULT_LBL", root_x + 183, row_d_y + 3, "ATR:", CLR_TEXT_MED, 7, true);
+   CreateEdit("INP_ATR_MULT", root_x + 215, row_d_y, 40, 20, DoubleToString(g_form_atr_mult, 1), CLR_CANVAS_BG, CLR_CYAN_NEON);
+   
+   CreateLabel("LBL_MULT", root_x + 260, row_d_y + 3, "MULT:", CLR_TEXT_MED, 7, true);
+   CreateEdit("INP_MULT", root_x + 300, row_d_y, 35, 20, IntegerToString(g_form_entry_mult), CLR_CANVAS_BG, CLR_GOLD_NEON);
+   
+   CreateLabel("LBL_X", root_x + 340, row_d_y + 3, "x", CLR_CYAN_NEON, 8, true);
    
    // Row E: Dynamic Price Bounds based on Direction (y = upper_y + 132)
    int row_e_y = upper_y + 132;
@@ -1041,6 +1049,7 @@ void SaveStateToFile()
          if(sf_len > 0) FileWriteString(handle, g_rules[i].bear_price_filter, sf_len);
          
          FileWriteInteger(handle, g_rules[i].max_orders);
+         FileWriteInteger(handle, g_rules[i].entry_multiplier);
          FileWriteInteger(handle, g_rules[i].orders_opened_count);
          FileWriteInteger(handle, g_rules[i].active ? 1 : 0);
       }
@@ -1066,6 +1075,7 @@ void LoadStateFromFile()
       g_rules[0].bull_price_filter = "ALL";
       g_rules[0].bear_price_filter = "ALL";
       g_rules[0].max_orders        = InpMaxOrders;
+      g_rules[0].entry_multiplier  = InpEntryMultiplier;
       g_rules[0].orders_opened_count = 0;
       g_rules[0].active            = true;
       g_rules[0].last_bull_bar     = 0;
@@ -1104,6 +1114,8 @@ void LoadStateFromFile()
          else g_rules[i].bear_price_filter = "ALL";
          
          g_rules[i].max_orders        = FileReadInteger(handle);
+         g_rules[i].entry_multiplier  = FileReadInteger(handle);
+         if(g_rules[i].entry_multiplier <= 0) g_rules[i].entry_multiplier = 1;
          g_rules[i].orders_opened_count = FileReadInteger(handle);
          g_rules[i].active            = (FileReadInteger(handle) == 1);
          g_rules[i].last_bull_bar     = 0;
@@ -1180,6 +1192,9 @@ void OnChartEvent(const int id,
          int cur_mord = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MAX_ORD", OBJPROP_TEXT));
          if(cur_mord >= 0) g_form_max_orders = cur_mord;
          
+         int cur_mult = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MULT", OBJPROP_TEXT));
+         if(cur_mult > 0) g_form_entry_mult = cur_mult;
+         
          if(g_form_direction == TRADE_DIR_BOTH)
          {
             string b_val = ObjectGetString(0, g_prefix + "INP_BULL_MAX", OBJPROP_TEXT);
@@ -1255,6 +1270,7 @@ void OnChartEvent(const int id,
          g_form_trail_pct  = InpTrailTriggerPct;
          g_form_atr_mult   = InpATRMultiplier;
          g_form_max_orders = InpMaxOrders;
+         g_form_entry_mult = InpEntryMultiplier;
          g_form_bmax       = "ALL";
          g_form_smin       = "ALL";
          g_editing_rule_idx = -1;
@@ -1309,6 +1325,9 @@ void OnChartEvent(const int id,
          
          int max_ord_val = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MAX_ORD", OBJPROP_TEXT));
          
+         int mult_val = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MULT", OBJPROP_TEXT));
+         if(mult_val <= 0) mult_val = 1;
+         
          string b_filter = "ALL";
          string s_filter = "ALL";
          
@@ -1354,6 +1373,7 @@ void OnChartEvent(const int id,
          g_form_lot_val   = lot_val;
          g_form_trail_pct = trail_pct;
          g_form_atr_mult  = atr_mult;
+         g_form_entry_mult= mult_val;
          g_form_max_orders= max_ord_val;
          g_form_bmax      = b_filter;
          g_form_smin      = s_filter;
@@ -1379,6 +1399,7 @@ void OnChartEvent(const int id,
          g_rules[target_idx].bull_price_filter   = b_filter;
          g_rules[target_idx].bear_price_filter   = s_filter;
          g_rules[target_idx].max_orders          = max_ord_val;
+         g_rules[target_idx].entry_multiplier    = mult_val;
          g_rules[target_idx].last_bull_bar       = 0;
          g_rules[target_idx].last_bear_bar       = 0;
          
@@ -1418,6 +1439,7 @@ void OnChartEvent(const int id,
             g_form_trail_on     = g_rules[i].enable_trail;
             g_form_trail_pct    = g_rules[i].trail_trigger_pct;
             g_form_atr_mult     = g_rules[i].atr_multiplier;
+            g_form_entry_mult   = g_rules[i].entry_multiplier;
             g_form_max_orders   = g_rules[i].max_orders;
             g_form_bmax         = g_rules[i].bull_price_filter;
             g_form_smin         = g_rules[i].bear_price_filter;
@@ -1523,22 +1545,28 @@ void OnTick()
                      tp_price = NormalizeDouble(tp_price, digits);
                      double lots = CalculateLotSize(sym, g_rules[r].lot_mode, g_rules[r].lot_value, ask, sl_price);
                      
-                     if(m_trade.Buy(lots, sym, ask, sl_price, tp_price, "Engulfing Buy (RR 1:" + DoubleToString(g_rules[r].risk_reward_ratio, 1) + ")"))
+                     int mult = g_rules[r].entry_multiplier;
+                     if(mult <= 0) mult = 1;
+                     
+                     for(int m = 0; m < mult; m++)
                      {
-                        ulong deal_tkt = m_trade.ResultOrder();
-                        g_rules[r].orders_opened_count++;
-                        SaveStateToFile();
-                        
-                        double atr100 = atr_50 * 2.0;
-                        if(g_rules[r].enable_trail)
+                        if(m_trade.Buy(lots, sym, ask, sl_price, tp_price, StringFormat("Engulfing Buy #%d (RR 1:%.1f)", m + 1, g_rules[r].risk_reward_ratio)))
                         {
-                           RegisterPositionTracking(deal_tkt, sym, tf, atr100, ask, tp_price, g_rules[r].trail_trigger_pct, g_rules[r].atr_multiplier);
+                           ulong deal_tkt = m_trade.ResultOrder();
+                           g_rules[r].orders_opened_count++;
+                           SaveStateToFile();
+                           
+                           double atr100 = atr_50 * 2.0;
+                           if(g_rules[r].enable_trail)
+                           {
+                              RegisterPositionTracking(deal_tkt, sym, tf, atr100, ask, tp_price, g_rules[r].trail_trigger_pct, g_rules[r].atr_multiplier);
+                           }
+                           
+                           string msg = StringFormat("[AUTO TRADER - ORDER OPENED (%d/%d)]\nSymbol: %s (%s)\nTicket: #%d (BUY)\nLot: %.2f | Ask: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)",
+                                                     m + 1, mult, sym, EnumToString(tf), deal_tkt, lots, ask, sl_price, tp_price, g_rules[r].risk_reward_ratio);
+                           if(InpEnableSoundAlerts) Alert(msg);
+                           if(InpEnablePushAlerts)  SendNotification(msg);
                         }
-                        
-                        string msg = StringFormat("[AUTO TRADER - ORDER OPENED]\nSymbol: %s (%s)\nTicket: #%d (BUY)\nLot: %.2f | Ask: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)",
-                                                  sym, EnumToString(tf), deal_tkt, lots, ask, sl_price, tp_price, g_rules[r].risk_reward_ratio);
-                        if(InpEnableSoundAlerts) Alert(msg);
-                        if(InpEnablePushAlerts)  SendNotification(msg);
                      }
                   }
                }
@@ -1567,22 +1595,28 @@ void OnTick()
                      tp_price = NormalizeDouble(tp_price, digits);
                      double lots = CalculateLotSize(sym, g_rules[r].lot_mode, g_rules[r].lot_value, bid, sl_price);
                      
-                     if(m_trade.Sell(lots, sym, bid, sl_price, tp_price, "Engulfing Sell (RR 1:" + DoubleToString(g_rules[r].risk_reward_ratio, 1) + ")"))
+                     int mult_s = g_rules[r].entry_multiplier;
+                     if(mult_s <= 0) mult_s = 1;
+                     
+                     for(int m = 0; m < mult_s; m++)
                      {
-                        ulong deal_tkt = m_trade.ResultOrder();
-                        g_rules[r].orders_opened_count++;
-                        SaveStateToFile();
-                        
-                        double atr100 = atr_50 * 2.0;
-                        if(g_rules[r].enable_trail)
+                        if(m_trade.Sell(lots, sym, bid, sl_price, tp_price, StringFormat("Engulfing Sell #%d (RR 1:%.1f)", m + 1, g_rules[r].risk_reward_ratio)))
                         {
-                           RegisterPositionTracking(deal_tkt, sym, tf, atr100, bid, tp_price, g_rules[r].trail_trigger_pct, g_rules[r].atr_multiplier);
+                           ulong deal_tkt = m_trade.ResultOrder();
+                           g_rules[r].orders_opened_count++;
+                           SaveStateToFile();
+                           
+                           double atr100 = atr_50 * 2.0;
+                           if(g_rules[r].enable_trail)
+                           {
+                              RegisterPositionTracking(deal_tkt, sym, tf, atr100, bid, tp_price, g_rules[r].trail_trigger_pct, g_rules[r].atr_multiplier);
+                           }
+                           
+                           string msg = StringFormat("[AUTO TRADER - ORDER OPENED (%d/%d)]\nSymbol: %s (%s)\nTicket: #%d (SELL)\nLot: %.2f | Bid: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)",
+                                                     m + 1, mult_s, sym, EnumToString(tf), deal_tkt, lots, bid, sl_price, tp_price, g_rules[r].risk_reward_ratio);
+                           if(InpEnableSoundAlerts) Alert(msg);
+                           if(InpEnablePushAlerts)  SendNotification(msg);
                         }
-                        
-                        string msg = StringFormat("[AUTO TRADER - ORDER OPENED]\nSymbol: %s (%s)\nTicket: #%d (SELL)\nLot: %.2f | Bid: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)",
-                                                  sym, EnumToString(tf), deal_tkt, lots, bid, sl_price, tp_price, g_rules[r].risk_reward_ratio);
-                        if(InpEnableSoundAlerts) Alert(msg);
-                        if(InpEnablePushAlerts)  SendNotification(msg);
                      }
                   }
                }
