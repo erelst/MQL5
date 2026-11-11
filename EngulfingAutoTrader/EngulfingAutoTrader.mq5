@@ -75,19 +75,19 @@ input ulong                InpMagicNumber      = 882201;         // Magic Number
 input group "=== AUTO TRAIL SL & TP ENGINE ==="
 input bool                 InpEnableTrail      = true;           // Default Enable Trail SL & TP
 input double               InpTrailTriggerPct  = 5.0;            // Sisa Jarak Menuju TP Trigger (%)
-input double               InpATRMultiplier    = 2.0;            // Min ATR Multiplier for Trail TP (>= 2.0x)
+input double               InpATRMultiplier    = 1.5;            // Min ATR Multiplier for Trail TP (>= 1.5x)
 
 input group "=== NOTIFICATIONS & ALERTS ==="
 input bool                 InpEnablePushAlerts = true;           // Send Mobile Push Notifications
 input bool                 InpEnableSoundAlerts= true;           // Enable Terminal / Sound Alerts
 
 input group "=== MONEY MANAGEMENT ==="
-input ENUM_LOT_MODE        InpLotMode          = LOT_FIXED;      // Default Lot Mode
+input ENUM_LOT_MODE        InpLotMode          = LOT_RISK_PCT;   // Default Lot Mode
 input double               InpFixedLot         = 0.01;           // Default Fixed Lot Size
 input double               InpRiskPercent      = 1.0;            // Default Risk Percent (% Balance)
 
 input group "=== ENGULFING & ATR SETTINGS ==="
-input ENUM_TIMEFRAMES      InpTimeframe        = PERIOD_M5;      // Default Timeframe
+input ENUM_TIMEFRAMES      InpTimeframe        = PERIOD_M1;      // Default Timeframe
 input int                  InpATRPeriod        = 14;             // ATR Period for 50% calculation
 input double               InpBodyRatioMult    = 1.0;            // Min Body Ratio vs Previous Candle
 
