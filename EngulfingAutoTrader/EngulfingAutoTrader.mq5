@@ -49,6 +49,10 @@ struct AutoTraderRule
    bool                 active;
    datetime             last_bull_bar;
    datetime             last_bear_bar;
+   datetime             bull_cond_start_time; // Tracks continuous valid seconds for Buy
+   datetime             bear_cond_start_time; // Tracks continuous valid seconds for Sell
+   datetime             bull_last_checked_bar; // Tracks candle close check
+   datetime             bear_last_checked_bar; // Tracks candle close check
 };
 
 struct SPositionTracking
@@ -707,14 +711,14 @@ void CreateDashboardUI()
    int prev_x  = root_x + form_w + 22;
    
    // 1A. Form Deck (Kiri)
-   CreateRect("CARD_FORM_DECK", root_x + 14, upper_y, form_w, 205, CLR_CARD_BG, CLR_BORDER_HARD);
+   CreateRect("CARD_FORM_DECK", root_x + 14, upper_y, form_w, 232, CLR_CARD_BG, CLR_BORDER_HARD);
    
    string form_header_txt = (g_editing_rule_idx >= 0) ? StringFormat("EDIT RULE #%d CONFIGURATION", g_editing_rule_idx + 1) : "ADD AUTO TRADER RULE";
    color form_header_clr = (g_editing_rule_idx >= 0) ? CLR_GOLD_NEON : CLR_CYAN_NEON;
-   CreateLabel("LBL_FORM_HEADER", root_x + 22, upper_y + 8, form_header_txt, form_header_clr, 9, true);
+   CreateLabel("LBL_FORM_HEADER", root_x + 22, upper_y + 6, form_header_txt, form_header_clr, 9, true);
    
-   // Row A: Symbol & Direction Toggle Buttons (y = upper_y + 28)
-   int row_a_y = upper_y + 28;
+   // Row A: Symbol & Direction Toggle Buttons (y = upper_y + 24)
+   int row_a_y = upper_y + 24;
    CreateLabel("LBL_SYM", root_x + 22, row_a_y + 3, "SYMBOL:", CLR_TEXT_PURE, 8, true);
    CreateEdit("INP_SYM", root_x + 95, row_a_y, 75, 20, g_form_sym, CLR_CANVAS_BG, CLR_CYAN_NEON);
    
@@ -729,8 +733,8 @@ void CreateDashboardUI()
    CreateButton("BTN_DIR_BUY",  root_x + 260, row_a_y, 74, 20, "BUY ONLY",  btn_buy_bg,  btn_buy_cl,  btn_buy_cl);
    CreateButton("BTN_DIR_SELL", root_x + 338, row_a_y, 76, 20, "SELL ONLY", btn_sell_bg, btn_sell_cl, btn_sell_cl);
    
-   // Row B: Risk Reward & Timeframe (y = upper_y + 54)
-   int row_b_y = upper_y + 54;
+   // Row B: Risk Reward & Timeframe (y = upper_y + 48)
+   int row_b_y = upper_y + 48;
    CreateLabel("LBL_RR", root_x + 22, row_b_y + 3, "RR RATIO:", CLR_TEXT_PURE, 8, true);
    CreateEdit("INP_RR", root_x + 95, row_b_y, 85, 20, DoubleToString(g_form_rr, 2), CLR_CANVAS_BG, CLR_CYAN_NEON);
    
@@ -745,8 +749,8 @@ void CreateDashboardUI()
    else if(g_form_tf == PERIOD_D1) tf_min = 1440;
    CreateEdit("INP_TF", root_x + 260, row_b_y, 154, 20, IntegerToString(tf_min), CLR_CANVAS_BG, CLR_CYAN_NEON);
    
-   // Row C: Lot Mode, Value & Max Orders (y = upper_y + 80)
-   int row_c_y = upper_y + 80;
+   // Row C: Lot Mode, Value & Max Orders (y = upper_y + 72)
+   int row_c_y = upper_y + 72;
    CreateLabel("LBL_LOT_MODE", root_x + 22, row_c_y + 3, "LOT MODE:", CLR_TEXT_PURE, 8, true);
    string lot_mode_str = (g_form_lot_mode == LOT_FIXED) ? "FIXED LOT" : "% RISK";
    color lot_mode_clr = (g_form_lot_mode == LOT_FIXED) ? CLR_CYAN_NEON : CLR_GOLD_NEON;
@@ -761,8 +765,8 @@ void CreateDashboardUI()
    string max_btn_lbl = (g_form_max_orders <= 0) ? "UNL" : IntegerToString(g_form_max_orders) + "x PAUSE";
    CreateButton("BTN_TOGGLE_MAX_ORD", root_x + 344, row_c_y, 70, 20, max_btn_lbl, CLR_PANEL_BG, CLR_CYAN_NEON, CLR_BORDER_HARD);
    
-   // Row D: Auto Trail Toggle & Parameters (y = upper_y + 106)
-   int row_d_y = upper_y + 106;
+   // Row D: Auto Trail Toggle & Parameters (y = upper_y + 96)
+   int row_d_y = upper_y + 96;
    CreateLabel("LBL_TRAIL", root_x + 22, row_d_y + 3, "TRAIL:", CLR_TEXT_PURE, 8, true);
    string trail_mode_str = g_form_trail_on ? "ON" : "OFF";
    color trail_mode_clr = g_form_trail_on ? CLR_GOLD_NEON : CLR_TEXT_MED;
@@ -776,11 +780,21 @@ void CreateDashboardUI()
    
    CreateLabel("LBL_MULT", root_x + 260, row_d_y + 3, "MULT:", CLR_TEXT_MED, 7, true);
    CreateEdit("INP_MULT", root_x + 300, row_d_y, 35, 20, IntegerToString(g_form_entry_mult), CLR_CANVAS_BG, CLR_GOLD_NEON);
-   
    CreateLabel("LBL_X", root_x + 340, row_d_y + 3, "x", CLR_CYAN_NEON, 8, true);
    
-   // Row E: Dynamic Price Bounds based on Direction (y = upper_y + 132)
-   int row_e_y = upper_y + 132;
+   // Row G: Entry Delay & Mode (y = upper_y + 120)
+   int row_g_y = upper_y + 120;
+   CreateLabel("LBL_DELAY_MODE", root_x + 22, row_g_y + 3, "DELAY MODE:", CLR_TEXT_PURE, 8, true);
+   string delay_mode_str = g_form_delay_close ? "TF CLOSE" : "SECONDS";
+   color delay_mode_clr = g_form_delay_close ? CLR_GOLD_NEON : CLR_CYAN_NEON;
+   CreateButton("BTN_TOGGLE_DELAY_MODE", root_x + 105, row_g_y, 85, 20, delay_mode_str, CLR_CANVAS_BG, delay_mode_clr, CLR_BORDER_HARD);
+   
+   CreateLabel("LBL_DELAY_SEC", root_x + 205, row_g_y + 3, "SEC:", CLR_TEXT_MED, 7, true);
+   CreateEdit("INP_DELAY_SEC", root_x + 238, row_g_y, 45, 20, IntegerToString(g_form_delay_sec), CLR_CANVAS_BG, CLR_GOLD_NEON);
+   CreateLabel("LBL_SEC_UNIT", root_x + 288, row_g_y + 3, "s (0=Inst)", CLR_TEXT_MED, 7, false);
+   
+   // Row E: Dynamic Price Bounds based on Direction (y = upper_y + 146)
+   int row_e_y = upper_y + 146;
    if(g_form_direction == TRADE_DIR_BOTH)
    {
       CreateLabel("LBL_BULL_MAX", root_x + 22, row_e_y + 3, "BUY BD:", CLR_BULL_NEON, 8, true);
@@ -796,12 +810,12 @@ void CreateDashboardUI()
    }
    else if(g_form_direction == TRADE_DIR_SELL)
    {
-      CreateLabel("LBL_BEAR_MIN", root_x + 22, row_e_y + 3, "SELL BOUND (cth: >1.0900 atau 4040-4078):", CLR_BEAR_NEON, 8, true);
+      CreateLabel("LBL_BEAR_MIN", root_x + 22, root_x + 22, row_e_y + 3, "SELL BOUND (cth: >1.0900 atau 4040-4078):", CLR_BEAR_NEON, 8, true);
       CreateEdit("INP_BEAR_MIN", root_x + 265, row_e_y, 149, 20, g_form_smin, CLR_CANVAS_BG, CLR_TEXT_PURE);
    }
    
-   // Row F: Form Action Buttons (y = upper_y + 162)
-   int row_f_y = upper_y + 162;
+   // Row F: Form Action Buttons (y = upper_y + 176)
+   int row_f_y = upper_y + 176;
    if(g_editing_rule_idx >= 0)
    {
       CreateButton("BTN_SUBMIT_RULE", root_x + 22, row_f_y, 215, 26, "UPDATE RULE #" + IntegerToString(g_editing_rule_idx + 1), CLR_TAB_ACTIVE_BG, CLR_GOLD_NEON, CLR_GOLD_NEON);
@@ -833,8 +847,9 @@ void CreateDashboardUI()
    CreateLabel("TH_RR",     root_x + 285, table_y + 6, "RR",        CLR_TEXT_MED, 8, true);
    CreateLabel("TH_TF",     root_x + 340, table_y + 6, "TF",        CLR_TEXT_MED, 8, true);
    CreateLabel("TH_MAX",    root_x + 375,  table_y + 6, "MAX",       CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_MULT",   root_x + 415,  table_y + 6, "MULT",      CLR_GOLD_NEON, 8, true);
-   CreateLabel("TH_FILTER", root_x + 455,  table_y + 6, "PRICE BOUNDS", CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_MULT",   root_x + 412,  table_y + 6, "MULT",      CLR_GOLD_NEON, 8, true);
+   CreateLabel("TH_DELAY",  root_x + 450,  table_y + 6, "DELAY",     CLR_CYAN_NEON, 8, true);
+   CreateLabel("TH_FILTER", root_x + 495,  table_y + 6, "PRICE BOUNDS", CLR_TEXT_MED, 8, true);
    CreateLabel("TH_TRAIL",  root_x + 575, table_y + 6, "AUTO TRAIL",CLR_TEXT_MED, 8, true);
    CreateLabel("TH_STATUS", root_x + 680, table_y + 6, "STATUS",    CLR_TEXT_MED, 8, true);
    CreateLabel("TH_ACT",    root_x + 750, table_y + 6, "ACTIONS",   CLR_TEXT_MED, 8, true);
@@ -976,7 +991,10 @@ void UpdateDashboardUI()
       CreateLabel(r_pfx + "MAX", root_x + 375, cur_y + 9, max_ord_disp, CLR_TEXT_PURE, 8, true);
       
       int mult_disp = (g_rules[i].entry_multiplier <= 0) ? 1 : g_rules[i].entry_multiplier;
-      CreateLabel(r_pfx + "MULT", root_x + 415, cur_y + 9, IntegerToString(mult_disp) + "x", CLR_GOLD_NEON, 8, true);
+      CreateLabel(r_pfx + "MULT", root_x + 412, cur_y + 9, IntegerToString(mult_disp) + "x", CLR_GOLD_NEON, 8, true);
+      
+      string delay_disp = g_rules[i].delay_is_tf_close ? "TF Close" : (IntegerToString(g_rules[i].delay_seconds) + "s");
+      CreateLabel(r_pfx + "DELAY", root_x + 450, cur_y + 9, delay_disp, CLR_CYAN_NEON, 8, false);
       
       string f_str = "";
       if(g_rules[i].direction == TRADE_DIR_BUY)
@@ -991,7 +1009,7 @@ void UpdateDashboardUI()
       {
          f_str = "B:" + g_rules[i].bull_price_filter + " | S:" + g_rules[i].bear_price_filter;
       }
-      CreateLabel(r_pfx + "FLT", root_x + 455, cur_y + 9, f_str, CLR_TEXT_MED, 7, false);
+      CreateLabel(r_pfx + "FLT", root_x + 495, cur_y + 9, f_str, CLR_TEXT_MED, 7, false);
       
       string trail_str = g_rules[i].enable_trail ? StringFormat("ON (%.1f%%, %.1fx)", g_rules[i].trail_trigger_pct, g_rules[i].atr_multiplier) : "OFF";
       CreateLabel(r_pfx + "TRL", root_x + 575, cur_y + 9, trail_str, g_rules[i].enable_trail ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, false);
@@ -1062,6 +1080,8 @@ void SaveStateToFile()
          
          FileWriteInteger(handle, g_rules[i].max_orders);
          FileWriteInteger(handle, g_rules[i].entry_multiplier);
+         FileWriteInteger(handle, g_rules[i].delay_seconds);
+         FileWriteInteger(handle, g_rules[i].delay_is_tf_close ? 1 : 0);
          FileWriteInteger(handle, g_rules[i].orders_opened_count);
          FileWriteInteger(handle, g_rules[i].active ? 1 : 0);
       }
@@ -1088,10 +1108,16 @@ void LoadStateFromFile()
       g_rules[0].bear_price_filter = "ALL";
       g_rules[0].max_orders        = InpMaxOrders;
       g_rules[0].entry_multiplier  = InpEntryMultiplier;
+      g_rules[0].delay_seconds     = InpDelaySeconds;
+      g_rules[0].delay_is_tf_close = InpDelayIsTfClose;
       g_rules[0].orders_opened_count = 0;
       g_rules[0].active            = true;
       g_rules[0].last_bull_bar     = 0;
       g_rules[0].last_bear_bar     = 0;
+      g_rules[0].bull_cond_start_time = 0;
+      g_rules[0].bear_cond_start_time = 0;
+      g_rules[0].bull_last_checked_bar = 0;
+      g_rules[0].bear_last_checked_bar = 0;
       return;
    }
    
@@ -1128,10 +1154,16 @@ void LoadStateFromFile()
          g_rules[i].max_orders        = FileReadInteger(handle);
          g_rules[i].entry_multiplier  = FileReadInteger(handle);
          if(g_rules[i].entry_multiplier <= 0) g_rules[i].entry_multiplier = 1;
+         g_rules[i].delay_seconds     = FileReadInteger(handle);
+         g_rules[i].delay_is_tf_close = (FileReadInteger(handle) == 1);
          g_rules[i].orders_opened_count = FileReadInteger(handle);
          g_rules[i].active            = (FileReadInteger(handle) == 1);
          g_rules[i].last_bull_bar     = 0;
          g_rules[i].last_bear_bar     = 0;
+         g_rules[i].bull_cond_start_time = 0;
+         g_rules[i].bear_cond_start_time = 0;
+         g_rules[i].bull_last_checked_bar = 0;
+         g_rules[i].bear_last_checked_bar = 0;
       }
       FileClose(handle);
    }
@@ -1207,6 +1239,9 @@ void OnChartEvent(const int id,
          int cur_mult = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MULT", OBJPROP_TEXT));
          if(cur_mult > 0) g_form_entry_mult = cur_mult;
          
+         int cur_sec = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_DELAY_SEC", OBJPROP_TEXT));
+         if(cur_sec >= 0) g_form_delay_sec = cur_sec;
+         
          if(g_form_direction == TRADE_DIR_BOTH)
          {
             string b_val = ObjectGetString(0, g_prefix + "INP_BULL_MAX", OBJPROP_TEXT);
@@ -1251,6 +1286,15 @@ void OnChartEvent(const int id,
          CreateDashboardUI();
          return;
       }
+      else if(sparam == g_prefix + "BTN_TOGGLE_DELAY_MODE")
+      {
+         int cur_sec = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_DELAY_SEC", OBJPROP_TEXT));
+         if(cur_sec >= 0) g_form_delay_sec = cur_sec;
+         
+         g_form_delay_close = !g_form_delay_close;
+         CreateDashboardUI();
+         return;
+      }
       else if(sparam == g_prefix + "BTN_TOGGLE_MAX_ORD")
       {
          if(g_form_max_orders <= 0) g_form_max_orders = 1;
@@ -1283,6 +1327,8 @@ void OnChartEvent(const int id,
          g_form_atr_mult   = InpATRMultiplier;
          g_form_max_orders = InpMaxOrders;
          g_form_entry_mult = InpEntryMultiplier;
+         g_form_delay_sec  = InpDelaySeconds;
+         g_form_delay_close= InpDelayIsTfClose;
          g_form_bmax       = "ALL";
          g_form_smin       = "ALL";
          g_editing_rule_idx = -1;
@@ -1340,6 +1386,9 @@ void OnChartEvent(const int id,
          int mult_val = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MULT", OBJPROP_TEXT));
          if(mult_val <= 0) mult_val = 1;
          
+         int delay_sec_val = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_DELAY_SEC", OBJPROP_TEXT));
+         if(delay_sec_val < 0) delay_sec_val = 0;
+         
          string b_filter = "ALL";
          string s_filter = "ALL";
          
@@ -1386,6 +1435,7 @@ void OnChartEvent(const int id,
          g_form_trail_pct = trail_pct;
          g_form_atr_mult  = atr_mult;
          g_form_entry_mult= mult_val;
+         g_form_delay_sec = delay_sec_val;
          g_form_max_orders= max_ord_val;
          g_form_bmax      = b_filter;
          g_form_smin      = s_filter;
@@ -1412,8 +1462,14 @@ void OnChartEvent(const int id,
          g_rules[target_idx].bear_price_filter   = s_filter;
          g_rules[target_idx].max_orders          = max_ord_val;
          g_rules[target_idx].entry_multiplier    = mult_val;
+         g_rules[target_idx].delay_seconds       = delay_sec_val;
+         g_rules[target_idx].delay_is_tf_close   = g_form_delay_close;
          g_rules[target_idx].last_bull_bar       = 0;
          g_rules[target_idx].last_bear_bar       = 0;
+         g_rules[target_idx].bull_cond_start_time = 0;
+         g_rules[target_idx].bear_cond_start_time = 0;
+         g_rules[target_idx].bull_last_checked_bar = 0;
+         g_rules[target_idx].bear_last_checked_bar = 0;
          
          g_selected_rule_idx = target_idx;
          g_editing_rule_idx  = -1;
@@ -1452,6 +1508,8 @@ void OnChartEvent(const int id,
             g_form_trail_pct    = g_rules[i].trail_trigger_pct;
             g_form_atr_mult     = g_rules[i].atr_multiplier;
             g_form_entry_mult   = g_rules[i].entry_multiplier;
+            g_form_delay_sec    = g_rules[i].delay_seconds;
+            g_form_delay_close  = g_rules[i].delay_is_tf_close;
             g_form_max_orders   = g_rules[i].max_orders;
             g_form_bmax         = g_rules[i].bull_price_filter;
             g_form_smin         = g_rules[i].bear_price_filter;
@@ -1539,14 +1597,71 @@ void OnTick()
       // A. CHECK BUY (Strong Bullish Break)
       if(g_rules[r].direction == TRADE_DIR_BOTH || g_rules[r].direction == TRADE_DIR_BUY)
       {
-         if(IsStrongBullishEngulfingBreak(sym, tf, atr_50, broken_level, cur_price))
+         bool is_bull_valid = IsStrongBullishEngulfingBreak(sym, tf, atr_50, broken_level, cur_price) && EvaluatePriceFilter(cur_price, g_rules[r].bull_price_filter);
+         
+         if(is_bull_valid)
          {
-            if(EvaluatePriceFilter(cur_price, g_rules[r].bull_price_filter))
+            datetime cur_bar_open_time = (datetime)SeriesInfoInteger(sym, tf, SERIES_LASTBAR_DATE);
+            
+            // Check if already traded this bar
+            if(g_rules[r].last_bull_bar != cur_bar_open_time)
             {
-               if(g_rules[r].last_bull_bar != cur_bar_time)
+               bool trigger_buy = false;
+               
+               if(g_rules[r].delay_is_tf_close)
                {
-                  g_rules[r].last_bull_bar = cur_bar_time;
-                  
+                  // Mode TF Close: Check if candle closed and condition was met during the candle
+                  if(g_rules[r].bull_last_checked_bar != cur_bar_open_time)
+                  {
+                     g_rules[r].bull_last_checked_bar = cur_bar_open_time;
+                     // We check if the completed candle (rates[1] or rates[2]) satisfied engulfing
+                     // Actually, if we are at a new bar, candle [1] just closed. Let's verify if candle [1] was a strong engulfing break!
+                     // Let's check completed candle [1] vs [2]
+                     MqlRates r_check[];
+                     ArraySetAsSeries(r_check, true);
+                     if(CopyRates(sym, tf, 1, 2, r_check) >= 2)
+                     {
+                        bool c_bull = (r_check[0].close > r_check[0].open);
+                        bool c_break = (r_check[0].close >= r_check[1].high || r_check[0].high >= r_check[1].high);
+                        bool c_cover = (r_check[0].low <= r_check[1].low);
+                        bool c_body  = ((r_check[0].close - r_check[0].open) > (r_check[1].open - r_check[1].close) * InpBodyRatioMult);
+                        
+                        if(c_bull && c_break && c_cover && c_body && EvaluatePriceFilter(r_check[0].close, g_rules[r].bull_price_filter))
+                        {
+                           trigger_buy = true;
+                           g_rules[r].last_bull_bar = cur_bar_open_time;
+                        }
+                     }
+                  }
+               }
+               else
+               {
+                  // Mode Seconds Delay
+                  int d_sec = g_rules[r].delay_seconds;
+                  if(d_sec <= 0)
+                  {
+                     // Instant entry
+                     trigger_buy = true;
+                     g_rules[r].last_bull_bar = cur_bar_open_time;
+                  }
+                  else
+                  {
+                     datetime now_time = TimeCurrent();
+                     if(g_rules[r].bull_cond_start_time == 0)
+                     {
+                        g_rules[r].bull_cond_start_time = now_time;
+                     }
+                     else if((int)(now_time - g_rules[r].bull_cond_start_time) >= d_sec)
+                     {
+                        trigger_buy = true;
+                        g_rules[r].last_bull_bar = cur_bar_open_time;
+                        g_rules[r].bull_cond_start_time = 0;
+                     }
+                  }
+               }
+               
+               if(trigger_buy)
+               {
                   double sl_price = broken_level - atr_50;
                   double sl_dist  = ask - sl_price;
                   
@@ -1584,19 +1699,74 @@ void OnTick()
                }
             }
          }
+         else
+         {
+            // Condition broken: reset seconds timer
+            g_rules[r].bull_cond_start_time = 0;
+         }
       }
       
       // B. CHECK SELL (Strong Bearish Break)
       if(g_rules[r].direction == TRADE_DIR_BOTH || g_rules[r].direction == TRADE_DIR_SELL)
       {
-         if(IsStrongBearishEngulfingBreak(sym, tf, atr_50, broken_level, cur_price))
+         bool is_bear_valid = IsStrongBearishEngulfingBreak(sym, tf, atr_50, broken_level, cur_price) && EvaluatePriceFilter(cur_price, g_rules[r].bear_price_filter);
+         
+         if(is_bear_valid)
          {
-            if(EvaluatePriceFilter(cur_price, g_rules[r].bear_price_filter))
+            datetime cur_bar_open_time = (datetime)SeriesInfoInteger(sym, tf, SERIES_LASTBAR_DATE);
+            
+            if(g_rules[r].last_bear_bar != cur_bar_open_time)
             {
-               if(g_rules[r].last_bear_bar != cur_bar_time)
+               bool trigger_sell = false;
+               
+               if(g_rules[r].delay_is_tf_close)
                {
-                  g_rules[r].last_bear_bar = cur_bar_time;
-                  
+                  if(g_rules[r].bear_last_checked_bar != cur_bar_open_time)
+                  {
+                     g_rules[r].bear_last_checked_bar = cur_bar_open_time;
+                     MqlRates r_check[];
+                     ArraySetAsSeries(r_check, true);
+                     if(CopyRates(sym, tf, 1, 2, r_check) >= 2)
+                     {
+                        bool c_bear = (r_check[0].close < r_check[0].open);
+                        bool c_break = (r_check[0].close <= r_check[1].low || r_check[0].low <= r_check[1].low);
+                        bool c_cover = (r_check[0].high >= r_check[1].high);
+                        bool c_body  = ((r_check[0].open - r_check[0].close) > (r_check[1].close - r_check[1].open) * InpBodyRatioMult);
+                        
+                        if(c_bear && c_break && c_cover && c_body && EvaluatePriceFilter(r_check[0].close, g_rules[r].bear_price_filter))
+                        {
+                           trigger_sell = true;
+                           g_rules[r].last_bear_bar = cur_bar_open_time;
+                        }
+                     }
+                  }
+               }
+               else
+               {
+                  int d_sec = g_rules[r].delay_seconds;
+                  if(d_sec <= 0)
+                  {
+                     trigger_sell = true;
+                     g_rules[r].last_bear_bar = cur_bar_open_time;
+                  }
+                  else
+                  {
+                     datetime now_time = TimeCurrent();
+                     if(g_rules[r].bear_cond_start_time == 0)
+                     {
+                        g_rules[r].bear_cond_start_time = now_time;
+                     }
+                     else if((int)(now_time - g_rules[r].bear_cond_start_time) >= d_sec)
+                     {
+                        trigger_sell = true;
+                        g_rules[r].last_bear_bar = cur_bar_open_time;
+                        g_rules[r].bear_cond_start_time = 0;
+                     }
+                  }
+               }
+               
+               if(trigger_sell)
+               {
                   double sl_price = broken_level + atr_50 + spread;
                   double sl_dist  = sl_price - bid;
                   
@@ -1633,6 +1803,10 @@ void OnTick()
                   }
                }
             }
+         }
+         else
+         {
+            g_rules[r].bear_cond_start_time = 0;
          }
       }
    }
