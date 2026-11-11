@@ -431,6 +431,8 @@ void ProcessAutoTrailSLTP()
       
       if(cur_tp <= 0) continue;
       
+      m_trade.SetExpertMagicNumber(m_position.Magic());
+      
       double trigger_ratio = g_tracking_list[i].trail_trigger_pct / 100.0;
       if(trigger_ratio <= 0) trigger_ratio = 0.05;
       
