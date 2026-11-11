@@ -499,6 +499,7 @@ void OnChartEvent(const int id,
          if(g_editing_radar_idx == idx) g_editing_radar_idx = -1;
          else if(g_editing_radar_idx > idx) g_editing_radar_idx--;
          RemoveRadarSymbol(idx);
+         SaveStateToFile();
          CreateDashboardUI();
          UpdateDashboardUI();
          return;
