@@ -120,15 +120,15 @@ string               g_prefix = "EAT_";
 bool                 g_master_power_enabled = true;
 
 // Active Form & Preview States (Persistent across rule additions)
-string               g_form_sym         = "EURUSD";
+string               g_form_sym         = _Symbol;
 ENUM_TRADE_DIRECTION g_form_direction   = TRADE_DIR_BOTH;
 double               g_form_rr          = 2.00;
-ENUM_TIMEFRAMES      g_form_tf          = PERIOD_M5;
-ENUM_LOT_MODE        g_form_lot_mode    = LOT_FIXED;
-double               g_form_lot_val     = 0.01;
+ENUM_TIMEFRAMES      g_form_tf          = PERIOD_M1;
+ENUM_LOT_MODE        g_form_lot_mode    = LOT_RISK_PCT;
+double               g_form_lot_val     = 1.0;
 bool                 g_form_trail_on    = true;
 double               g_form_trail_pct   = 5.0;
-double               g_form_atr_mult    = 2.0;
+double               g_form_atr_mult    = 1.5;
 int                  g_form_max_orders  = 1;
 string               g_form_bmax        = "ALL";
 string               g_form_smin        = "ALL";
