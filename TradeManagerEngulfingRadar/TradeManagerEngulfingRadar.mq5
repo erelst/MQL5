@@ -20,7 +20,8 @@ enum ENUM_BE_OFFSET_MODE
 {
    BE_OFFSET_AUTO_SPREAD,   // Auto Spread (+ Spread for Buy, - Spread for Sell)
    BE_OFFSET_ZERO,          // Exact Open Price (+0 points)
-   BE_OFFSET_CUSTOM_POINTS  // Custom Lock Points
+   BE_OFFSET_CUSTOM_POINTS, // Custom Lock Points
+   BE_OFFSET_CUSTOM_PRICE   // Fixed SL Price (input below)
 };
 
 struct SAutoBEItem
@@ -32,6 +33,7 @@ struct SAutoBEItem
    double               trigger_price;
    ENUM_BE_OFFSET_MODE  offset_mode;
    int                  custom_points;
+   double               fixed_price;  // Used when offset_mode == BE_OFFSET_CUSTOM_PRICE
    bool                 active;
 };
 
@@ -84,6 +86,7 @@ int               g_active_tab = 1; // 1 = Orders Tab, 2 = Radar Tab
 int               g_orders_page = 0;
 int               g_editing_radar_idx = -1; // -1 = Add mode, >= 0 = Edit mode index
 ENUM_BE_OFFSET_MODE g_be_offset_mode = BE_OFFSET_AUTO_SPREAD; // Selected Offset Mode for Trigger
+double            g_be_fixed_price = 0.0; // Fixed SL price for BE_OFFSET_CUSTOM_PRICE (0 = off)
 const int         MAX_ROWS_PER_PAGE = 8;
 string            g_prefix = "TMER_";
 
@@ -286,14 +289,20 @@ void OnChartEvent(const int id,
       }
       else if(sparam == g_prefix + "BTN_BE_MODE")
       {
-         // Cycle through Offset modes: Auto Spread -> Exact Zero -> Custom Lock
+         // Cycle through Offset modes: Auto Spread -> Exact Zero -> Custom Points -> Fixed Price
          if(g_be_offset_mode == BE_OFFSET_AUTO_SPREAD)
             g_be_offset_mode = BE_OFFSET_ZERO;
          else if(g_be_offset_mode == BE_OFFSET_ZERO)
             g_be_offset_mode = BE_OFFSET_CUSTOM_POINTS;
+         else if(g_be_offset_mode == BE_OFFSET_CUSTOM_POINTS)
+            g_be_offset_mode = BE_OFFSET_CUSTOM_PRICE;
          else
             g_be_offset_mode = BE_OFFSET_AUTO_SPREAD;
-            
+
+         // Preserve typed price across re-render
+         string str_px = ObjectGetString(0, g_prefix + "INP_BE_PRICE", OBJPROP_TEXT);
+         if(StringLen(str_px) > 0) g_be_fixed_price = StringToDouble(str_px);
+
          CreateDashboardUI();
          UpdateDashboardUI();
          return;
@@ -817,6 +826,8 @@ void CheckAutoBETriggers()
                      new_sl = open_price + spread;
                   else if(g_auto_be_list[i].offset_mode == BE_OFFSET_CUSTOM_POINTS)
                      new_sl = open_price + (g_auto_be_list[i].custom_points * point);
+                  else if(g_auto_be_list[i].offset_mode == BE_OFFSET_CUSTOM_PRICE)
+                     new_sl = g_auto_be_list[i].fixed_price;
                      
                   int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
                   new_sl = NormalizeDouble(new_sl, digits);
@@ -848,6 +859,8 @@ void CheckAutoBETriggers()
                      new_sl = open_price - spread;
                   else if(g_auto_be_list[i].offset_mode == BE_OFFSET_CUSTOM_POINTS)
                      new_sl = open_price - (g_auto_be_list[i].custom_points * point);
+                  else if(g_auto_be_list[i].offset_mode == BE_OFFSET_CUSTOM_PRICE)
+                     new_sl = g_auto_be_list[i].fixed_price;
                      
                   int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
                   new_sl = NormalizeDouble(new_sl, digits);
@@ -1048,6 +1061,17 @@ void ApplyInstantBESpread()
 
 void ActivateBulkAutoBE(double trigger_price, ENUM_BE_OFFSET_MODE mode, int custom_pts)
 {
+   double fixed_px = 0.0;
+   if(mode == BE_OFFSET_CUSTOM_PRICE)
+   {
+      fixed_px = StringToDouble(ObjectGetString(0, g_prefix + "INP_BE_PRICE", OBJPROP_TEXT));
+      if(fixed_px <= 0)
+      {
+         Alert("Mode FIXED PRICE aktif: isi dulu kolom SL TARGET PRICE!");
+         return;
+      }
+   }
+
    int count = 0;
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
@@ -1066,6 +1090,7 @@ void ActivateBulkAutoBE(double trigger_price, ENUM_BE_OFFSET_MODE mode, int cust
                g_auto_be_list[j].trigger_price = trigger_price;
                g_auto_be_list[j].offset_mode   = mode;
                g_auto_be_list[j].custom_points = custom_pts;
+               g_auto_be_list[j].fixed_price   = fixed_px;
                g_auto_be_list[j].active        = true;
                exists = true;
                break;
@@ -1083,6 +1108,7 @@ void ActivateBulkAutoBE(double trigger_price, ENUM_BE_OFFSET_MODE mode, int cust
             g_auto_be_list[size].trigger_price = trigger_price;
             g_auto_be_list[size].offset_mode   = mode;
             g_auto_be_list[size].custom_points = custom_pts;
+            g_auto_be_list[size].fixed_price   = fixed_px;
             g_auto_be_list[size].active        = true;
          }
          count++;
@@ -1323,7 +1349,7 @@ void CreateDashboardUI()
       CreateLabel("TH_OPN", root_x + 430, th_y + 4, "OPEN", CLR_TEXT_MED, 8, true);
       CreateLabel("TH_SL",  root_x + 515, th_y + 4, "SL", CLR_TEXT_MED, 8, true);
       CreateLabel("TH_TP",  root_x + 600, th_y + 4, "TP", CLR_TEXT_MED, 8, true);
-      CreateLabel("TH_BE",  root_x + 685, th_y + 4, "AUTO-BE", CLR_TEXT_MED, 8, true);
+      CreateLabel("TH_BE",  root_x + 700, th_y + 4, "AUTO-BE", CLR_TEXT_MED, 8, true);
       
       // Action Deck (SL/TP & Auto-BE)
       int deck_y = table_y + 270;
@@ -1343,7 +1369,7 @@ void CreateDashboardUI()
       
       // Box B: Auto Break-Even
       int box_b_x = root_x + 24 + box_w;
-      CreateRect("CARD_BE", box_b_x, deck_y, box_w, 140, CLR_CARD_BG, CLR_BORDER_HARD);
+      CreateRect("CARD_BE", box_b_x, deck_y, box_w, 168, CLR_CARD_BG, CLR_BORDER_HARD);
       CreateLabel("LBL_BE", box_b_x + 12, deck_y + 10, "BREAK-EVEN (BE) ENGINE", CLR_CYAN_NEON, 9, true);
       
       // Instant BE button (Direct Move to Open +/- Spread)
@@ -1365,10 +1391,21 @@ void CreateDashboardUI()
          mode_str = "CUSTOM LOCK (+10 pts)";
          mode_clr = CLR_GOLD_NEON;
       }
+      else if(g_be_offset_mode == BE_OFFSET_CUSTOM_PRICE)
+      {
+         mode_str = "FIXED SL PRICE (> 0)";
+         mode_clr = CLR_BULL_NEON;
+      }
       CreateButton("BTN_BE_MODE", box_b_x + 125, deck_y + 64, 240, 22, mode_str, CLR_CANVAS_BG, mode_clr, CLR_BORDER_HARD);
-      
-      CreateButton("BTN_APPLY_BE", box_b_x + 12, deck_y + 98, 190, 26, "ACTIVATE BE TRIGGER", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
-      CreateButton("BTN_CANCEL_BE", box_b_x + 210, deck_y + 98, 155, 26, "DEACTIVATE", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
+
+      // Fixed SL price input (blank = off). Only active in FIXED SL PRICE mode.
+      CreateLabel("LBL_BE_PRICE", box_b_x + 12, deck_y + 96, "SL TARGET PRICE:", CLR_TEXT_PURE, 8, true);
+      string px_default = (g_be_fixed_price > 0) ? DoubleToString(g_be_fixed_price, _Digits) : "";
+      CreateEdit("INP_BE_PRICE", box_b_x + 125, deck_y + 92, 240, 22, px_default,
+                 CLR_CANVAS_BG, g_be_offset_mode == BE_OFFSET_CUSTOM_PRICE ? CLR_BULL_NEON : CLR_TEXT_MED);
+
+      CreateButton("BTN_APPLY_BE", box_b_x + 12, deck_y + 126, 190, 26, "ACTIVATE BE TRIGGER", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
+      CreateButton("BTN_CANCEL_BE", box_b_x + 210, deck_y + 126, 155, 26, "DEACTIVATE", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
    }
    else if(g_active_tab == 2)
    {
@@ -1497,7 +1534,7 @@ void UpdateDashboardUI()
          {
             if(g_auto_be_list[b].ticket == ticket && g_auto_be_list[b].active)
             {
-               be_status = "ON @" + DoubleToString(g_auto_be_list[b].trigger_price, digits);
+               be_status = "ON " + DoubleToString(g_auto_be_list[b].trigger_price, digits);
                be_color  = CLR_GOLD_NEON;
                break;
             }
@@ -1524,7 +1561,7 @@ void UpdateDashboardUI()
          CreateLabel(r_pfx + "OPN", root_x + 430, cur_y + 3, DoubleToString(open_p, digits), CLR_TEXT_PURE, 8, false);
          CreateLabel(r_pfx + "SL",  root_x + 515, cur_y + 3, sl > 0 ? DoubleToString(sl, digits) : "-", CLR_BEAR_NEON, 8, false);
          CreateLabel(r_pfx + "TP",  root_x + 600, cur_y + 3, tp > 0 ? DoubleToString(tp, digits) : "-", CLR_BULL_NEON, 8, false);
-         CreateLabel(r_pfx + "BE",  root_x + 685, cur_y + 3, be_status, be_color, 8, true);
+         CreateLabel(r_pfx + "BE",  root_x + 700, cur_y + 3, be_status, be_color, 8, true);
          
          row_idx++;
       }
@@ -1570,7 +1607,7 @@ void UpdateDashboardUI()
          CreateLabel(r_pfx + "OPN", root_x + 430, cur_y + 3, DoubleToString(open_p, digits), CLR_TEXT_PURE, 8, false);
          CreateLabel(r_pfx + "SL",  root_x + 515, cur_y + 3, sl > 0 ? DoubleToString(sl, digits) : "-", CLR_BEAR_NEON, 8, false);
          CreateLabel(r_pfx + "TP",  root_x + 600, cur_y + 3, tp > 0 ? DoubleToString(tp, digits) : "-", CLR_BULL_NEON, 8, false);
-         CreateLabel(r_pfx + "BE",  root_x + 685, cur_y + 3, "-", CLR_TEXT_MED, 8, false);
+         CreateLabel(r_pfx + "BE",  root_x + 700, cur_y + 3, "-", CLR_TEXT_MED, 8, false);
          
          row_idx++;
       }
@@ -1598,13 +1635,15 @@ void UpdateDashboardUI()
          string str_tf = StringSubstr(EnumToString(g_radar_symbols[i].timeframe), 7);
          CreateLabel(r_pfx + "TF", root_x + 130, cur_y + 8, "[" + str_tf + "]", CLR_CYAN_NEON, 8, true);
          
-         string str_bull = g_radar_symbols[i].bull_enabled ? ((g_radar_symbols[i].bull_price_max > 0) ? StringFormat("Bullish jika < %.5f", g_radar_symbols[i].bull_price_max) : "Bullish: BEBAS (Any Price)") : "Bullish: OFF";
-         string str_bear = g_radar_symbols[i].bear_enabled ? ((g_radar_symbols[i].bear_price_min > 0) ? StringFormat("Bearish jika > %.5f", g_radar_symbols[i].bear_price_min) : "Bearish: BEBAS (Any Price)") : "Bearish: OFF";
-         
+         int row_digits = (int)SymbolInfoInteger(g_radar_symbols[i].symbol, SYMBOL_DIGITS);
+         string str_bull = g_radar_symbols[i].bull_enabled ? ((g_radar_symbols[i].bull_price_max > 0) ? "BULL < " + DoubleToString(g_radar_symbols[i].bull_price_max, row_digits) : "BULL: BEBAS") : "BULL: OFF";
+         string str_bear = g_radar_symbols[i].bear_enabled ? ((g_radar_symbols[i].bear_price_min > 0) ? "BEAR > " + DoubleToString(g_radar_symbols[i].bear_price_min, row_digits) : "BEAR: BEBAS") : "BEAR: OFF";
+
          CreateLabel(r_pfx + "COND_BULL", root_x + 200, cur_y + 6, str_bull, g_radar_symbols[i].bull_enabled ? CLR_BULL_NEON : CLR_TEXT_MED, 8, true);
          CreateLabel(r_pfx + "COND_BEAR", root_x + 200, cur_y + 22, str_bear, g_radar_symbols[i].bear_enabled ? CLR_BEAR_NEON : CLR_TEXT_MED, 8, true);
-         
-         CreateLabel(r_pfx + "ATR", root_x + 460, cur_y + 12, "50% ATR(14) auto-included", CLR_CYAN_NEON, 8, false);
+
+         // Column reserved between bounds (x+200..x+560) and EDIT button (x+win_w-170)
+         CreateLabel(r_pfx + "ATR", root_x + 575, cur_y + 12, "ATR 50%", CLR_CYAN_NEON, 8, false);
          CreateButton("BTN_EDIT_RADAR_" + IntegerToString(i), root_x + win_w - 170, cur_y + 9, 52, 24, "EDIT", is_item_editing ? CLR_TAB_ACTIVE_BG : CLR_CARD_BG, is_item_editing ? CLR_GOLD_NEON : CLR_CYAN_NEON, is_item_editing ? CLR_GOLD_NEON : CLR_BORDER_HARD);
          CreateButton("BTN_DEL_RADAR_" + IntegerToString(i), root_x + win_w - 110, cur_y + 9, 58, 24, "DELETE", C'18,8,34', CLR_BEAR_NEON, CLR_BEAR_NEON);
       }
@@ -1631,6 +1670,9 @@ void SaveStateToFile()
    int handle = FileOpen(filename, FILE_WRITE|FILE_BIN);
    if(handle != INVALID_HANDLE)
    {
+      // Version header (2 = has fixed_price + g_be_fixed_price)
+      FileWriteInteger(handle, 2);
+
       // 0. Save UI Active Tab & Offset Mode
       FileWriteInteger(handle, g_active_tab);
       FileWriteInteger(handle, (int)g_be_offset_mode);
@@ -1669,9 +1711,13 @@ void SaveStateToFile()
          FileWriteDouble(handle, g_auto_be_list[i].trigger_price);
          FileWriteInteger(handle, (int)g_auto_be_list[i].offset_mode);
          FileWriteInteger(handle, g_auto_be_list[i].custom_points);
+         FileWriteDouble(handle, g_auto_be_list[i].fixed_price);
          FileWriteInteger(handle, g_auto_be_list[i].active ? 1 : 0);
       }
-      
+
+      // 3. Global BE fixed price (appended last for backward compatibility)
+      FileWriteDouble(handle, g_be_fixed_price);
+
       FileClose(handle);
    }
 }
@@ -1684,8 +1730,21 @@ void LoadStateFromFile()
    int handle = FileOpen(filename, FILE_READ|FILE_BIN);
    if(handle != INVALID_HANDLE)
    {
+      // Version header: v1 files (no header) start with active_tab (1 or 2).
+      int first = FileReadInteger(handle);
+      int version;
+      if(first == 2)
+      {
+         version = 2;
+         g_active_tab = FileReadInteger(handle);
+      }
+      else
+      {
+         version = 1;
+         g_active_tab = first; // legacy: first int was active_tab
+      }
+
       // 0. Read UI Active Tab & Offset Mode
-      g_active_tab = FileReadInteger(handle);
       if(g_active_tab != 1 && g_active_tab != 2) g_active_tab = 1;
       g_be_offset_mode = (ENUM_BE_OFFSET_MODE)FileReadInteger(handle);
       
@@ -1728,9 +1787,14 @@ void LoadStateFromFile()
          g_auto_be_list[i].trigger_price = FileReadDouble(handle);
          g_auto_be_list[i].offset_mode   = (ENUM_BE_OFFSET_MODE)FileReadInteger(handle);
          g_auto_be_list[i].custom_points = FileReadInteger(handle);
+         if(version >= 2) g_auto_be_list[i].fixed_price = FileReadDouble(handle);
+         else             g_auto_be_list[i].fixed_price = 0.0;
          g_auto_be_list[i].active        = (FileReadInteger(handle) == 1);
       }
-      
+
+      if(version >= 2 && FileIsEnding(handle) == false)
+         g_be_fixed_price = FileReadDouble(handle);
+
       FileClose(handle);
    }
 }

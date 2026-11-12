@@ -14,10 +14,32 @@ Tool Expert Advisor (EA) multi-simbol untuk MetaTrader 5 dengan dashboard intera
   - **`SET BE SPREAD` (Instan)**: Langsung menggeser SL order terpilih ke titik impas (Harga Open + Spread untuk Buy, atau Harga Open - Spread untuk Sell) saat itu juga.
   - **`ACTIVATE BE TRIGGER` (Otomatis)**: Menyetel harga pemicu (*trigger price*). Begitu harga market menyentuh level tersebut, EA akan otomatis menggeser SL ke titik Break-Even.
 
+#### Mode BE Offset (Tombol `BE OFFSET MODE`)
+
+Klik tombol `BE OFFSET MODE` untuk berpindah mode secara berurutan (siklus 4 mode):
+
+| Mode | Tampilan | SL setelah trigger tercapai |
+|---|---|---|
+| **Auto Spread** | `AUTO SPREAD (+/- Spread)` | Buy: `Open + Spread` / Sell: `Open - Spread` |
+| **Exact Open** | `EXACT OPEN (+0 pts)` | Buy & Sell: tepat di `Open` |
+| **Custom Lock** | `CUSTOM LOCK (+10 pts)` | Buy: `Open + 10 pts` / Sell: `Open - 10 pts` |
+| **Fixed SL Price** | `FIXED SL PRICE (> 0)` | Buy & Sell: tepat di harga pada kolom `SL TARGET PRICE` |
+
+**Mode `FIXED SL PRICE`** memungkinkan Anda menentukan sendiri level SL tujuan. Isi kolom **`SL TARGET PRICE`** dengan harga (misal `1.0965`), lalu klik `ACTIVATE BE TRIGGER`.
+
+- Kolom harga **kosong = OFF**; mode ini akan menolak aktivasi dan menampilkan peringatan.
+- Harga yang sudah diketik **tetap tersimpan** saat Anda berpindah mode atau me-render ulang dashboard.
+- Harga tersebut juga disimpan ke file state per akun, jadi tidak hilang setelah restart.
+- EA hanya menggeser SL jika hasilnya **memperbaiki** posisi (Buy: SL baru > SL sekarang; Sell: SL baru < SL sekarang). Jika tidak, jadwal BE dianggap selesai dan tidak dipaksakan.
+
+> Catatan: harga tetap dipakai apa adanya untuk kedua arah, jadi pastikan level yang Anda masukkan memang valid sebagai SL (di bawah harga untuk Buy, di atas harga untuk Sell). EA tidak akan memaksa SL yang memperburuk posisi.
+
 ---
 
 ### 2. Engulfing Radar & Mobile Push Alert (Tab 2)
 - **Real-time Tick-Level Detection**: Pola dideteksi langsung saat harga running menembus (*breakout*) High/Low candle sebelumnya tanpa perlu menunggu candle selesai (*close*).
+- **Dual-Timeframe (M5 + M1)**: Untuk pantauan **M5**, radar juga menerima sinyal dari **M1** dengan prioritas M5. TF lain tetap eksklusif. Lihat [`DUAL_TIMEFRAME.md`](../DUAL_TIMEFRAME.md) untuk detailnya.
+- **Basis ATR M1**: Bila simbol dipantau di **M1**, nilai ATR(14) dipinjam dari **M5** lalu dikali **0.5** agar buffer SL tidak terlalu rapat. Sama seperti yang dipakai `EngulfingAutoTrader`.
 - **Kalkulasi Otomatis 50% ATR**: Menghitung 50% nilai ATR dari candle yang ditembus dan menyajikannya dalam satuan **pips** dan **points**.
 - **Suggested SL Otomatis**:
   - *Bullish Engulfing*: `Low Candle Sebelumnya - 50% ATR`
@@ -28,6 +50,7 @@ Tool Expert Advisor (EA) multi-simbol untuk MetaTrader 5 dengan dashboard intera
   - Kosongkan kolom jika ingin menonaktifkan salah satu arah (misal hanya memantau Bullish saja).
 - **Edit & Hapus Simbol**: Dilengkapi tombol `EDIT` untuk mengubah konfigurasi pantauan yang sudah ada serta tombol `DELETE`.
 - **Tombol `TEST ALERT`**: Menguji koneksi notifikasi ke MetaTrader Mobile di HP Anda secara instan.
+- **Nama TF di Alert**: Teks alert menyertakan timeframe sumber sinyal (misal `EURUSD (M5)` atau `EURUSD (M1)`), sehingga Anda tahu sinyal mana yang terpicu saat mode dual-TF aktif.
 
 ---
 

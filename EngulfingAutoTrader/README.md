@@ -27,6 +27,32 @@ Berbeda dengan EA konvensional yang hanya memiliki satu pasang pengaturan, Engul
   - `1` (Default): Rule membuka 1x order, lalu otomatis berstatus **`PAUSED`** setelah tereksekusi.
   - `UNL` / `0`: Tanpa batas (*unlimited*), terus aktif membuka order setiap kali pola Engulfing valid muncul.
 
+#### MAX ORDER vs ENTRY MULTIPLIER (Sering Tertukar)
+
+Kedua angka ini berbeda peran dan sering salah dipahami:
+
+| Parameter | Arti | Contoh |
+|---|---|---|
+| **MAX ORDER** | Jumlah **siklus entry** sebelum rule auto-pause | `2` = boleh entry 2 kali, lalu `PAUSED` |
+| **ENTRY MULTIPLIER** | Jumlah **posisi per siklus entry** | `3` = sekali sinyal buka 3 posisi |
+
+| MAX | MULT | Hasil |
+|---|---|---|
+| `1` | `3` | 3 posisi dalam 1 siklus, lalu pause |
+| `2` | `1` | 2 posisi dalam 2 siklus, lalu pause |
+| `2` | `3` | 6 posisi (3 per siklus), lalu pause |
+| `UNL` | berapa pun | Tanpa batas siklus |
+
+**Aturan penting saat kuota terbatas**: bila MAX ORDER tersisa lebih sedikit daripada jumlah candidate timeframe yang valid, **M5 selalu diambil lebih dulu** daripada M1. Rule tidak akan "memakai" kuotanya untuk sinyal M1 lalu melewatkan sinyal M5 pada tick yang sama.
+
+---
+
+#### Logika Dual-Timeframe (M5 + M1)
+
+Rule **M5** menerima sinyal dari **M5** dan **M1**, dengan **M5 diprioritaskan**. Rule **M1 tetap eksklusif M1**, dan TF lain sepenuhnya eksklusif. Selain itu, ATR untuk rule **M1 dipinjam dari M5 lalu dikali 0.5** agar buffer SL tidak terlalu rapat.
+
+Detail lengkap (termasuk alasan, slot state per-TF, dan versioning file state) ada di [`DUAL_TIMEFRAME.md`](../DUAL_TIMEFRAME.md).
+
 ---
 
 ### 3. Auto Trail SL (BE) & Volatility Trail TP Engine
@@ -36,6 +62,33 @@ Berbeda dengan EA konvensional yang hanya memiliki satu pasang pengaturan, Engul
    - Jika ATR Realtime saat mendekati target mencapai $\ge 2\times$ ATR acuan saat open, TP otomatis diperpanjang sejauh $+1\times$ target awal.
 3. **Penguncian Profit Bertingkat (Cycle 2+)**:
    - Saat harga mendekati target TP baru yang diperpanjang, SL otomatis dikunci di level harga TP sebelumnya.
+
+#### Prilaku Saat Rule Auto-Pause (MAX ORDER Tercapai)
+
+Auto-pause **hanya menghentikan pembukaan order baru**. Semua mekanisme lain tetap berjalan:
+
+| Mekanisme | Saat rule `PAUSED` |
+|---|---|
+| Auto Trail SL & TP Extension | **Tetap jalan** setiap tick |
+| Penguncian profit bertingkat | **Tetap jalan** |
+| Radar alert (EA terpisah) | **Tetap jalan** |
+| BE engine (Trade Manager) | **Tetap jalan** |
+| Pembukaan order baru | **Berhenti** |
+
+Hal ini karena `ProcessAutoTrailSLTP()` dipanggil di `OnTick()` **sebelum** loop rules, dan tidak pernah membaca `max_orders` maupun `orders_opened_count`. Ini disengaja: posisi yang baru dibuka justru paling butuh proteksi BE setelah rule berhenti membuka posisi.
+
+**Saat Anda me-reaktivasi rule** (`ACTIVE` kembali):
+
+- Counter `orders_opened_count` **di-reset ke 0** → rule boleh memulai siklus entry baru.
+- Posisi **lama** tetap terlacak di `g_tracking_list[]`, dan tetap memakai parameter trail **saat posisi itu dibuka** (trigger %, multiplier ATR, ATR acuan).
+- Posisi **baru** otomatis ikut terlacak dan memakai setting trail terbaru.
+
+> Konsekuensi: mengubah setting Auto Trail lalu me-reaktivasi rule **tidak** mengubah perilaku trail pada posisi yang sudah terbuka — hanya posisi baru yang memakai setting baru.
+
+**Dua batasan yang perlu diketahui:**
+
+- **Master Power OFF ≠ auto-pause.** Master power OFF menghentikan trail juga, karena `if(!g_master_power_enabled) return;` berada sebelum pemanggilan trail engine.
+- **Posisi tanpa TP tidak di-trail.** Trail dilewati bila `TakeProfit <= 0`, karena perhitungan jarak trailing berbasis sisa jarak menuju TP.
 
 ---
 
