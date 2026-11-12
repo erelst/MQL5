@@ -47,12 +47,12 @@ struct AutoTraderRule
    bool                 delay_is_tf_close; // true = wait for TF candle close, false = seconds delay
    int                  orders_opened_count; // Tracks total opened orders for this rule lifecycle
    bool                 active;
-   datetime             last_bull_bar;
-   datetime             last_bear_bar;
-   datetime             bull_cond_start_time; // Tracks continuous valid seconds for Buy
-   datetime             bear_cond_start_time; // Tracks continuous valid seconds for Sell
-   datetime             bull_last_checked_bar; // Tracks candle close check
-   datetime             bear_last_checked_bar; // Tracks candle close check
+   datetime             last_bull_bar[2];      // [0]=own TF, [1]=M1 fallback (M5 rules only)
+   datetime             last_bear_bar[2];
+   datetime             bull_cond_start_time[2]; // continuous-valid timer per signal TF
+   datetime             bear_cond_start_time[2];
+   datetime             bull_last_checked_bar[2]; // TF Close check per signal TF
+   datetime             bear_last_checked_bar[2];
 };
 
 struct SPositionTracking
@@ -247,6 +247,27 @@ double CalculateATR50(const string sym, const ENUM_TIMEFRAMES tf, int period)
    return CalculateATR100(sym, tf, period) * 0.5;
 }
 
+// ponytail: M1 is the only exception -> ATR(14) basis comes from M5 candles
+ENUM_TIMEFRAMES AtrBaseTF(const ENUM_TIMEFRAMES rule_tf)
+{
+   return (rule_tf == PERIOD_M1) ? PERIOD_M5 : rule_tf;
+}
+
+// ponytail: M5 rule also accepts M1 engulfing signals; every other TF stays exclusive
+int CandidateTFs(const ENUM_TIMEFRAMES rule_tf, ENUM_TIMEFRAMES &out[])
+{
+   if(rule_tf == PERIOD_M5)
+   {
+      ArrayResize(out, 2);
+      out[0] = PERIOD_M5;   // priority: the rule's own TF first
+      out[1] = PERIOD_M1;   // fallback early signal
+      return 2;
+   }
+   ArrayResize(out, 1);
+   out[0] = rule_tf;
+   return 1;
+}
+
 //+------------------------------------------------------------------+
 //| REALTIME STRONG BULLISH ENGULFING BREAK DETECTION                |
 //+------------------------------------------------------------------+
@@ -277,10 +298,7 @@ bool IsStrongBullishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf,
    bool is_stronger_body   = ((cur_close - cur_open) > (prev_open - prev_close) * InpBodyRatioMult);
    
    if(is_bullish_running && is_breaking_high && is_covering_low && is_stronger_body)
-   {
-      out_atr_50 = CalculateATR50(sym, tf, InpATRPeriod);
       return true;
-   }
    return false;
 }
 
@@ -314,10 +332,7 @@ bool IsStrongBearishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf,
    bool is_stronger_body   = ((prev_close - prev_open) < (cur_open - cur_close) * InpBodyRatioMult);
    
    if(is_bearish_running && is_breaking_low && is_covering_high && is_stronger_body)
-   {
-      out_atr_50 = CalculateATR50(sym, tf, InpATRPeriod);
       return true;
-   }
    return false;
 }
 
@@ -440,7 +455,7 @@ void ProcessAutoTrailSLTP()
       double trigger_ratio = g_tracking_list[i].trail_trigger_pct / 100.0;
       if(trigger_ratio <= 0) trigger_ratio = 0.05;
       
-      double current_atr100 = CalculateATR100(sym, g_tracking_list[i].timeframe, InpATRPeriod);
+      double current_atr100 = CalculateATR100(sym, AtrBaseTF(g_tracking_list[i].timeframe), InpATRPeriod);
       double required_atr   = g_tracking_list[i].initial_atr100 * g_tracking_list[i].atr_multiplier;
       bool atr_exploding    = (current_atr100 >= required_atr);
       
@@ -1051,6 +1066,7 @@ void SaveStateToFile()
    if(handle != INVALID_HANDLE)
    {
       FileWriteInteger(handle, g_master_power_enabled ? 1 : 0);
+      FileWriteInteger(handle, 2); // ponytail: format v2 = per-signal-TF slots
       
       int total_rules = ArraySize(g_rules);
       FileWriteInteger(handle, total_rules);
@@ -1112,12 +1128,15 @@ void LoadStateFromFile()
       g_rules[0].delay_is_tf_close = InpDelayIsTfClose;
       g_rules[0].orders_opened_count = 0;
       g_rules[0].active            = true;
-      g_rules[0].last_bull_bar     = 0;
-      g_rules[0].last_bear_bar     = 0;
-      g_rules[0].bull_cond_start_time = 0;
-      g_rules[0].bear_cond_start_time = 0;
-      g_rules[0].bull_last_checked_bar = 0;
-      g_rules[0].bear_last_checked_bar = 0;
+      for(int k = 0; k < 2; k++)
+      {
+         g_rules[0].last_bull_bar[k] = 0;
+         g_rules[0].last_bear_bar[k] = 0;
+         g_rules[0].bull_cond_start_time[k] = 0;
+         g_rules[0].bear_cond_start_time[k] = 0;
+         g_rules[0].bull_last_checked_bar[k] = 0;
+         g_rules[0].bear_last_checked_bar[k] = 0;
+      }
       return;
    }
    
@@ -1125,7 +1144,12 @@ void LoadStateFromFile()
    if(handle != INVALID_HANDLE)
    {
       g_master_power_enabled = (FileReadInteger(handle) == 1);
-      int total_rules = FileReadInteger(handle);
+      int state_ver = FileReadInteger(handle); // v2 files carry 2; v1 legacy files landed on the rule count
+      int total_rules;
+      if(state_ver == 2)
+         total_rules = FileReadInteger(handle);
+      else
+         total_rules = state_ver; // legacy: this int was the rule count
       ArrayResize(g_rules, total_rules);
       
       for(int i = 0; i < total_rules; i++)
@@ -1158,12 +1182,15 @@ void LoadStateFromFile()
          g_rules[i].delay_is_tf_close = (FileReadInteger(handle) == 1);
          g_rules[i].orders_opened_count = FileReadInteger(handle);
          g_rules[i].active            = (FileReadInteger(handle) == 1);
-         g_rules[i].last_bull_bar     = 0;
-         g_rules[i].last_bear_bar     = 0;
-         g_rules[i].bull_cond_start_time = 0;
-         g_rules[i].bear_cond_start_time = 0;
-         g_rules[i].bull_last_checked_bar = 0;
-         g_rules[i].bear_last_checked_bar = 0;
+         for(int k = 0; k < 2; k++)
+         {
+            g_rules[i].last_bull_bar[k] = 0;
+            g_rules[i].last_bear_bar[k] = 0;
+            g_rules[i].bull_cond_start_time[k] = 0;
+            g_rules[i].bear_cond_start_time[k] = 0;
+            g_rules[i].bull_last_checked_bar[k] = 0;
+            g_rules[i].bear_last_checked_bar[k] = 0;
+         }
       }
       FileClose(handle);
    }
@@ -1464,12 +1491,15 @@ void OnChartEvent(const int id,
          g_rules[target_idx].entry_multiplier    = mult_val;
          g_rules[target_idx].delay_seconds       = delay_sec_val;
          g_rules[target_idx].delay_is_tf_close   = g_form_delay_close;
-         g_rules[target_idx].last_bull_bar       = 0;
-         g_rules[target_idx].last_bear_bar       = 0;
-         g_rules[target_idx].bull_cond_start_time = 0;
-         g_rules[target_idx].bear_cond_start_time = 0;
-         g_rules[target_idx].bull_last_checked_bar = 0;
-         g_rules[target_idx].bear_last_checked_bar = 0;
+         for(int k = 0; k < 2; k++)
+         {
+            g_rules[target_idx].last_bull_bar[k] = 0;
+            g_rules[target_idx].last_bear_bar[k] = 0;
+            g_rules[target_idx].bull_cond_start_time[k] = 0;
+            g_rules[target_idx].bear_cond_start_time[k] = 0;
+            g_rules[target_idx].bull_last_checked_bar[k] = 0;
+            g_rules[target_idx].bear_last_checked_bar[k] = 0;
+         }
          
          g_selected_rule_idx = target_idx;
          g_editing_rule_idx  = -1;
@@ -1588,225 +1618,233 @@ void OnTick()
       double spread = ask - bid;
       int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
       
-      datetime cur_bar_time = (datetime)SeriesInfoInteger(sym, tf, SERIES_LASTBAR_DATE);
+      // Realtime ATR 50%: basis = own TF, except M1 which uses M5 candles
+      ENUM_TIMEFRAMES atr_tf = AtrBaseTF(tf);
+      double atr_50 = CalculateATR50(sym, atr_tf, InpATRPeriod);
+      if(atr_50 <= 0) continue;
       
-      double atr_50 = 0.0;
-      double broken_level = 0.0;
-      double cur_price = 0.0;
+      ENUM_TIMEFRAMES cand_tf[];
+      int cand_total = CandidateTFs(tf, cand_tf);
       
       // A. CHECK BUY (Strong Bullish Break)
       if(g_rules[r].direction == TRADE_DIR_BOTH || g_rules[r].direction == TRADE_DIR_BUY)
       {
-         bool is_bull_valid = IsStrongBullishEngulfingBreak(sym, tf, atr_50, broken_level, cur_price) && EvaluatePriceFilter(cur_price, g_rules[r].bull_price_filter);
-         
-         if(is_bull_valid)
+         for(int c = 0; c < cand_total; c++)
          {
-            datetime cur_bar_open_time = (datetime)SeriesInfoInteger(sym, tf, SERIES_LASTBAR_DATE);
+            // MAX ORDER = entry cycles; re-checked after every cycle
+            if(g_rules[r].max_orders > 0 && g_rules[r].orders_opened_count >= g_rules[r].max_orders)
+               break;
             
-            // Check if already traded this bar
-            if(g_rules[r].last_bull_bar != cur_bar_open_time)
+            ENUM_TIMEFRAMES sig_tf = cand_tf[c];
+            double broken_level = 0.0;
+            double cur_price = 0.0;
+            double atr_dummy = 0.0;
+            
+            if(!IsStrongBullishEngulfingBreak(sym, sig_tf, atr_dummy, broken_level, cur_price)) continue;
+            if(!EvaluatePriceFilter(cur_price, g_rules[r].bull_price_filter)) continue;
+            
+            datetime cur_bar_open_time = (datetime)SeriesInfoInteger(sym, sig_tf, SERIES_LASTBAR_DATE);
+            int slot = (c == 0) ? 0 : 1;
+            if(g_rules[r].last_bull_bar[slot] == cur_bar_open_time) continue;
+            
+            bool trigger_buy = false;
+            
+            if(g_rules[r].delay_is_tf_close)
             {
-               bool trigger_buy = false;
-               
-               if(g_rules[r].delay_is_tf_close)
+               // TF Close mode on the SIGNAL tf: verify the just-closed candle
+               if(g_rules[r].bull_last_checked_bar[slot] != cur_bar_open_time)
                {
-                  // Mode TF Close: Check if candle closed and condition was met during the candle
-                  if(g_rules[r].bull_last_checked_bar != cur_bar_open_time)
+                  g_rules[r].bull_last_checked_bar[slot] = cur_bar_open_time;
+                  MqlRates r_check[];
+                  ArraySetAsSeries(r_check, true);
+                  if(CopyRates(sym, sig_tf, 1, 2, r_check) >= 2)
                   {
-                     g_rules[r].bull_last_checked_bar = cur_bar_open_time;
-                     // We check if the completed candle (rates[1] or rates[2]) satisfied engulfing
-                     // Actually, if we are at a new bar, candle [1] just closed. Let's verify if candle [1] was a strong engulfing break!
-                     // Let's check completed candle [1] vs [2]
-                     MqlRates r_check[];
-                     ArraySetAsSeries(r_check, true);
-                     if(CopyRates(sym, tf, 1, 2, r_check) >= 2)
-                     {
-                        bool c_bull = (r_check[0].close > r_check[0].open);
-                        bool c_break = (r_check[0].close >= r_check[1].high || r_check[0].high >= r_check[1].high);
-                        bool c_cover = (r_check[0].low <= r_check[1].low);
-                        bool c_body  = ((r_check[0].close - r_check[0].open) > (r_check[1].open - r_check[1].close) * InpBodyRatioMult);
-                        
-                        if(c_bull && c_break && c_cover && c_body && EvaluatePriceFilter(r_check[0].close, g_rules[r].bull_price_filter))
-                        {
-                           trigger_buy = true;
-                           g_rules[r].last_bull_bar = cur_bar_open_time;
-                        }
-                     }
-                  }
-               }
-               else
-               {
-                  // Mode Seconds Delay
-                  int d_sec = g_rules[r].delay_seconds;
-                  if(d_sec <= 0)
-                  {
-                     // Instant entry
-                     trigger_buy = true;
-                     g_rules[r].last_bull_bar = cur_bar_open_time;
-                  }
-                  else
-                  {
-                     datetime now_time = TimeCurrent();
-                     if(g_rules[r].bull_cond_start_time == 0)
-                     {
-                        g_rules[r].bull_cond_start_time = now_time;
-                     }
-                     else if((int)(now_time - g_rules[r].bull_cond_start_time) >= d_sec)
+                     bool c_bull  = (r_check[0].close > r_check[0].open);
+                     bool c_break = (r_check[0].close >= r_check[1].high || r_check[0].high >= r_check[1].high);
+                     bool c_cover = (r_check[0].low <= r_check[1].low);
+                     bool c_body  = ((r_check[0].close - r_check[0].open) > (r_check[1].open - r_check[1].close) * InpBodyRatioMult);
+                     
+                     if(c_bull && c_break && c_cover && c_body && EvaluatePriceFilter(r_check[0].close, g_rules[r].bull_price_filter))
                      {
                         trigger_buy = true;
-                        g_rules[r].last_bull_bar = cur_bar_open_time;
-                        g_rules[r].bull_cond_start_time = 0;
-                     }
-                  }
-               }
-               
-               if(trigger_buy)
-               {
-                  double sl_price = broken_level - atr_50;
-                  double sl_dist  = ask - sl_price;
-                  
-                  if(sl_dist > 0)
-                  {
-                     double tp_price = ask + (sl_dist * g_rules[r].risk_reward_ratio);
-                     sl_price = NormalizeDouble(sl_price, digits);
-                     tp_price = NormalizeDouble(tp_price, digits);
-                     double lots = CalculateLotSize(sym, g_rules[r].lot_mode, g_rules[r].lot_value, ask, sl_price);
-                     
-                     int mult = g_rules[r].entry_multiplier;
-                     if(mult <= 0) mult = 1;
-                     
-                     for(int m = 0; m < mult; m++)
-                     {
-                        if(m_trade.Buy(lots, sym, ask, sl_price, tp_price, StringFormat("Engulfing Buy #%d (RR 1:%.1f)", m + 1, g_rules[r].risk_reward_ratio)))
-                        {
-                           ulong deal_tkt = m_trade.ResultOrder();
-                           g_rules[r].orders_opened_count++;
-                           SaveStateToFile();
-                           
-                           double atr100 = atr_50 * 2.0;
-                           if(g_rules[r].enable_trail)
-                           {
-                              RegisterPositionTracking(deal_tkt, sym, tf, atr100, ask, tp_price, g_rules[r].trail_trigger_pct, g_rules[r].atr_multiplier);
-                           }
-                           
-                           string msg = StringFormat("[AUTO TRADER - ORDER OPENED (%d/%d)]\nSymbol: %s (%s)\nTicket: #%d (BUY)\nLot: %.2f | Ask: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)",
-                                                     m + 1, mult, sym, EnumToString(tf), deal_tkt, lots, ask, sl_price, tp_price, g_rules[r].risk_reward_ratio);
-                           if(InpEnableSoundAlerts) Alert(msg);
-                           if(InpEnablePushAlerts)  SendNotification(msg);
-                        }
+                        g_rules[r].last_bull_bar[slot] = cur_bar_open_time;
+                        broken_level = r_check[1].low;
                      }
                   }
                }
             }
-         }
-         else
-         {
-            // Condition broken: reset seconds timer
-            g_rules[r].bull_cond_start_time = 0;
+            else
+            {
+               // Seconds mode: condition must hold continuously, reset if it breaks
+               int d_sec = g_rules[r].delay_seconds;
+               if(d_sec <= 0)
+               {
+                  trigger_buy = true;
+                  g_rules[r].last_bull_bar[slot] = cur_bar_open_time;
+               }
+               else
+               {
+                  datetime now_time = TimeCurrent();
+                  if(g_rules[r].bull_cond_start_time[slot] == 0)
+                     g_rules[r].bull_cond_start_time[slot] = now_time;
+                  else if((int)(now_time - g_rules[r].bull_cond_start_time[slot]) >= d_sec)
+                  {
+                     trigger_buy = true;
+                     g_rules[r].last_bull_bar[slot] = cur_bar_open_time;
+                     g_rules[r].bull_cond_start_time[slot] = 0;
+                  }
+               }
+            }
+            
+            if(!trigger_buy) continue;
+            
+            double sl_price = broken_level - atr_50;
+            double sl_dist  = ask - sl_price;
+            if(sl_dist <= 0) continue;
+            
+            double tp_price = ask + (sl_dist * g_rules[r].risk_reward_ratio);
+            sl_price = NormalizeDouble(sl_price, digits);
+            tp_price = NormalizeDouble(tp_price, digits);
+            double lots = CalculateLotSize(sym, g_rules[r].lot_mode, g_rules[r].lot_value, ask, sl_price);
+            
+            int mult = g_rules[r].entry_multiplier;
+            if(mult <= 0) mult = 1;
+            
+            int opened = 0;
+            for(int m = 0; m < mult; m++)
+            {
+               if(m_trade.Buy(lots, sym, ask, sl_price, tp_price, StringFormat("Engulfing Buy #%d (RR 1:%.1f)", m + 1, g_rules[r].risk_reward_ratio)))
+               {
+                  ulong deal_tkt = m_trade.ResultOrder();
+                  opened++;
+                  
+                  double atr100 = atr_50 * 2.0;
+                  if(g_rules[r].enable_trail)
+                     RegisterPositionTracking(deal_tkt, sym, tf, atr100, ask, tp_price, g_rules[r].trail_trigger_pct, g_rules[r].atr_multiplier);
+                  
+                  string msg = StringFormat("[AUTO TRADER - ORDER OPENED (%d/%d)]\nSymbol: %s (%s signal)\nTicket: #%d (BUY)\nLot: %.2f | Ask: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)",
+                                            m + 1, mult, sym, EnumToString(sig_tf), deal_tkt, lots, ask, sl_price, tp_price, g_rules[r].risk_reward_ratio);
+                  if(InpEnableSoundAlerts) Alert(msg);
+                  if(InpEnablePushAlerts)  SendNotification(msg);
+               }
+            }
+            
+            // One cycle consumed per signal, not per position
+            if(opened > 0)
+            {
+               g_rules[r].orders_opened_count++;
+               SaveStateToFile();
+               UpdateDashboardUI();
+            }
          }
       }
       
       // B. CHECK SELL (Strong Bearish Break)
       if(g_rules[r].direction == TRADE_DIR_BOTH || g_rules[r].direction == TRADE_DIR_SELL)
       {
-         bool is_bear_valid = IsStrongBearishEngulfingBreak(sym, tf, atr_50, broken_level, cur_price) && EvaluatePriceFilter(cur_price, g_rules[r].bear_price_filter);
-         
-         if(is_bear_valid)
+         for(int c = 0; c < cand_total; c++)
          {
-            datetime cur_bar_open_time = (datetime)SeriesInfoInteger(sym, tf, SERIES_LASTBAR_DATE);
+            if(g_rules[r].max_orders > 0 && g_rules[r].orders_opened_count >= g_rules[r].max_orders)
+               break;
             
-            if(g_rules[r].last_bear_bar != cur_bar_open_time)
+            ENUM_TIMEFRAMES sig_tf = cand_tf[c];
+            double broken_level = 0.0;
+            double cur_price = 0.0;
+            double atr_dummy = 0.0;
+            
+            if(!IsStrongBearishEngulfingBreak(sym, sig_tf, atr_dummy, broken_level, cur_price)) continue;
+            if(!EvaluatePriceFilter(cur_price, g_rules[r].bear_price_filter)) continue;
+            
+            datetime cur_bar_open_time = (datetime)SeriesInfoInteger(sym, sig_tf, SERIES_LASTBAR_DATE);
+            int slot = (c == 0) ? 0 : 1;
+            if(g_rules[r].last_bear_bar[slot] == cur_bar_open_time) continue;
+            
+            bool trigger_sell = false;
+            
+            if(g_rules[r].delay_is_tf_close)
             {
-               bool trigger_sell = false;
-               
-               if(g_rules[r].delay_is_tf_close)
+               if(g_rules[r].bear_last_checked_bar[slot] != cur_bar_open_time)
                {
-                  if(g_rules[r].bear_last_checked_bar != cur_bar_open_time)
+                  g_rules[r].bear_last_checked_bar[slot] = cur_bar_open_time;
+                  MqlRates r_check[];
+                  ArraySetAsSeries(r_check, true);
+                  if(CopyRates(sym, sig_tf, 1, 2, r_check) >= 2)
                   {
-                     g_rules[r].bear_last_checked_bar = cur_bar_open_time;
-                     MqlRates r_check[];
-                     ArraySetAsSeries(r_check, true);
-                     if(CopyRates(sym, tf, 1, 2, r_check) >= 2)
-                     {
-                        bool c_bear = (r_check[0].close < r_check[0].open);
-                        bool c_break = (r_check[0].close <= r_check[1].low || r_check[0].low <= r_check[1].low);
-                        bool c_cover = (r_check[0].high >= r_check[1].high);
-                        bool c_body  = ((r_check[0].open - r_check[0].close) > (r_check[1].close - r_check[1].open) * InpBodyRatioMult);
-                        
-                        if(c_bear && c_break && c_cover && c_body && EvaluatePriceFilter(r_check[0].close, g_rules[r].bear_price_filter))
-                        {
-                           trigger_sell = true;
-                           g_rules[r].last_bear_bar = cur_bar_open_time;
-                        }
-                     }
-                  }
-               }
-               else
-               {
-                  int d_sec = g_rules[r].delay_seconds;
-                  if(d_sec <= 0)
-                  {
-                     trigger_sell = true;
-                     g_rules[r].last_bear_bar = cur_bar_open_time;
-                  }
-                  else
-                  {
-                     datetime now_time = TimeCurrent();
-                     if(g_rules[r].bear_cond_start_time == 0)
-                     {
-                        g_rules[r].bear_cond_start_time = now_time;
-                     }
-                     else if((int)(now_time - g_rules[r].bear_cond_start_time) >= d_sec)
+                     bool c_bear  = (r_check[0].close < r_check[0].open);
+                     bool c_break = (r_check[0].close <= r_check[1].low || r_check[0].low <= r_check[1].low);
+                     bool c_cover = (r_check[0].high >= r_check[1].high);
+                     bool c_body  = ((r_check[0].open - r_check[0].close) > (r_check[1].close - r_check[1].open) * InpBodyRatioMult);
+                     
+                     if(c_bear && c_break && c_cover && c_body && EvaluatePriceFilter(r_check[0].close, g_rules[r].bear_price_filter))
                      {
                         trigger_sell = true;
-                        g_rules[r].last_bear_bar = cur_bar_open_time;
-                        g_rules[r].bear_cond_start_time = 0;
-                     }
-                  }
-               }
-               
-               if(trigger_sell)
-               {
-                  double sl_price = broken_level + atr_50 + spread;
-                  double sl_dist  = sl_price - bid;
-                  
-                  if(sl_dist > 0)
-                  {
-                     double tp_price = bid - (sl_dist * g_rules[r].risk_reward_ratio);
-                     sl_price = NormalizeDouble(sl_price, digits);
-                     tp_price = NormalizeDouble(tp_price, digits);
-                     double lots = CalculateLotSize(sym, g_rules[r].lot_mode, g_rules[r].lot_value, bid, sl_price);
-                     
-                     int mult_s = g_rules[r].entry_multiplier;
-                     if(mult_s <= 0) mult_s = 1;
-                     
-                     for(int m = 0; m < mult_s; m++)
-                     {
-                        if(m_trade.Sell(lots, sym, bid, sl_price, tp_price, StringFormat("Engulfing Sell #%d (RR 1:%.1f)", m + 1, g_rules[r].risk_reward_ratio)))
-                        {
-                           ulong deal_tkt = m_trade.ResultOrder();
-                           g_rules[r].orders_opened_count++;
-                           SaveStateToFile();
-                           
-                           double atr100 = atr_50 * 2.0;
-                           if(g_rules[r].enable_trail)
-                           {
-                              RegisterPositionTracking(deal_tkt, sym, tf, atr100, bid, tp_price, g_rules[r].trail_trigger_pct, g_rules[r].atr_multiplier);
-                           }
-                           
-                           string msg = StringFormat("[AUTO TRADER - ORDER OPENED (%d/%d)]\nSymbol: %s (%s)\nTicket: #%d (SELL)\nLot: %.2f | Bid: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)",
-                                                     m + 1, mult_s, sym, EnumToString(tf), deal_tkt, lots, bid, sl_price, tp_price, g_rules[r].risk_reward_ratio);
-                           if(InpEnableSoundAlerts) Alert(msg);
-                           if(InpEnablePushAlerts)  SendNotification(msg);
-                        }
+                        g_rules[r].last_bear_bar[slot] = cur_bar_open_time;
+                        broken_level = r_check[1].high;
                      }
                   }
                }
             }
-         }
-         else
-         {
-            g_rules[r].bear_cond_start_time = 0;
+            else
+            {
+               int d_sec = g_rules[r].delay_seconds;
+               if(d_sec <= 0)
+               {
+                  trigger_sell = true;
+                  g_rules[r].last_bear_bar[slot] = cur_bar_open_time;
+               }
+               else
+               {
+                  datetime now_time = TimeCurrent();
+                  if(g_rules[r].bear_cond_start_time[slot] == 0)
+                     g_rules[r].bear_cond_start_time[slot] = now_time;
+                  else if((int)(now_time - g_rules[r].bear_cond_start_time[slot]) >= d_sec)
+                  {
+                     trigger_sell = true;
+                     g_rules[r].last_bear_bar[slot] = cur_bar_open_time;
+                     g_rules[r].bear_cond_start_time[slot] = 0;
+                  }
+               }
+            }
+            
+            if(!trigger_sell) continue;
+            
+            double sl_price = broken_level + atr_50 + spread;
+            double sl_dist  = sl_price - bid;
+            if(sl_dist <= 0) continue;
+            
+            double tp_price = bid - (sl_dist * g_rules[r].risk_reward_ratio);
+            sl_price = NormalizeDouble(sl_price, digits);
+            tp_price = NormalizeDouble(tp_price, digits);
+            double lots = CalculateLotSize(sym, g_rules[r].lot_mode, g_rules[r].lot_value, bid, sl_price);
+            
+            int mult_s = g_rules[r].entry_multiplier;
+            if(mult_s <= 0) mult_s = 1;
+            
+            int opened = 0;
+            for(int m = 0; m < mult_s; m++)
+            {
+               if(m_trade.Sell(lots, sym, bid, sl_price, tp_price, StringFormat("Engulfing Sell #%d (RR 1:%.1f)", m + 1, g_rules[r].risk_reward_ratio)))
+               {
+                  ulong deal_tkt = m_trade.ResultOrder();
+                  opened++;
+                  
+                  double atr100 = atr_50 * 2.0;
+                  if(g_rules[r].enable_trail)
+                     RegisterPositionTracking(deal_tkt, sym, tf, atr100, bid, tp_price, g_rules[r].trail_trigger_pct, g_rules[r].atr_multiplier);
+                  
+                  string msg = StringFormat("[AUTO TRADER - ORDER OPENED (%d/%d)]\nSymbol: %s (%s signal)\nTicket: #%d (SELL)\nLot: %.2f | Bid: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)",
+                                            m + 1, mult_s, sym, EnumToString(sig_tf), deal_tkt, lots, bid, sl_price, tp_price, g_rules[r].risk_reward_ratio);
+                  if(InpEnableSoundAlerts) Alert(msg);
+                  if(InpEnablePushAlerts)  SendNotification(msg);
+               }
+            }
+            
+            if(opened > 0)
+            {
+               g_rules[r].orders_opened_count++;
+               SaveStateToFile();
+               UpdateDashboardUI();
+            }
          }
       }
    }

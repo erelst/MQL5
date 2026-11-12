@@ -538,10 +538,26 @@ void ProcessEngulfingForSymbol(int index)
    
    datetime cur_bar_time = (datetime)SeriesInfoInteger(sym, tf, SERIES_LASTBAR_DATE);
    
+   // ponytail: M5 watches also accept M1 signals; every other TF stays exclusive
+   ENUM_TIMEFRAMES sig_tf_bull = tf;
+   bool bull_hit = IsStrongBullishEngulfingBreak(sym, tf, atr_50, broken_range, cur_price, broken_high, broken_low);
+   if(!bull_hit && tf == PERIOD_M5)
+   {
+      bull_hit = IsStrongBullishEngulfingBreak(sym, PERIOD_M1, atr_50, broken_range, cur_price, broken_high, broken_low);
+      if(bull_hit) sig_tf_bull = PERIOD_M1;
+   }
+   ENUM_TIMEFRAMES sig_tf_bear = tf;
+   bool bear_hit = IsStrongBearishEngulfingBreak(sym, tf, atr_50, broken_range, cur_price, broken_high, broken_low);
+   if(!bear_hit && tf == PERIOD_M5)
+   {
+      bear_hit = IsStrongBearishEngulfingBreak(sym, PERIOD_M1, atr_50, broken_range, cur_price, broken_high, broken_low);
+      if(bear_hit) sig_tf_bear = PERIOD_M1;
+   }
+   
    // 1. Check Bullish Engulfing Break
    if(g_radar_symbols[index].bull_enabled)
    {
-      if(IsStrongBullishEngulfingBreak(sym, tf, atr_50, broken_range, cur_price, broken_high, broken_low))
+      if(bull_hit)
       {
          // Filter: Price < bull_price_max (if defined)
          if(g_radar_symbols[index].bull_price_max <= 0 || cur_price < g_radar_symbols[index].bull_price_max)
@@ -560,7 +576,7 @@ void ProcessEngulfingForSymbol(int index)
                double rec_sl = broken_low - atr_50;
                
                string msg = StringFormat("[ENGULFING ALERT] %s (%s)\nType: Realtime Strong BULLISH Break\nPrice: %s\n50%% ATR(%d): %.1f pips (%.0f pts)\nSuggested SL: %s\nBroken Range: %.1f pips",
-                                         sym, EnumToString(tf),
+                                         sym, EnumToString(sig_tf_bull),
                                          DoubleToString(cur_price, digits),
                                          g_radar_symbols[index].atr_period,
                                          pips_val,
@@ -579,7 +595,7 @@ void ProcessEngulfingForSymbol(int index)
    // 2. Check Bearish Engulfing Break
    if(g_radar_symbols[index].bear_enabled)
    {
-      if(IsStrongBearishEngulfingBreak(sym, tf, atr_50, broken_range, cur_price, broken_high, broken_low))
+      if(bear_hit)
       {
          // Filter: Price > bear_price_min (if defined)
          if(g_radar_symbols[index].bear_price_min <= 0 || cur_price > g_radar_symbols[index].bear_price_min)
@@ -599,7 +615,7 @@ void ProcessEngulfingForSymbol(int index)
                double rec_sl = broken_high + atr_50 + spread_val;
                
                string msg = StringFormat("[ENGULFING ALERT] %s (%s)\nType: Realtime Strong BEARISH Break\nPrice: %s\n50%% ATR(%d): %.1f pips (%.0f pts)\nSuggested SL: %s\nBroken Range: %.1f pips",
-                                         sym, EnumToString(tf),
+                                         sym, EnumToString(sig_tf_bear),
                                          DoubleToString(cur_price, digits),
                                          g_radar_symbols[index].atr_period,
                                          pips_val,
@@ -619,6 +635,12 @@ void ProcessEngulfingForSymbol(int index)
 //+------------------------------------------------------------------+
 //| FAST DIRECT ATR CALCULATION (ponytail: No indicator handles)     |
 //+------------------------------------------------------------------+
+// ponytail: M1 is the only exception -> 50% ATR basis comes from M5 candles
+ENUM_TIMEFRAMES AtrBaseTF(const ENUM_TIMEFRAMES tf)
+{
+   return (tf == PERIOD_M1) ? PERIOD_M5 : tf;
+}
+
 double CalculateATR50(const string sym, const ENUM_TIMEFRAMES tf, int period)
 {
    MqlRates rates[];
@@ -680,7 +702,7 @@ bool IsStrongBullishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf,
    
    if(is_bullish_running && is_breaking_high && is_covering_low && is_stronger_body)
    {
-      out_atr_50 = CalculateATR50(sym, tf, InpDefaultATRPeriod);
+      out_atr_50 = CalculateATR50(sym, AtrBaseTF(tf), InpDefaultATRPeriod);
       return true;
    }
    
@@ -731,7 +753,7 @@ bool IsStrongBearishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf,
    
    if(is_bearish_running && is_breaking_low && is_covering_high && is_stronger_body)
    {
-      out_atr_50 = CalculateATR50(sym, tf, InpDefaultATRPeriod);
+      out_atr_50 = CalculateATR50(sym, AtrBaseTF(tf), InpDefaultATRPeriod);
       return true;
    }
    
