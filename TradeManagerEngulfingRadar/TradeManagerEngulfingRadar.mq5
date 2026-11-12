@@ -1632,7 +1632,7 @@ void UpdateDashboardUI()
          
          string str_tkt = StringSubstr(oname, StringLen(g_prefix + "ROW_CB_"));
          long   tkt     = StringToInteger(str_tkt);
-         bool   alive   = (PositionSelectByTicket((ulong)tkt) || OrderSelect((ulong)tkt, SELECT_BY_TICKET));
+         bool   alive   = (PositionSelectByTicket((ulong)tkt) || OrderSelect((ulong)tkt));
          if(!alive) ObjectDelete(0, oname);
       }
    }
