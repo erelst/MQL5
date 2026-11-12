@@ -1671,10 +1671,9 @@ void OnTick()
                // tf (M1 signal -> M1 close, M5 signal -> M5 close) and skips the
                // live-candle IsStrong*EngulfingBreak gate entirely. That gate reads
                // bar 0 (still forming) and re-reads a different bar once the TF rolls,
-               // so it could never fire on the bar that just closed. c_break below
-               // uses `||` (close OR high broke the prev high), so a wick-only break
-               // still counts -- deliberately looser than IsStrong*EngulfingBreak;
-               // tighten to `&&` if this proves too trigger-happy on live data.
+               // so it could never fire on the bar that just closed. The predicate
+               // below mirrors IsStrong*EngulfingBreak, including the requirement
+               // that the previous candle be bearish.
                if(g_rules[r].bull_last_checked_bar[slot] != cur_bar_open_time)
                {
                   g_rules[r].bull_last_checked_bar[slot] = cur_bar_open_time;
@@ -1682,15 +1681,22 @@ void OnTick()
                   ArraySetAsSeries(r_check, true);
                   if(CopyRates(sym, sig_tf, 1, 2, r_check) >= 2)
                   {
+                     // prev candle must be bearish, same requirement as
+                     // IsStrongBullishEngulfingBreak(). Without it c_body compares a
+                     // positive body against a NEGATIVE (r1.open-r1.close) on a bullish
+                     // prev, so every red candle passes -- measured ~1% false fires.
+                     bool c_bear_prev = (r_check[1].close < r_check[1].open);
                      bool c_bull  = (r_check[0].close > r_check[0].open);
                      bool c_break = (r_check[0].close >= r_check[1].high || r_check[0].high >= r_check[1].high);
                      bool c_cover = (r_check[0].low <= r_check[1].low);
                      bool c_body  = ((r_check[0].close - r_check[0].open) > (r_check[1].open - r_check[1].close) * InpBodyRatioMult);
                      
-                     if(c_bull && c_break && c_cover && c_body && EvaluatePriceFilter(r_check[0].close, g_rules[r].bull_price_filter))
+                     if(c_bear_prev && c_bull && c_break && c_cover && c_body && EvaluatePriceFilter(r_check[0].close, g_rules[r].bull_price_filter))
                      {
                         trigger_buy = true;
-                        g_rules[r].last_bull_bar[slot] = cur_bar_open_time;
+                        // No last_bull_bar write: the duplicate-tick guard for this
+                        // mode is bull_last_checked_bar, stamped above. Writing
+                        // last_bull_bar here only fed the seconds-mode reader.
                         broken_level = r_check[1].low;
                      }
                   }
@@ -1797,15 +1803,17 @@ void OnTick()
                   ArraySetAsSeries(r_check, true);
                   if(CopyRates(sym, sig_tf, 1, 2, r_check) >= 2)
                   {
+                     // prev candle must be bullish; mirrors IsStrongBearishEngulfingBreak()
+                     bool c_bull_prev = (r_check[1].close > r_check[1].open);
                      bool c_bear  = (r_check[0].close < r_check[0].open);
                      bool c_break = (r_check[0].close <= r_check[1].low || r_check[0].low <= r_check[1].low);
                      bool c_cover = (r_check[0].high >= r_check[1].high);
                      bool c_body  = ((r_check[0].open - r_check[0].close) > (r_check[1].close - r_check[1].open) * InpBodyRatioMult);
                      
-                     if(c_bear && c_break && c_cover && c_body && EvaluatePriceFilter(r_check[0].close, g_rules[r].bear_price_filter))
+                     if(c_bull_prev && c_bear && c_break && c_cover && c_body && EvaluatePriceFilter(r_check[0].close, g_rules[r].bear_price_filter))
                      {
                         trigger_sell = true;
-                        g_rules[r].last_bear_bar[slot] = cur_bar_open_time;
+                        // No last_bear_bar write: see the BUY branch note.
                         broken_level = r_check[1].high;
                      }
                   }

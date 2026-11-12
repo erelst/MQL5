@@ -92,9 +92,15 @@ Konsekuensi penting: di mode `TF Close`, gate candle-berjalan **sengaja dilewati
 
 Implementasinya lewat `CopyRates(sym, sig_tf, 1, 2, ...)` di dalam loop `CandidateTFs()` — `sig_tf` sudah berisi TF sinyal yang sedang diperiksa, jadi M5 dan M1 masing-masing memakai close-nya sendiri.
 
-Syarat validasi pada candle tertutup: `c_bull` (close > open), `c_break` (close **atau** high menembus high candle sebelumnya), `c_cover` (low ≤ low sebelumnya), dan `c_body` (body lebih besar dari body sebelumnya × `InpBodyRatioMult`).
+Syarat validasi pada candle tertutup **identik** dengan `IsStrong*EngulfingBreak()`, hanya diterapkan pada pasangan candle `[1]` dan `[2]` alih-alih `[0]` dan `[1]`:
 
-> Catatan: `c_break` memakai `||` sehingga tembusan lewat *wick* saja tetap dihitung — lebih longgar daripada `IsStrong*EngulfingBreak()`. Ketatkan ke `&&` bila terbukti terlalu sering memicu.
+- `c_*_prev` — candle sebelumnya harus berlawanan arah (bearish untuk BUY, bullish untuk SELL). **Wajib**: tanpa syarat ini, `c_body` membandingkan body positif dengan `(r1.open - r1.close)` yang **negatif** pada candle sebelumnya yang searah, sehingga hampir semua candle lolos.
+- `c_bull` / `c_bear` — arah candle sinyal.
+- `c_break` — close **atau** high menembus high candle sebelumnya.
+- `c_cover` — low (BUY) / high (SELL) menutupi candle sebelumnya.
+- `c_body` — body lebih besar dari body sebelumnya × `InpBodyRatioMult`.
+
+> Catatan: `c_break` memakai `||` sehingga tembusan lewat *wick* saja tetap dihitung. Ini sama dengan perilaku `IsStrong*EngulfingBreak()`, jadi **bukan** pelonggaran — konsisten dengan mode Seconds.
 
 ---
 
