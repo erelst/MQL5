@@ -12,7 +12,7 @@ EA otomatis multi-aturan (*Multi-Rule List*) untuk eksekusi posisi berdasarkan p
 - **Multi-Rule Management**: Menambah, mengedit, menghapus, dan mengaktifkan/mempaus (*active/paused*) banyak rule sekaligus.
 - **Paging Dinamis**: Tombol navigasi `PREV` / `NEXT` otomatis muncul saat rule melebihi kapasitas tampilan per halaman (5 rule).
 - **Direction Filter**: Mendukung `BUY & SELL`, `BUY ONLY`, dan `SELL ONLY` dengan pembersihan label sisi harga yang tidak relevan secara otomatis.
-- **Flexible Price Bounds**: Filter harga kustom menggunakan operator (`<`, `>`, `<=`, `>=`, rentang `Min-Max` cth: `4040-4078`), atau `ALL`/`BEBAS`.
+- **Flexible Price Bounds**: Filter harga kustom menggunakan operator (`<`, `>`, `<=`, `>=`), rentang `Min-Max` cth: `4040-4078`, atau `ALL`/`BEBAS`. Urutan rentang **bebas dibolak-balik**: `4078-4040` sama artinya dengan `4040-4078`. Batasnya inklusif (kedua ujung ikut lolos).
 - **Max Orders & Auto-Pause**: Batasan jumlah open order per rule (cth: `1x PAUSE`), di mana rule otomatis berpindah status menjadi `PAUSED` dan memperbarui tampilan secara real-time setelah target tercapai.
 - **Entry Multiplier (`MULT`)**: Memungkinkan pembukaan beberapa posisi sekaligus per sinyal (cth: `3x` open order serentak).
 - **Entry Delay & Confirmation**: 

@@ -197,10 +197,52 @@ def check_sequential_entry():
           " for the previous to close, pauses at MAX ORDER)")
 
 
+def check_price_range_order():
+    """A range must behave the same whichever way round it is typed.
+
+    "3051-3040" and "3040-3051" both mean the band 3040..3051. Before the
+    normalisation, a reversed range required price >= 3051 AND price <= 3040,
+    which nothing can satisfy, so the rule silently never opened an order.
+    """
+    src = open(SRC).read()
+    i = src.index("bool EvaluatePriceFilter")
+    j = src.index("// Check operators", i)
+    branch = src[i:j]
+
+    # The pair must be normalised before the comparison. This is the guard that
+    # fails if the swap is removed again.
+    assert re.search(r"if\s*\(\s*min_val\s*>\s*max_val\s*\)", branch), \
+        "range bounds are not normalised; a reversed range would never match"
+
+    # Take the comparison itself out of the source instead of retyping it.
+    cmp_line = [l.strip() for l in branch.split("\n")
+                if l.strip().startswith("if(min_val > 0")]
+    assert cmp_line, "could not find the range comparison in the source"
+    expr = cmp_line[0][3:].rstrip(")").strip()
+    expr = expr.replace("&&", " and ").replace("||", " or ")
+
+    def hit(price, a, b):
+        lo, hi = (a, b) if a <= b else (b, a)      # mirrors the source swap
+        return bool(eval(expr, {}, {"price": price, "min_val": lo, "max_val": hi}))
+
+    # Symmetry: the two orders must agree for every price, inside and outside.
+    for price in (3039, 3040, 3045, 3051, 3052):
+        assert hit(price, 3040, 3051) == hit(price, 3051, 3040), \
+            "range is not order-independent at price %s" % price
+
+    assert hit(3045, 3051, 3040) and hit(3045, 3040, 3051), "inside band must match"
+    assert hit(3040, 3051, 3040) and hit(3051, 3040, 3051), "bounds must be inclusive"
+    assert not hit(3039, 3051, 3040) and not hit(3052, 3040, 3051), \
+        "outside band must be rejected"
+
+    print("test_price_range: OK (3040-3051 == 3051-3040, bounds inclusive)")
+
+
 if __name__ == "__main__":
     try:
         demo()
         check_sequential_entry()
+        check_price_range_order()
     except Exception as exc:  # noqa: BLE001 - a test, any failure is a failure
         print("test_autotrader: FAILED -> %s" % exc)
         sys.exit(1)

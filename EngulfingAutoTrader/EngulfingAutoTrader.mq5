@@ -189,6 +189,15 @@ bool EvaluatePriceFilter(double price, string filter_str)
       
       double min_val = StringToDouble(s_min);
       double max_val = StringToDouble(s_max);
+      // Order does not matter: "3051-3040" is the same band as "3040-3051".
+      // Without this, a reversed range required price >= 3051 AND price <= 3040,
+      // which is impossible, so the rule silently never opened an order.
+      if(min_val > max_val)
+      {
+         double tmp = min_val;
+         min_val = max_val;
+         max_val = tmp;
+      }
       if(min_val > 0 && max_val > 0 && price >= min_val && price <= max_val)
          return true;
       return false;

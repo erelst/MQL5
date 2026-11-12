@@ -20,7 +20,7 @@ Berbeda dengan EA konvensional yang hanya memiliki satu pasang pengaturan, Engul
 ### 2. Flexible Price Bounds & Max Orders Control
 - **Filter Harga Fleksibel (`<`, `>`, `<=`, `>=`, Rentang `Min-Max`)**:
   - Mendukung operator pembanding secara langsung (cth: `< 1.0850`, `<= 1.0820`, `>= 1.0910`, `> 1.0900`).
-  - Mendukung format rentang harga (cth: `4040-4078`).
+  - Mendukung format rentang harga (cth: `4040-4078`). Urutan **bebas dibolak-balik** — `4078-4040` sama dengan `4040-4078`. Batas inklusif: `4040` dan `4078` keduanya lolos.
   - **Strict Validation**: Angka mentah tanpa operator atau tanpa rentang akan ditolak dengan *Alert* peringatan.
   - **Dynamic Form**: Kolom Price Bounds menyesuaikan otomatis (jika `BUY ONLY` hanya tampil Buy Bound, jika `SELL ONLY` hanya tampil Sell Bound).
 - **Max Orders / Batas Open Order**:
