@@ -804,9 +804,14 @@ void CreateDashboardUI()
    color delay_mode_clr = g_form_delay_close ? CLR_GOLD_NEON : CLR_CYAN_NEON;
    CreateButton("BTN_TOGGLE_DELAY_MODE", root_x + 105, row_g_y, 85, 20, delay_mode_str, CLR_CANVAS_BG, delay_mode_clr, CLR_BORDER_HARD);
    
-   CreateLabel("LBL_DELAY_SEC", root_x + 205, row_g_y + 3, "SEC:", CLR_TEXT_MED, 7, true);
-   CreateEdit("INP_DELAY_SEC", root_x + 238, row_g_y, 45, 20, IntegerToString(g_form_delay_sec), CLR_CANVAS_BG, CLR_GOLD_NEON);
-   CreateLabel("LBL_SEC_UNIT", root_x + 288, row_g_y + 3, "s (0=Inst)", CLR_TEXT_MED, 7, false);
+   // Seconds field is meaningless in TF CLOSE mode. DestroyDashboardUI() already
+   // wiped the objects, so they simply aren't recreated.
+   if(!g_form_delay_close)
+   {
+      CreateLabel("LBL_DELAY_SEC", root_x + 205, row_g_y + 3, "SEC:", CLR_TEXT_MED, 7, true);
+      CreateEdit("INP_DELAY_SEC", root_x + 238, row_g_y, 45, 20, IntegerToString(g_form_delay_sec), CLR_CANVAS_BG, CLR_GOLD_NEON);
+      CreateLabel("LBL_SEC_UNIT", root_x + 288, row_g_y + 3, "s (0=Inst)", CLR_TEXT_MED, 7, false);
+   }
    
    // Row E: Dynamic Price Bounds based on Direction (y = upper_y + 146)
    int row_e_y = upper_y + 146;
@@ -1267,8 +1272,13 @@ void OnChartEvent(const int id,
          int cur_mult = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MULT", OBJPROP_TEXT));
          if(cur_mult > 0) g_form_entry_mult = cur_mult;
          
-         int cur_sec = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_DELAY_SEC", OBJPROP_TEXT));
-         if(cur_sec >= 0) g_form_delay_sec = cur_sec;
+         // Object is absent in TF CLOSE mode; keep the stored value instead of
+         // reading "" as 0.
+         if(!g_form_delay_close)
+         {
+            int cur_sec = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_DELAY_SEC", OBJPROP_TEXT));
+            if(cur_sec >= 0) g_form_delay_sec = cur_sec;
+         }
          
          if(g_form_direction == TRADE_DIR_BOTH)
          {
@@ -1316,8 +1326,12 @@ void OnChartEvent(const int id,
       }
       else if(sparam == g_prefix + "BTN_TOGGLE_DELAY_MODE")
       {
-         int cur_sec = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_DELAY_SEC", OBJPROP_TEXT));
-         if(cur_sec >= 0) g_form_delay_sec = cur_sec;
+         // Object is absent in TF CLOSE mode, so only read it when present.
+         if(!g_form_delay_close)
+         {
+            int cur_sec = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_DELAY_SEC", OBJPROP_TEXT));
+            if(cur_sec >= 0) g_form_delay_sec = cur_sec;
+         }
          
          g_form_delay_close = !g_form_delay_close;
          CreateDashboardUI();
@@ -1414,7 +1428,11 @@ void OnChartEvent(const int id,
          int mult_val = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MULT", OBJPROP_TEXT));
          if(mult_val <= 0) mult_val = 1;
          
-         int delay_sec_val = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_DELAY_SEC", OBJPROP_TEXT));
+         // Object absent in TF CLOSE mode: fall back to the stored value so
+         // switching modes does not silently zero the saved seconds.
+         int delay_sec_val = g_form_delay_sec;
+         if(!g_form_delay_close)
+            delay_sec_val = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_DELAY_SEC", OBJPROP_TEXT));
          if(delay_sec_val < 0) delay_sec_val = 0;
          
          string b_filter = "ALL";
@@ -1641,18 +1659,22 @@ void OnTick()
             double cur_price = 0.0;
             double atr_dummy = 0.0;
             
-            if(!IsStrongBullishEngulfingBreak(sym, sig_tf, atr_dummy, broken_level, cur_price)) continue;
-            if(!EvaluatePriceFilter(cur_price, g_rules[r].bull_price_filter)) continue;
-            
+            // Cur candle open time for THIS signal TF; slot 0 = own TF, slot 1 = M1
             datetime cur_bar_open_time = (datetime)SeriesInfoInteger(sym, sig_tf, SERIES_LASTBAR_DATE);
             int slot = (c == 0) ? 0 : 1;
-            if(g_rules[r].last_bull_bar[slot] == cur_bar_open_time) continue;
             
             bool trigger_buy = false;
             
             if(g_rules[r].delay_is_tf_close)
             {
-               // TF Close mode on the SIGNAL tf: verify the just-closed candle
+               // ponytail: closed-bar mode reads the just-closed candle of the SIGNAL
+               // tf (M1 signal -> M1 close, M5 signal -> M5 close) and skips the
+               // live-candle IsStrong*EngulfingBreak gate entirely. That gate reads
+               // bar 0 (still forming) and re-reads a different bar once the TF rolls,
+               // so it could never fire on the bar that just closed. c_break below
+               // uses `||` (close OR high broke the prev high), so a wick-only break
+               // still counts -- deliberately looser than IsStrong*EngulfingBreak;
+               // tighten to `&&` if this proves too trigger-happy on live data.
                if(g_rules[r].bull_last_checked_bar[slot] != cur_bar_open_time)
                {
                   g_rules[r].bull_last_checked_bar[slot] = cur_bar_open_time;
@@ -1676,7 +1698,12 @@ void OnTick()
             }
             else
             {
-               // Seconds mode: condition must hold continuously, reset if it breaks
+               // Seconds mode keeps the live-candle gates, evaluated per signal TF
+               if(!IsStrongBullishEngulfingBreak(sym, sig_tf, atr_dummy, broken_level, cur_price)) continue;
+               if(!EvaluatePriceFilter(cur_price, g_rules[r].bull_price_filter)) continue;
+               if(g_rules[r].last_bull_bar[slot] == cur_bar_open_time) continue;
+               
+               // Condition must hold continuously, reset if it breaks
                int d_sec = g_rules[r].delay_seconds;
                if(d_sec <= 0)
                {
@@ -1753,17 +1780,16 @@ void OnTick()
             double cur_price = 0.0;
             double atr_dummy = 0.0;
             
-            if(!IsStrongBearishEngulfingBreak(sym, sig_tf, atr_dummy, broken_level, cur_price)) continue;
-            if(!EvaluatePriceFilter(cur_price, g_rules[r].bear_price_filter)) continue;
-            
+            // Cur candle open time for THIS signal TF; slot 0 = own TF, slot 1 = M1
             datetime cur_bar_open_time = (datetime)SeriesInfoInteger(sym, sig_tf, SERIES_LASTBAR_DATE);
             int slot = (c == 0) ? 0 : 1;
-            if(g_rules[r].last_bear_bar[slot] == cur_bar_open_time) continue;
             
             bool trigger_sell = false;
             
             if(g_rules[r].delay_is_tf_close)
             {
+               // Same fix as BUY: read the just-closed candle of the SIGNAL tf.
+               // See the BUY branch for why the live-candle gate cannot work here.
                if(g_rules[r].bear_last_checked_bar[slot] != cur_bar_open_time)
                {
                   g_rules[r].bear_last_checked_bar[slot] = cur_bar_open_time;
@@ -1787,6 +1813,11 @@ void OnTick()
             }
             else
             {
+               // Seconds mode keeps the live-candle gates, evaluated per signal TF
+               if(!IsStrongBearishEngulfingBreak(sym, sig_tf, atr_dummy, broken_level, cur_price)) continue;
+               if(!EvaluatePriceFilter(cur_price, g_rules[r].bear_price_filter)) continue;
+               if(g_rules[r].last_bear_bar[slot] == cur_bar_open_time) continue;
+               
                int d_sec = g_rules[r].delay_seconds;
                if(d_sec <= 0)
                {

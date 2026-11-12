@@ -77,6 +77,25 @@ Efeknya:
 - Sinyal M1 dan M5 punya "ingatan" masing-masing, jadi keduanya bisa terpicu pada bar yang sama tanpa saling menutup.
 - Ada **dua jalur reset** yang harus selalu me-reset **kedua** slot: reset setelah entry sukses, dan reset saat master power / rule di-toggle. Me-reset hanya indeks `0` akan membuat slot M1 menyimpan bar lama dan melewatkan sinyal berikutnya.
 
+### 3a. Mode Delay `TF Close` dan TF Sinyal
+
+Mode `TF Close` memvalidasi **candle yang baru saja tertutup** (bar index `1`), bukan candle berjalan. Alasannya: `IsStrong*EngulfingBreak()` membaca bar `0` yang masih terbentuk, sehingga bentuknya bisa berubah sampai detik terakhir; pola yang terlihat "valid" di tengah candle bisa hilang saat candle tutup.
+
+Konsekuensi penting: di mode `TF Close`, gate candle-berjalan **sengaja dilewati**. Kalau tidak, entry tidak akan pernah terjadi — saat TF berganti, bar `0` yang dinilai sudah menjadi candle baru yang baru lahir (high = low = open), sehingga gate selalu gagal pada saat yang justru menjadi momen validasi.
+
+**Close yang dipakai mengikuti TF sinyalnya**, bukan TF rule:
+
+| Sinyal dari | Candle yang divalidasi |
+|---|---|
+| M5 (slot `0`) | Close M5 |
+| M1 (slot `1`) | Close M1 |
+
+Implementasinya lewat `CopyRates(sym, sig_tf, 1, 2, ...)` di dalam loop `CandidateTFs()` — `sig_tf` sudah berisi TF sinyal yang sedang diperiksa, jadi M5 dan M1 masing-masing memakai close-nya sendiri.
+
+Syarat validasi pada candle tertutup: `c_bull` (close > open), `c_break` (close **atau** high menembus high candle sebelumnya), `c_cover` (low ≤ low sebelumnya), dan `c_body` (body lebih besar dari body sebelumnya × `InpBodyRatioMult`).
+
+> Catatan: `c_break` memakai `||` sehingga tembusan lewat *wick* saja tetap dihitung — lebih longgar daripada `IsStrong*EngulfingBreak()`. Ketatkan ke `&&` bila terbukti terlalu sering memicu.
+
 ---
 
 ## 4. Hubungan MAX ORDER vs ENTRY MULTIPLIER
