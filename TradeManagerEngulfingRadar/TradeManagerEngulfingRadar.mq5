@@ -1502,10 +1502,10 @@ void UpdateDashboardUI()
    
    if(g_active_tab == 1)
    {
-      // Clean previous dynamic objects by prefix matching
-      ObjectsDeleteAll(0, g_prefix + "R_");
-      ObjectsDeleteAll(0, g_prefix + "ROW_CB_");
-      
+      // ponytail: no ObjectsDeleteAll here. The Create* helpers only create when
+      // ObjectFind fails, so existing rows are updated in place instead of being
+      // destroyed and rebuilt on every 1s timer tick (that was the visible flicker).
+      // Stale rows -- ones that no longer have a position/order -- are hidden below.
       int table_y = tab_y + 36;
       int start_y = table_y + 58;
       int row_idx = 0;
@@ -1610,6 +1610,30 @@ void UpdateDashboardUI()
          CreateLabel(r_pfx + "BE",  root_x + 700, cur_y + 3, "-", CLR_TEXT_MED, 8, false);
          
          row_idx++;
+      }
+      
+      // Hide rows beyond the current count (position closed -> row must vanish).
+      for(int k = row_idx; k < MAX_ROWS_PER_PAGE; k++)
+      {
+         string hide_pfx = StringFormat("R_%d_", k);
+         ObjectsDeleteAll(0, g_prefix + hide_pfx);
+      }
+      
+      // Checkbox names are keyed by TICKET, not row index, so they cannot be
+      // cleaned by row prefix. Instead walk every object of that prefix and
+      // delete only those whose ticket is no longer open (position or order).
+      // Runs after both render loops: PositionSelectByTicket/OrderSelect change
+      // the global selection, which would corrupt an in-flight PositionGetDouble.
+      int objs = ObjectsTotal(0, -1, -1);
+      for(int o = objs - 1; o >= 0; o--)
+      {
+         string oname = ObjectName(0, o);
+         if(StringFind(oname, g_prefix + "ROW_CB_") != 0) continue;
+         
+         string str_tkt = StringSubstr(oname, StringLen(g_prefix + "ROW_CB_"));
+         long   tkt     = StringToInteger(str_tkt);
+         bool   alive   = (PositionSelectByTicket((ulong)tkt) || OrderSelect((ulong)tkt, SELECT_BY_TICKET));
+         if(!alive) ObjectDelete(0, oname);
       }
    }
    else if(g_active_tab == 2)
