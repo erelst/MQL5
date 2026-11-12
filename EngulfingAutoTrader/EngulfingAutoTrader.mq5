@@ -1626,11 +1626,14 @@ void OnTick()
          continue;
       }
       
-      // Sequential entries: once a cycle has opened, hold the next cycle until
-      // every position it opened is closed. Positions are attributed to a rule by
-      // symbol + magic, and magic is shared by every rule, so the symbol is the key.
+      // Sequential entries: no new cycle while the previous batch is still open.
+      // CountOpenPositions matches symbol + magic, i.e. only positions THIS EA
+      // opened; a manual trade carries a different magic and cannot block entry.
+      // Deliberately NOT conditioned on orders_opened_count: manual reactivation
+      // resets that counter to 0, which would bypass this gate while the previous
+      // batch was still running.
       // ponytail: symbol-keyed, so two rules on the SAME symbol block each other.
-      if(g_rules[r].orders_opened_count > 0 && CountOpenPositions(g_rules[r].symbol) > 0)
+      if(CountOpenPositions(g_rules[r].symbol) > 0)
          continue;
       
       string sym = g_rules[r].symbol;
@@ -1661,7 +1664,7 @@ void OnTick()
             if(g_rules[r].max_orders > 0 && g_rules[r].orders_opened_count >= g_rules[r].max_orders)
                break;
             // Sequential: never start the next cycle in the same tick
-            if(g_rules[r].orders_opened_count > 0 && CountOpenPositions(sym) > 0)
+            if(CountOpenPositions(sym) > 0)
                break;
             
             ENUM_TIMEFRAMES sig_tf = cand_tf[c];
@@ -1791,7 +1794,7 @@ void OnTick()
             if(g_rules[r].max_orders > 0 && g_rules[r].orders_opened_count >= g_rules[r].max_orders)
                break;
             // Sequential: never start the next cycle in the same tick
-            if(g_rules[r].orders_opened_count > 0 && CountOpenPositions(sym) > 0)
+            if(CountOpenPositions(sym) > 0)
                break;
             
             ENUM_TIMEFRAMES sig_tf = cand_tf[c];

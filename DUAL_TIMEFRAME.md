@@ -129,7 +129,7 @@ Implementasi: counter `orders_opened_count` dinaikkan **satu kali per siklus** (
 Siklus entry **tidak** boleh tumpang tindih. Siklus berikutnya baru dibuka setelah **semua posisi dari siklus sebelumnya tertutup**:
 
 ```cpp
-if(g_rules[r].orders_opened_count > 0 && CountOpenPositions(sym) > 0)
+if(CountOpenPositions(sym) > 0)
    continue;   // (di dalam loop candidate-TF: break)
 ```
 
@@ -141,7 +141,9 @@ Gate ini ada di **tiga** tempat, dan ketiganya diperlukan:
 | Loop candidate-TF BUY | Mencegah siklus kedua di tick yang sama (mis. sinyal M5 lalu M1) |
 | Loop candidate-TF SELL | Idem untuk sisi SELL |
 
-Syarat `orders_opened_count > 0` penting: tanpa itu, rule akan terkunci selamanya bila ada posisi apa pun di simbol tersebut (mis. dibuka manual), karena counter masih 0 pada siklus pertama.
+Gate **tidak** bergantung pada `orders_opened_count`. Itu disengaja: tombol toggle rule me-reset counter tersebut ke 0 saat diaktifkan manual, sehingga bila gate ikut memeriksa counter, siklus baru bisa lolos padahal batch sebelumnya masih terbuka.
+
+Aman untuk tidak bergantung pada counter tersebut karena `CountOpenPositions()` sudah menyaring `Magic() == InpMagicNumber` — hanya posisi yang dibuka EA ini yang dihitung. Trade manual (Magic `0`) atau dari EA lain tidak akan memblokir entry.
 
 Urutan dengan MAX `3` dan MULT `2`: buka 2 → tunggu tutup → buka 2 → tunggu tutup → buka 2 → `PAUSED`.
 
