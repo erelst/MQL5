@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Self-check for EngulfingAutoTrader's closed-bar (TF CLOSE) signal predicate.
+"""Self-check for EngulfingAutoTrader's entry logic.
 
-Extracts the c_* predicate lines straight from the .mq5 so this test fails if
-the source drifts. No MQL5 compiler is available, so this is the cheapest thing
+Two checks, both reading the predicates out of the .mq5 so they fail if the
+source drifts. No MQL5 compiler is available, so this is the cheapest thing
 that actually breaks when the logic breaks.
 
-Run: python3 test_tf_close.py
+Run: python3 test_autotrader.py
 """
 import os
 import random
@@ -122,9 +122,75 @@ def demo():
           " 0 mismatches vs reference over 5000 random pairs)")
 
 
+def check_sequential_entry():
+    """MAX ORDER cycles must run one at a time: the next cycle waits until every
+    position opened by the previous cycle is closed.
+
+    Gate (x3 in the source) is:
+        g_rules[r].orders_opened_count > 0 && CountOpenPositions(sym) > 0
+    """
+    src = open(SRC).read()
+    gates = re.findall(
+        r"if\(g_rules\[r\]\.orders_opened_count\s*>\s*0\s*&&\s*"
+        r"CountOpenPositions\([^)]*\)\s*>\s*0\)", src)
+    assert len(gates) == 3, (
+        "expected the sequential gate in 3 places (rule loop + BUY + SELL), "
+        "found %d" % len(gates))
+
+    # Guard the first cycle specifically. `>= 0` instead of `> 0` would block
+    # entry forever, because orders_opened_count starts at 0.
+    assert not re.search(r"orders_opened_count\s*>=\s*0\s*&&\s*CountOpenPositions", src), \
+        "gate uses >= 0, which blocks the very first cycle"
+
+    # Tick-by-tick walk of the scenario the user asked for: MAX ORDER 3, MULT 2.
+    # The cycle's positions stay open for 2 ticks, so the gate must make the EA
+    # wait in between. Expected sequence:
+    #   opened, blocked, opened, blocked, opened, paused
+    max_orders, mult, close_after = 3, 2, 2
+    opened_cycles = 0
+    open_positions = 0
+    age = 0
+    actions = []
+    for _ in range(30):
+        if max_orders > 0 and opened_cycles >= max_orders:
+            actions.append("paused")
+            break
+        if opened_cycles > 0 and open_positions > 0:
+            actions.append("blocked")
+        else:
+            opened_cycles += 1
+            open_positions = mult
+            age = 0
+            actions.append("opened")
+        if open_positions > 0:
+            age += 1
+            if age >= close_after:          # the whole cycle closes together
+                open_positions = 0
+                age = 0
+
+    assert actions[0] == "opened", \
+        "first cycle must open immediately, got %s" % actions
+    assert actions[-1] == "paused", \
+        "rule must auto-pause at MAX ORDER, got %s" % actions
+    assert actions.count("opened") == max_orders, \
+        "expected %d cycles, got %s" % (max_orders, actions)
+    # The actual requirement: never two entries back to back. Every cycle after
+    # the first must be preceded by at least one tick spent waiting.
+    for i, a in enumerate(actions):
+        if a == "opened" and i > 0:
+            assert actions[i - 1] == "blocked", \
+                "cycle opened without waiting for the previous one to close: %s" % actions
+    assert actions == ["opened", "blocked", "opened", "blocked", "opened", "paused"], \
+        "unexpected sequence: %s" % actions
+
+    print("test_sequential_entry: OK (3 gates, first cycle fires, later cycles wait"
+          " for the previous to close, pauses at MAX ORDER)")
+
+
 if __name__ == "__main__":
     try:
         demo()
+        check_sequential_entry()
     except Exception as exc:  # noqa: BLE001 - a test, any failure is a failure
-        print("test_tf_close: FAILED -> %s" % exc)
+        print("test_autotrader: FAILED -> %s" % exc)
         sys.exit(1)

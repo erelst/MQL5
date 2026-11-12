@@ -124,6 +124,29 @@ Contoh kombinasi:
 
 Implementasi: counter `orders_opened_count` dinaikkan **satu kali per siklus** (bukan per posisi), dan hanya jika minimal satu order berhasil. Gate MAX ORDER dicek ulang di dalam loop candidate-TF dan langsung `break` bila sudah tercapai — sehingga M5 yang berprioritas tidak bisa terlewati hanya karena M1 sudah memenuhi kuota.
 
+### 4a. Siklus Berurutan (Sequential Entry)
+
+Siklus entry **tidak** boleh tumpang tindih. Siklus berikutnya baru dibuka setelah **semua posisi dari siklus sebelumnya tertutup**:
+
+```cpp
+if(g_rules[r].orders_opened_count > 0 && CountOpenPositions(sym) > 0)
+   continue;   // (di dalam loop candidate-TF: break)
+```
+
+Gate ini ada di **tiga** tempat, dan ketiganya diperlukan:
+
+| Lokasi | Alasan |
+|---|---|
+| Awal loop rule | Mencegah siklus baru antar-tick |
+| Loop candidate-TF BUY | Mencegah siklus kedua di tick yang sama (mis. sinyal M5 lalu M1) |
+| Loop candidate-TF SELL | Idem untuk sisi SELL |
+
+Syarat `orders_opened_count > 0` penting: tanpa itu, rule akan terkunci selamanya bila ada posisi apa pun di simbol tersebut (mis. dibuka manual), karena counter masih 0 pada siklus pertama.
+
+Urutan dengan MAX `3` dan MULT `2`: buka 2 → tunggu tutup → buka 2 → tunggu tutup → buka 2 → `PAUSED`.
+
+> Batasan yang diketahui: posisi dihitung **berdasarkan simbol** (`CountOpenPositions(sym)`), karena Magic Number dipakai bersama semua rule. Dua rule pada simbol yang sama akan saling menunggu. Upgrade path bila perlu: beri Magic Number unik per rule dan kunci penghitungannya ke magic tersebut.
+
 ---
 
 ## 5. Perilaku Saat Auto-Pause (Penting)

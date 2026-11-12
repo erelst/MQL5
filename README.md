@@ -40,7 +40,7 @@ Dashboard manajemen posisi terbuka dan pemantau multi-symbol real-time.
 ```
 README.md                          (file ini)
 DUAL_TIMEFRAME.md                  (dokumen lintas-EA: ATR base TF & duel M5/M1)
-test_tf_close.py                   (self-check logika sinyal TF CLOSE)
+test_autotrader.py                 (self-check logika sinyal & entry AutoTrader)
 .gitignore
 EngulfingAutoTrader/
    EngulfingAutoTrader.mq5

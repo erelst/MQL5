@@ -43,6 +43,10 @@ Kedua angka ini berbeda peran dan sering salah dipahami:
 | `2` | `3` | 6 posisi (3 per siklus), lalu pause |
 | `UNL` | berapa pun | Tanpa batas siklus |
 
+**Siklus berjalan berurutan (sequential)**: siklus berikutnya **tidak** akan dibuka selama masih ada posisi terbuka dari siklus sebelumnya. Baru setelah semua posisi siklus itu tertutup, siklus berikutnya boleh jalan — sampai kuota MAX ORDER habis lalu rule `PAUSED`. Jadi dengan MAX `3` dan MULT `2`, urutannya: buka 2 → tunggu keduanya tutup → buka 2 → tunggu → buka 2 → pause.
+
+> Catatan: posisi dihitung berdasarkan **simbol**, karena Magic Number dipakai bersama oleh semua rule. Bila Anda membuat dua rule pada simbol yang sama, keduanya akan saling menunggu.
+
 **Aturan penting saat kuota terbatas**: bila MAX ORDER tersisa lebih sedikit daripada jumlah candidate timeframe yang valid, **M5 selalu diambil lebih dulu** daripada M1. Rule tidak akan "memakai" kuotanya untuk sinyal M1 lalu melewatkan sinyal M5 pada tick yang sama.
 
 ---

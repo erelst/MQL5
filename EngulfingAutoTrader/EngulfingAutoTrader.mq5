@@ -1626,6 +1626,13 @@ void OnTick()
          continue;
       }
       
+      // Sequential entries: once a cycle has opened, hold the next cycle until
+      // every position it opened is closed. Positions are attributed to a rule by
+      // symbol + magic, and magic is shared by every rule, so the symbol is the key.
+      // ponytail: symbol-keyed, so two rules on the SAME symbol block each other.
+      if(g_rules[r].orders_opened_count > 0 && CountOpenPositions(g_rules[r].symbol) > 0)
+         continue;
+      
       string sym = g_rules[r].symbol;
       ENUM_TIMEFRAMES tf = g_rules[r].timeframe;
       
@@ -1652,6 +1659,9 @@ void OnTick()
          {
             // MAX ORDER = entry cycles; re-checked after every cycle
             if(g_rules[r].max_orders > 0 && g_rules[r].orders_opened_count >= g_rules[r].max_orders)
+               break;
+            // Sequential: never start the next cycle in the same tick
+            if(g_rules[r].orders_opened_count > 0 && CountOpenPositions(sym) > 0)
                break;
             
             ENUM_TIMEFRAMES sig_tf = cand_tf[c];
@@ -1779,6 +1789,9 @@ void OnTick()
          for(int c = 0; c < cand_total; c++)
          {
             if(g_rules[r].max_orders > 0 && g_rules[r].orders_opened_count >= g_rules[r].max_orders)
+               break;
+            // Sequential: never start the next cycle in the same tick
+            if(g_rules[r].orders_opened_count > 0 && CountOpenPositions(sym) > 0)
                break;
             
             ENUM_TIMEFRAMES sig_tf = cand_tf[c];
