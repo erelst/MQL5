@@ -825,7 +825,7 @@ void CreateDashboardUI()
    }
    else if(g_form_direction == TRADE_DIR_SELL)
    {
-      CreateLabel("LBL_BEAR_MIN", root_x + 22, root_x + 22, row_e_y + 3, "SELL BOUND (cth: >1.0900 atau 4040-4078):", CLR_BEAR_NEON, 8, true);
+      CreateLabel("LBL_BEAR_MIN", root_x + 22, row_e_y + 3, "SELL BOUND (cth: >1.0900 atau 4040-4078):", CLR_BEAR_NEON, 8, true);
       CreateEdit("INP_BEAR_MIN", root_x + 265, row_e_y, 149, 20, g_form_smin, CLR_CANVAS_BG, CLR_TEXT_PURE);
    }
    
