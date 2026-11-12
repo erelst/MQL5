@@ -1150,6 +1150,7 @@ void LoadStateFromFile()
          total_rules = FileReadInteger(handle);
       else
          total_rules = state_ver; // legacy: this int was the rule count
+      if(total_rules < 0 || total_rules > 1000) { FileClose(handle); return; } // corrupt/foreign file
       ArrayResize(g_rules, total_rules);
       
       for(int i = 0; i < total_rules; i++)

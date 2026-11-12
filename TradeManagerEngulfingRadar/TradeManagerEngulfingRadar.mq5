@@ -156,6 +156,8 @@ void SetOrderSelected(ulong ticket, bool sel);
 void SelectAllOrders(bool sel);
 void SaveStateToFile();
 void LoadStateFromFile();
+ENUM_TIMEFRAMES AtrBaseTF(const ENUM_TIMEFRAMES tf);
+double CalculateATR50(const string sym, const ENUM_TIMEFRAMES tf, int period);
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -543,15 +545,26 @@ void ProcessEngulfingForSymbol(int index)
    bool bull_hit = IsStrongBullishEngulfingBreak(sym, tf, atr_50, broken_range, cur_price, broken_high, broken_low);
    if(!bull_hit && tf == PERIOD_M5)
    {
-      bull_hit = IsStrongBullishEngulfingBreak(sym, PERIOD_M1, atr_50, broken_range, cur_price, broken_high, broken_low);
-      if(bull_hit) sig_tf_bull = PERIOD_M1;
+      double atr_m1 = 0.0;
+      if(IsStrongBullishEngulfingBreak(sym, PERIOD_M1, atr_m1, broken_range, cur_price, broken_high, broken_low))
+      {
+         bull_hit = true;
+         sig_tf_bull = PERIOD_M1;
+      }
    }
+   
+   double atr_50_bear = 0.0;
+   double br_bear = 0.0, bh_bear = 0.0, bl_bear = 0.0;
    ENUM_TIMEFRAMES sig_tf_bear = tf;
-   bool bear_hit = IsStrongBearishEngulfingBreak(sym, tf, atr_50, broken_range, cur_price, broken_high, broken_low);
+   bool bear_hit = IsStrongBearishEngulfingBreak(sym, tf, atr_50_bear, br_bear, cur_price, bh_bear, bl_bear);
    if(!bear_hit && tf == PERIOD_M5)
    {
-      bear_hit = IsStrongBearishEngulfingBreak(sym, PERIOD_M1, atr_50, broken_range, cur_price, broken_high, broken_low);
-      if(bear_hit) sig_tf_bear = PERIOD_M1;
+      double atr_m1 = 0.0;
+      if(IsStrongBearishEngulfingBreak(sym, PERIOD_M1, atr_m1, br_bear, cur_price, bh_bear, bl_bear))
+      {
+         bear_hit = true;
+         sig_tf_bear = PERIOD_M1;
+      }
    }
    
    // 1. Check Bullish Engulfing Break
@@ -609,10 +622,10 @@ void ProcessEngulfingForSymbol(int index)
                double pips_factor = (digits == 3 || digits == 5) ? 10.0 * point : point;
                if(pips_factor == 0) pips_factor = point;
                
-               double pips_val = atr_50 / pips_factor;
-               double points_val = atr_50 / point;
+               double pips_val = atr_50_bear / pips_factor;
+               double points_val = atr_50_bear / point;
                double spread_val = (SymbolInfoDouble(sym, SYMBOL_ASK) - SymbolInfoDouble(sym, SYMBOL_BID));
-               double rec_sl = broken_high + atr_50 + spread_val;
+               double rec_sl = broken_high + atr_50_bear + spread_val;
                
                string msg = StringFormat("[ENGULFING ALERT] %s (%s)\nType: Realtime Strong BEARISH Break\nPrice: %s\n50%% ATR(%d): %.1f pips (%.0f pts)\nSuggested SL: %s\nBroken Range: %.1f pips",
                                          sym, EnumToString(sig_tf_bear),
@@ -621,7 +634,7 @@ void ProcessEngulfingForSymbol(int index)
                                          pips_val,
                                          points_val,
                                          DoubleToString(rec_sl, digits),
-                                         broken_range / pips_factor);
+                                         br_bear / pips_factor);
                
                if(InpEnableSoundAlerts) Alert(msg);
                if(InpEnablePushAlerts)  SendNotification(msg);
