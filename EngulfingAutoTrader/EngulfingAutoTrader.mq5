@@ -479,6 +479,40 @@ void ProcessAutoTrailSLTP()
          if(total_dist <= 0) continue;
          
          double remaining_dist = cur_tp - bid;
+         
+         // ponytail: ATR explosion triggers independently of remaining distance to TP,
+         // allowing TP to extend as soon as volatility spikes.
+         if(atr_exploding)
+         {
+            if(g_tracking_list[i].trail_cycle == 0)
+            {
+               double be_sl = NormalizeDouble(open_p + spread, digits);
+               double new_tp = NormalizeDouble(cur_tp + g_tracking_list[i].initial_tp_dist, digits);
+               if(m_trade.PositionModify(tkt, be_sl > cur_sl ? be_sl : cur_sl, new_tp))
+               {
+                  g_tracking_list[i].prev_tp_level = cur_tp;
+                  g_tracking_list[i].trail_cycle   = 1;
+                  string msg = StringFormat("[AUTO TRADER - TRAIL TP EXTENDED]\nSymbol: %s\nTicket: #%d (BUY)\nAction: TP Extended\nNew TP: %.5f", sym, tkt, new_tp);
+                  if(InpEnableSoundAlerts) Alert(msg);
+                  if(InpEnablePushAlerts)  SendNotification(msg);
+               }
+            }
+            else if(g_tracking_list[i].trail_cycle >= 1)
+            {
+               double prev_tp = g_tracking_list[i].prev_tp_level;
+               double new_sl  = NormalizeDouble(prev_tp, digits);
+               double new_tp  = NormalizeDouble(cur_tp + g_tracking_list[i].initial_tp_dist, digits);
+               if(m_trade.PositionModify(tkt, new_sl > cur_sl ? new_sl : cur_sl, new_tp))
+               {
+                  g_tracking_list[i].prev_tp_level = cur_tp;
+                  g_tracking_list[i].trail_cycle++;
+                  string msg = StringFormat("[AUTO TRADER - TRAIL TP EXTENDED]\nSymbol: %s\nTicket: #%d (BUY)\nAction: TP Extended (Cycle %d)\nNew TP: %.5f", sym, tkt, g_tracking_list[i].trail_cycle, new_tp);
+                  if(InpEnableSoundAlerts) Alert(msg);
+                  if(InpEnablePushAlerts)  SendNotification(msg);
+               }
+            }
+         }
+         
          if(remaining_dist <= total_dist * trigger_ratio && bid > open_p)
          {
             if(g_tracking_list[i].trail_cycle == 0)
@@ -493,18 +527,6 @@ void ProcessAutoTrailSLTP()
                      if(InpEnablePushAlerts)  SendNotification(msg);
                   }
                }
-               if(atr_exploding)
-               {
-                  double new_tp = NormalizeDouble(cur_tp + g_tracking_list[i].initial_tp_dist, digits);
-                  if(m_trade.PositionModify(tkt, be_sl > cur_sl ? be_sl : cur_sl, new_tp))
-                  {
-                     g_tracking_list[i].prev_tp_level = cur_tp;
-                     g_tracking_list[i].trail_cycle   = 1;
-                     string msg = StringFormat("[AUTO TRADER - TRAIL TP EXTENDED]\nSymbol: %s\nTicket: #%d (BUY)\nAction: TP Extended\nNew TP: %.5f", sym, tkt, new_tp);
-                     if(InpEnableSoundAlerts) Alert(msg);
-                     if(InpEnablePushAlerts)  SendNotification(msg);
-                  }
-               }
             }
             else if(g_tracking_list[i].trail_cycle >= 1)
             {
@@ -515,18 +537,6 @@ void ProcessAutoTrailSLTP()
                   if(m_trade.PositionModify(tkt, new_sl, cur_tp))
                   {
                      string msg = StringFormat("[AUTO TRADER - TRAIL SL LOCKED]\nSymbol: %s\nTicket: #%d (BUY)\nAction: SL locked to Prev TP\nNew SL: %.5f", sym, tkt, new_sl);
-                     if(InpEnableSoundAlerts) Alert(msg);
-                     if(InpEnablePushAlerts)  SendNotification(msg);
-                  }
-               }
-               if(atr_exploding)
-               {
-                  double new_tp = NormalizeDouble(cur_tp + g_tracking_list[i].initial_tp_dist, digits);
-                  if(m_trade.PositionModify(tkt, new_sl > cur_sl ? new_sl : cur_sl, new_tp))
-                  {
-                     g_tracking_list[i].prev_tp_level = cur_tp;
-                     g_tracking_list[i].trail_cycle++;
-                     string msg = StringFormat("[AUTO TRADER - TRAIL TP EXTENDED]\nSymbol: %s\nTicket: #%d (BUY)\nAction: TP Extended (Cycle %d)\nNew TP: %.5f", sym, tkt, g_tracking_list[i].trail_cycle, new_tp);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);
                   }
