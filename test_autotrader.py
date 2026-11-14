@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """Self-check for EngulfingAutoTrader's entry logic.
 
-Two checks, both reading the predicates out of the .mq5 so they fail if the
-source drifts. No MQL5 compiler is available, so this is the cheapest thing
-that actually breaks when the logic breaks.
+Everything below reads the predicates straight out of the .mq5 and compares them
+against an independent reference implementation, so the test fails when the
+source drifts -- not when my port of the source drifts. That distinction is the
+whole point: an earlier version of this file re-typed the live detector, got the
+SELL body condition wrong, and therefore passed while the real source and the
+TF CLOSE copy disagreed whenever InpBodyRatioMult != 1.
+
+No MQL5 compiler is available, so this is the cheapest thing that actually
+breaks when the logic breaks.
 
 Run: python3 test_autotrader.py
 """
@@ -16,42 +22,55 @@ SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                    "EngulfingAutoTrader", "EngulfingAutoTrader.mq5")
 
 
-def predicates(src):
-    """Return (buy_src, sell_src) predicate text blocks from the .mq5."""
-    def grab(anchor, stop):
-        i = src.index(anchor)
-        j = src.index(stop, i)
-        return src[i:j]
-
-    buy = grab("bool c_bear_prev", "EvaluatePriceFilter(r_check[0].close, g_rules[r].bull_price_filter)")
-    sell = grab("bool c_bull_prev", "EvaluatePriceFilter(r_check[0].close, g_rules[r].bear_price_filter)")
-    return buy, sell
-
-
 class Bar(dict):
     __getattr__ = dict.__getitem__
 
 
-def eval_block(block, r0, r1, ratio):
-    """Evaluate a predicate block, translating C++ operators to Python."""
-    ns = {"r_check": [r0, r1], "InpBodyRatioMult": ratio}
-    for line in block.split("\n"):
-        line = line.strip()
-        m = re.match(r"bool (c_\w+)\s*=\s*(.+);$", line)
-        if m:
-            ns[m.group(1)] = eval(translate(m.group(2)), {}, ns)
-    guard = [l.strip() for l in block.split("\n") if l.strip().startswith("if(c_")]
-    assert guard, "closed-bar block has no final guard"
-    expr = guard[0][3:].split("&& EvaluatePriceFilter")[0].strip()
-    expr = expr.rstrip(" )").rstrip("&").strip()
-    return bool(eval(translate(expr), {}, ns))
-
-
-def translate(expr):
+def py(expr):
+    """Translate the C++ operators MQL5 and Python spell differently."""
     return expr.replace("||", " or ").replace("&&", " and ")
 
 
-# --- reference implementations: ports of the live-bar detectors -------------
+def load_detector(src, start, stop):
+    """Pull one IsStrong*EngulfingBreak function out of the source as a spec.
+
+    The spec is built from the source text, so a change to the source is a change
+    to the thing under test.
+    """
+    block = src[src.index(start):src.index(stop, src.index(start))]
+    locals_ = re.findall(r"double (\w+)\s*=\s*rates\[(\d)\]\.(\w+);", block)
+    assert locals_, "no rates[] reads found in %s" % start
+    prev = re.search(r"if\((\w+)\s*(>=|<=)\s*(\w+)\)\s*return false;", block)
+    assert prev, "no previous-candle direction guard in %s" % start
+    bools = [(m.group(1), m.group(2).strip())
+             for m in re.finditer(r"^\s*bool (is_\w+)\s*=\s*(.+?);\s*$", block,
+                                  re.MULTILINE)]
+    assert bools, "no is_* conditions found in %s" % start
+    guard = [l.strip() for l in block.split("\n") if l.strip().startswith("if(is_")]
+    assert guard, "no final guard found in %s" % start
+    expr = guard[-1][3:].rstrip(")").strip()
+    return {"locals": locals_, "prev": prev.groups(), "bools": bools, "guard": expr,
+            "block": block}
+
+
+def fire(spec, r0, r1, ratio):
+    """Evaluate the extracted detector on a (live bar, previous bar) pair."""
+    env = {"InpBodyRatioMult": ratio}
+    env.update({name: (r0 if idx == "0" else r1)[field]
+                for name, idx, field in spec["locals"]})
+    a, op, b = spec["prev"]
+    if op == ">=" and env[a] >= env[b]:
+        return False
+    if op == "<=" and env[a] <= env[b]:
+        return False
+    for name, expr in spec["bools"]:
+        env[name] = bool(eval(py(expr), {}, env))
+    return bool(eval(py(spec["guard"]), {}, env))
+
+
+# --- reference implementations, retyped by hand on purpose -------------------
+# These are the independent side of the comparison. If the source disagrees with
+# them, one of the two is wrong and the test stops.
 def ref_bull(cur, prev, ratio):
     if prev["close"] >= prev["open"]:
         return False
@@ -78,48 +97,112 @@ def rand_bar(rng):
     return Bar(open=o, high=h, low=l, close=c)
 
 
-def demo():
+def check_detector():
+    """The extracted detectors must match the reference, and must fire at all."""
     src = open(SRC).read()
-    buy, sell = predicates(src)
+    buy = load_detector(src, "bool IsStrongBullishEngulfingBreak",
+                        "//| REALTIME STRONG BEARISH")
+    sell = load_detector(src, "bool IsStrongBearishEngulfingBreak",
+                         "//| LOT SIZE CALCULATION")
 
-    # 1. The regression that motivated this test: a bullish prev candle must NOT
-    #    produce a BUY signal. Before the c_bear_prev fix this fired.
+    # 1. genuine engulfings fire on both sides (a detector that never fires would
+    #    sail through a pure "no false positives" test, which is how a dead mode
+    #    went unnoticed before)
+    bear_prev = Bar(open=1.0900, high=1.0902, low=1.0883, close=1.0885)
+    bull_cur = Bar(open=1.0884, high=1.0906, low=1.0882, close=1.0905)
+    assert ref_bull(bull_cur, bear_prev, 1.0), "fixture is not a bull engulfing"
+    assert fire(buy, bull_cur, bear_prev, 1.0), "BUY detector did not fire"
+
+    bull_prev = Bar(open=1.0885, high=1.0902, low=1.0883, close=1.0900)
+    bear_cur = Bar(open=1.0901, high=1.0903, low=1.0880, close=1.0879)
+    assert ref_bear(bear_cur, bull_prev, 1.0), "fixture is not a bear engulfing"
+    assert fire(sell, bear_cur, bull_prev, 1.0), "SELL detector did not fire"
+
+    # 2. the previous candle must be the opposite colour, both sides
     prev_bull = Bar(open=1.0900, high=1.0920, low=1.0895, close=1.0915)
-    engulfing_up = Bar(open=1.0905, high=1.0935, low=1.0890, close=1.0930)
-    assert not eval_block(buy, engulfing_up, prev_bull, 1.0), \
-        "BUY fired with a bullish prev candle (c_bear_prev missing?)"
-
-    # Mirror case for SELL.
+    engulf_up = Bar(open=1.0905, high=1.0935, low=1.0890, close=1.0930)
+    assert not fire(buy, engulf_up, prev_bull, 1.0), \
+        "BUY fired with a bullish previous candle"
     prev_bear = Bar(open=1.0915, high=1.0920, low=1.0895, close=1.0900)
-    engulfing_dn = Bar(open=1.0910, high=1.0925, low=1.0880, close=1.0885)
-    assert not eval_block(sell, engulfing_dn, prev_bear, 1.0), \
-        "SELL fired with a bearish prev candle (c_bull_prev missing?)"
+    engulf_dn = Bar(open=1.0910, high=1.0925, low=1.0880, close=1.0885)
+    assert not fire(sell, engulf_dn, prev_bear, 1.0), \
+        "SELL fired with a bearish previous candle"
 
-    # 2. a genuine engulfing pair still fires
-    bear_prev = Bar(open=1.0900, high=1.0905, low=1.0880, close=1.0885)
-    bull_cur = Bar(open=1.0884, high=1.0910, low=1.0880, close=1.0908)
-    assert eval_block(buy, bull_cur, bear_prev, 1.0), "genuine BUY engulfing did not fire"
-    assert ref_bull(bull_cur, bear_prev, 1.0), "reference disagrees on genuine BUY"
-
-    bull_prev = Bar(open=1.0885, high=1.0910, low=1.0880, close=1.0908)
-    bear_cur = Bar(open=1.0909, high=1.0912, low=1.0870, close=1.0872)
-    assert eval_block(sell, bear_cur, bull_prev, 1.0), "genuine SELL engulfing did not fire"
-    assert ref_bear(bear_cur, bull_prev, 1.0), "reference disagrees on genuine SELL"
-
-    # 3. exhaustive-ish equivalence with the reference detectors
+    # 3. source vs reference over random pairs. ratio != 1 is included on purpose:
+    #    the SELL side used to divide by InpBodyRatioMult while the BUY side
+    #    multiplied, which is invisible at the default 1.0.
     rng = random.Random(11)
-    mism_b = mism_s = 0
-    for _ in range(5000):
-        prev, cur = rand_bar(rng), rand_bar(rng)
-        if eval_block(buy, cur, prev, 1.0) != ref_bull(cur, prev, 1.0):
-            mism_b += 1
-        if eval_block(sell, cur, prev, 1.0) != ref_bear(cur, prev, 1.0):
-            mism_s += 1
-    assert mism_b == 0 and mism_s == 0, \
-        "closed-bar predicate diverged from reference: buy=%d sell=%d" % (mism_b, mism_s)
+    fired_b = fired_s = 0
+    for ratio in (1.0, 1.0, 1.7, 0.5):
+        for _ in range(2500):
+            prev, cur = rand_bar(rng), rand_bar(rng)
+            got_b, want_b = fire(buy, cur, prev, ratio), ref_bull(cur, prev, ratio)
+            got_s, want_s = fire(sell, cur, prev, ratio), ref_bear(cur, prev, ratio)
+            assert got_b == want_b, \
+                "BUY source disagrees with reference (ratio %s): %s %s %s %s" % (
+                    ratio, cur, prev, got_b, want_b)
+            assert got_s == want_s, \
+                "SELL source disagrees with reference (ratio %s): %s %s %s %s" % (
+                    ratio, cur, prev, got_s, want_s)
+            fired_b += got_b
+            fired_s += got_s
+    assert fired_b > 0 and fired_s > 0, \
+        "one detector never fired over 10000 pairs (buy=%d sell=%d)" % (fired_b, fired_s)
 
-    print("test_tf_close: OK (prev-direction enforced, genuine engulfings fire,"
-          " 0 mismatches vs reference over 5000 random pairs)")
+    # 4. the two sides must use the same body convention
+    body_b = dict(buy["bools"])["is_stronger_body"]
+    body_s = dict(sell["bools"])["is_stronger_body"]
+    assert "<" not in body_s and ">" in body_s, \
+        "SELL body condition is inverted/asymmetric with BUY: %s" % body_s
+    assert ("* InpBodyRatioMult" in body_b) and ("* InpBodyRatioMult" in body_s), \
+        "body conditions do not share the multiplier convention"
+
+    print("test_detector: OK (source == reference over 10000 pairs incl. ratio 1.7/0.5,"
+          " %d buy + %d sell fires, both sides multiply)" % (fired_b, fired_s))
+
+
+def check_tf_close_wiring():
+    """TF CLOSE must reuse the seconds-mode detector, not its own copy.
+
+    The duplicated copy is what let the two modes disagree. This also re-checks
+    the ordering that broke TF CLOSE once before: the closed-bar branch has to be
+    reached before the live-candle gate, or it can never fire.
+    """
+    src = open(SRC).read()
+
+    for token in ("c_bear_prev", "c_bull_prev", "c_body", "c_break", "c_cover",
+                  "r_check"):
+        assert token not in src, \
+            "the duplicated TF CLOSE predicate is back (%s); the two modes can drift" % token
+
+    # The shift parameter must actually be read, or TF CLOSE silently looks at the
+    # live candle again -- exactly the bug this wiring exists to prevent.
+    assert src.count("CopyRates(sym, tf, shift, 3, rates)") == 2, \
+        "the detector takes a shift but ignores it"
+
+    for name, field in (("IsStrongBullish", "bull"), ("IsStrongBearish", "bear")):
+        tfclose = "%sEngulfingBreak(sym, sig_tf, 1," % name
+        live = "%sEngulfingBreak(sym, sig_tf, 0," % name
+        assert tfclose in src, "%s: TF CLOSE does not call the shared detector" % name
+        assert live in src, "%s: seconds mode lost its detector call" % name
+        assert src.index(tfclose) < src.index(live), (
+            "%s: the live gate runs before the TF CLOSE branch, so TF CLOSE can "
+            "never fire (the original bug)" % name)
+        assert "%s_last_checked_bar[slot] = cur_bar_open_time;" % field in src, \
+            "%s: no per-bar guard" % field
+
+    # A rule that was just created/loaded/reactivated stores 0, and the first tick
+    # must arm it rather than judge a candle that closed before the rule existed.
+    assert src.count("prev_chk != 0") == 2, \
+        "the freshly-armed guard is missing, so a stale candle can fire a signal"
+
+    # The log must name the candle that fired, so the user can check it on a chart
+    # instead of trusting this file.
+    assert src.count('" | Signal bar: " + TimeToString(sig_bar_time)') == 2, \
+        "entry log no longer names the signal bar; the user cannot verify an entry"
+
+    print("test_tf_close_wiring: OK (one shared detector, TF CLOSE before the live"
+          " gate, freshly-armed rules skip one candle, signal bar logged)")
 
 
 def check_sequential_entry():
@@ -219,7 +302,7 @@ def check_price_range_order():
                 if l.strip().startswith("if(min_val > 0")]
     assert cmp_line, "could not find the range comparison in the source"
     expr = cmp_line[0][3:].rstrip(")").strip()
-    expr = expr.replace("&&", " and ").replace("||", " or ")
+    expr = py(expr)
 
     def hit(price, a, b):
         lo, hi = (a, b) if a <= b else (b, a)      # mirrors the source swap
@@ -240,7 +323,8 @@ def check_price_range_order():
 
 if __name__ == "__main__":
     try:
-        demo()
+        check_detector()
+        check_tf_close_wiring()
         check_sequential_entry()
         check_price_range_order()
     except Exception as exc:  # noqa: BLE001 - a test, any failure is a failure

@@ -280,12 +280,15 @@ int CandidateTFs(const ENUM_TIMEFRAMES rule_tf, ENUM_TIMEFRAMES &out[])
 //+------------------------------------------------------------------+
 //| REALTIME STRONG BULLISH ENGULFING BREAK DETECTION                |
 //+------------------------------------------------------------------+
-bool IsStrongBullishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf,
+// ponytail: shift=0 reads the live candle (seconds mode), shift=1 the bar that
+// just closed (TF CLOSE mode). One predicate for both modes: the hand-typed
+// TF CLOSE copy this replaces had drifted (SELL body divided in live mode).
+bool IsStrongBullishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf, const int shift,
                                    double &out_atr_50, double &out_broken_low, double &out_cur_price)
 {
    MqlRates rates[];
    ArraySetAsSeries(rates, true);
-   if(CopyRates(sym, tf, 0, 3, rates) < 3) return false;
+   if(CopyRates(sym, tf, shift, 3, rates) < 3) return false;
    
    double cur_open  = rates[0].open;
    double cur_close = rates[0].close;
@@ -314,12 +317,12 @@ bool IsStrongBullishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf,
 //+------------------------------------------------------------------+
 //| REALTIME STRONG BEARISH ENGULFING BREAK DETECTION                |
 //+------------------------------------------------------------------+
-bool IsStrongBearishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf,
+bool IsStrongBearishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf, const int shift,
                                    double &out_atr_50, double &out_broken_high, double &out_cur_price)
 {
    MqlRates rates[];
    ArraySetAsSeries(rates, true);
-   if(CopyRates(sym, tf, 0, 3, rates) < 3) return false;
+   if(CopyRates(sym, tf, shift, 3, rates) < 3) return false;
    
    double cur_open  = rates[0].open;
    double cur_close = rates[0].close;
@@ -338,7 +341,9 @@ bool IsStrongBearishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf,
    bool is_bearish_running = (cur_close < cur_open);
    bool is_breaking_low    = (cur_close <= prev_low || cur_low <= prev_low);
    bool is_covering_high   = (cur_high >= prev_high);
-   bool is_stronger_body   = ((prev_close - prev_open) < (cur_open - cur_close) * InpBodyRatioMult);
+   // ponytail: unified with the BUY side (multiply). This used to divide, so
+   // seconds mode and TF CLOSE disagreed whenever InpBodyRatioMult != 1.
+   bool is_stronger_body   = ((cur_open - cur_close) > (prev_close - prev_open) * InpBodyRatioMult);
    
    if(is_bearish_running && is_breaking_low && is_covering_high && is_stronger_body)
       return true;
@@ -1689,45 +1694,29 @@ void OnTick()
             
             if(g_rules[r].delay_is_tf_close)
             {
-               // ponytail: closed-bar mode reads the just-closed candle of the SIGNAL
-               // tf (M1 signal -> M1 close, M5 signal -> M5 close) and skips the
-               // live-candle IsStrong*EngulfingBreak gate entirely. That gate reads
-               // bar 0 (still forming) and re-reads a different bar once the TF rolls,
-               // so it could never fire on the bar that just closed. The predicate
-               // below mirrors IsStrong*EngulfingBreak, including the requirement
-               // that the previous candle be bearish.
-               if(g_rules[r].bull_last_checked_bar[slot] != cur_bar_open_time)
+               // ponytail: TF CLOSE reuses the seconds-mode detector shifted one bar
+               // back (shift=1), so both modes share one predicate and cannot drift.
+               datetime prev_chk = g_rules[r].bull_last_checked_bar[slot];
+               if(prev_chk != cur_bar_open_time)
                {
                   g_rules[r].bull_last_checked_bar[slot] = cur_bar_open_time;
-                  MqlRates r_check[];
-                  ArraySetAsSeries(r_check, true);
-                  if(CopyRates(sym, sig_tf, 1, 2, r_check) >= 2)
+                  // prev_chk == 0 means the rule was just created, loaded or
+                  // reactivated: this candle closed before the rule existed, so it is
+                  // armed here and skipped rather than judged as a fresh signal.
+                  if(prev_chk != 0 &&
+                     IsStrongBullishEngulfingBreak(sym, sig_tf, 1, atr_dummy, broken_level, cur_price) &&
+                     EvaluatePriceFilter(cur_price, g_rules[r].bull_price_filter))
                   {
-                     // prev candle must be bearish, same requirement as
-                     // IsStrongBullishEngulfingBreak(). Without it c_body compares a
-                     // positive body against a NEGATIVE (r1.open-r1.close) on a bullish
-                     // prev, so every red candle passes -- measured ~1% false fires.
-                     bool c_bear_prev = (r_check[1].close < r_check[1].open);
-                     bool c_bull  = (r_check[0].close > r_check[0].open);
-                     bool c_break = (r_check[0].close >= r_check[1].high || r_check[0].high >= r_check[1].high);
-                     bool c_cover = (r_check[0].low <= r_check[1].low);
-                     bool c_body  = ((r_check[0].close - r_check[0].open) > (r_check[1].open - r_check[1].close) * InpBodyRatioMult);
-                     
-                     if(c_bear_prev && c_bull && c_break && c_cover && c_body && EvaluatePriceFilter(r_check[0].close, g_rules[r].bull_price_filter))
-                     {
-                        trigger_buy = true;
-                        // No last_bull_bar write: the duplicate-tick guard for this
-                        // mode is bull_last_checked_bar, stamped above. Writing
-                        // last_bull_bar here only fed the seconds-mode reader.
-                        broken_level = r_check[1].low;
-                     }
+                     trigger_buy = true;
+                     // No last_bull_bar write: the duplicate-tick guard for this mode
+                     // is bull_last_checked_bar, stamped above.
                   }
                }
             }
             else
             {
                // Seconds mode keeps the live-candle gates, evaluated per signal TF
-               if(!IsStrongBullishEngulfingBreak(sym, sig_tf, atr_dummy, broken_level, cur_price)) continue;
+               if(!IsStrongBullishEngulfingBreak(sym, sig_tf, 0, atr_dummy, broken_level, cur_price)) continue;
                if(!EvaluatePriceFilter(cur_price, g_rules[r].bull_price_filter)) continue;
                if(g_rules[r].last_bull_bar[slot] == cur_bar_open_time) continue;
                
@@ -1754,6 +1743,11 @@ void OnTick()
             
             if(!trigger_buy) continue;
             
+            // ponytail: TF CLOSE fires on the bar that just closed (one bar back), so
+            // log that bar's open time; the user can point at it on the chart.
+            datetime sig_bar_time = g_rules[r].delay_is_tf_close
+                                    ? (datetime)(cur_bar_open_time - PeriodSeconds(sig_tf))
+                                    : cur_bar_open_time;
             double sl_price = broken_level - atr_50;
             double sl_dist  = ask - sl_price;
             if(sl_dist <= 0) continue;
@@ -1780,6 +1774,8 @@ void OnTick()
                   
                   string msg = StringFormat("[AUTO TRADER - ORDER OPENED (%d/%d)]\nSymbol: %s (%s signal)\nTicket: #%d (BUY)\nLot: %.2f | Ask: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)",
                                             m + 1, mult, sym, EnumToString(sig_tf), deal_tkt, lots, ask, sl_price, tp_price, g_rules[r].risk_reward_ratio);
+                  // ponytail: name the candle that fired, so the user can check it
+                  msg += " | Signal bar: " + TimeToString(sig_bar_time);
                   if(InpEnableSoundAlerts) Alert(msg);
                   if(InpEnablePushAlerts)  SendNotification(msg);
                }
@@ -1819,35 +1815,27 @@ void OnTick()
             
             if(g_rules[r].delay_is_tf_close)
             {
-               // Same fix as BUY: read the just-closed candle of the SIGNAL tf.
-               // See the BUY branch for why the live-candle gate cannot work here.
-               if(g_rules[r].bear_last_checked_bar[slot] != cur_bar_open_time)
+               // Same as BUY: seconds-mode detector shifted one bar back (shift=1).
+               datetime prev_chk = g_rules[r].bear_last_checked_bar[slot];
+               if(prev_chk != cur_bar_open_time)
                {
                   g_rules[r].bear_last_checked_bar[slot] = cur_bar_open_time;
-                  MqlRates r_check[];
-                  ArraySetAsSeries(r_check, true);
-                  if(CopyRates(sym, sig_tf, 1, 2, r_check) >= 2)
+                  // prev_chk == 0 means the rule was just created, loaded or
+                  // reactivated: this candle closed before the rule existed, so it is
+                  // armed here and skipped rather than judged as a fresh signal.
+                  if(prev_chk != 0 &&
+                     IsStrongBearishEngulfingBreak(sym, sig_tf, 1, atr_dummy, broken_level, cur_price) &&
+                     EvaluatePriceFilter(cur_price, g_rules[r].bear_price_filter))
                   {
-                     // prev candle must be bullish; mirrors IsStrongBearishEngulfingBreak()
-                     bool c_bull_prev = (r_check[1].close > r_check[1].open);
-                     bool c_bear  = (r_check[0].close < r_check[0].open);
-                     bool c_break = (r_check[0].close <= r_check[1].low || r_check[0].low <= r_check[1].low);
-                     bool c_cover = (r_check[0].high >= r_check[1].high);
-                     bool c_body  = ((r_check[0].open - r_check[0].close) > (r_check[1].close - r_check[1].open) * InpBodyRatioMult);
-                     
-                     if(c_bull_prev && c_bear && c_break && c_cover && c_body && EvaluatePriceFilter(r_check[0].close, g_rules[r].bear_price_filter))
-                     {
-                        trigger_sell = true;
-                        // No last_bear_bar write: see the BUY branch note.
-                        broken_level = r_check[1].high;
-                     }
+                     trigger_sell = true;
+                     // No last_bear_bar write: see the BUY branch note.
                   }
                }
             }
             else
             {
                // Seconds mode keeps the live-candle gates, evaluated per signal TF
-               if(!IsStrongBearishEngulfingBreak(sym, sig_tf, atr_dummy, broken_level, cur_price)) continue;
+               if(!IsStrongBearishEngulfingBreak(sym, sig_tf, 0, atr_dummy, broken_level, cur_price)) continue;
                if(!EvaluatePriceFilter(cur_price, g_rules[r].bear_price_filter)) continue;
                if(g_rules[r].last_bear_bar[slot] == cur_bar_open_time) continue;
                
@@ -1873,6 +1861,10 @@ void OnTick()
             
             if(!trigger_sell) continue;
             
+            // See the BUY branch: the logged bar is the one TF CLOSE judged.
+            datetime sig_bar_time = g_rules[r].delay_is_tf_close
+                                    ? (datetime)(cur_bar_open_time - PeriodSeconds(sig_tf))
+                                    : cur_bar_open_time;
             double sl_price = broken_level + atr_50 + spread;
             double sl_dist  = sl_price - bid;
             if(sl_dist <= 0) continue;
@@ -1899,6 +1891,7 @@ void OnTick()
                   
                   string msg = StringFormat("[AUTO TRADER - ORDER OPENED (%d/%d)]\nSymbol: %s (%s signal)\nTicket: #%d (SELL)\nLot: %.2f | Bid: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)",
                                             m + 1, mult_s, sym, EnumToString(sig_tf), deal_tkt, lots, bid, sl_price, tp_price, g_rules[r].risk_reward_ratio);
+                  msg += " | Signal bar: " + TimeToString(sig_bar_time);
                   if(InpEnableSoundAlerts) Alert(msg);
                   if(InpEnablePushAlerts)  SendNotification(msg);
                }
