@@ -163,6 +163,67 @@ ENUM_TIMEFRAMES AtrBaseTF(const ENUM_TIMEFRAMES tf);
 double CalculateATR50(const string sym, const ENUM_TIMEFRAMES tf, int period);
 
 //+------------------------------------------------------------------+
+//| FLEXIBLE PRICE FILTER EVALUATION (<, >, <=, >=, RANGE, ALL)       |
+//+------------------------------------------------------------------+
+bool EvaluatePriceFilter(double price, string filter_str)
+{
+   StringTrimLeft(filter_str);
+   StringTrimRight(filter_str);
+   StringToUpper(filter_str);
+   
+   if(filter_str == "" || filter_str == "ALL" || filter_str == "BEBAS" || filter_str == "FREE")
+      return true;
+      
+   int dash_pos = StringFind(filter_str, "-");
+   if(dash_pos > 0)
+   {
+      string s_min = StringSubstr(filter_str, 0, dash_pos);
+      string s_max = StringSubstr(filter_str, dash_pos + 1);
+      StringTrimLeft(s_min); StringTrimRight(s_min);
+      StringTrimLeft(s_max); StringTrimRight(s_max);
+      
+      double min_val = StringToDouble(s_min);
+      double max_val = StringToDouble(s_max);
+      if(min_val > max_val)
+      {
+         double tmp = min_val;
+         min_val = max_val;
+         max_val = tmp;
+      }
+      if(min_val > 0 && max_val > 0 && price >= min_val && price <= max_val)
+         return true;
+      return false;
+   }
+   
+   if(StringFind(filter_str, "<=") == 0)
+   {
+      double val = StringToDouble(StringSubstr(filter_str, 2));
+      return (price <= val);
+   }
+   if(StringFind(filter_str, ">=") == 0)
+   {
+      double val = StringToDouble(StringSubstr(filter_str, 2));
+      return (price >= val);
+   }
+   if(StringFind(filter_str, "<") == 0)
+   {
+      double val = StringToDouble(StringSubstr(filter_str, 1));
+      return (price < val);
+   }
+   if(StringFind(filter_str, ">") == 0)
+   {
+      double val = StringToDouble(StringSubstr(filter_str, 1));
+      return (price > val);
+   }
+   
+   double exact_val = StringToDouble(filter_str);
+   if(exact_val > 0)
+      return (MathAbs(price - exact_val) < 0.00001);
+      
+   return true;
+}
+
+//+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit()
