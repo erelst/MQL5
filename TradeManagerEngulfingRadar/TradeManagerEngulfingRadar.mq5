@@ -145,8 +145,8 @@ void DestroyDashboardUI();
 void CheckAutoBETriggers();
 void CheckEngulfingRadar();
 void ProcessEngulfingForSymbol(int index);
-bool IsStrongBullishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf, double &out_atr_50, double &out_broken_range, double &out_cur_price, double &out_broken_high, double &out_broken_low);
-bool IsStrongBearishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf, double &out_atr_50, double &out_broken_range, double &out_cur_price, double &out_broken_high, double &out_broken_low);
+bool IsStrongBullishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf, const int shift, double &out_atr_50, double &out_broken_range, double &out_cur_price, double &out_broken_high, double &out_broken_low);
+bool IsStrongBearishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf, const int shift, double &out_atr_50, double &out_broken_range, double &out_cur_price, double &out_broken_high, double &out_broken_low);
 void ApplyBulkSL(double sl_price);
 void ApplyBulkTP(double tp_price);
 void ApplyInstantBESpread();
@@ -551,11 +551,11 @@ void ProcessEngulfingForSymbol(int index)
    
    // ponytail: M5 watches also accept M1 signals; every other TF stays exclusive
    ENUM_TIMEFRAMES sig_tf_bull = tf;
-   bool bull_hit = IsStrongBullishEngulfingBreak(sym, tf, atr_50, broken_range, cur_price, broken_high, broken_low);
+   bool bull_hit = IsStrongBullishEngulfingBreak(sym, tf, 0, atr_50, broken_range, cur_price, broken_high, broken_low);
    if(!bull_hit && tf == PERIOD_M5)
    {
       double atr_m1 = 0.0;
-      if(IsStrongBullishEngulfingBreak(sym, PERIOD_M1, atr_m1, broken_range, cur_price, broken_high, broken_low))
+      if(IsStrongBullishEngulfingBreak(sym, PERIOD_M1, 0, atr_m1, broken_range, cur_price, broken_high, broken_low))
       {
          bull_hit = true;
          sig_tf_bull = PERIOD_M1;
@@ -565,11 +565,11 @@ void ProcessEngulfingForSymbol(int index)
    double atr_50_bear = 0.0;
    double br_bear = 0.0, bh_bear = 0.0, bl_bear = 0.0;
    ENUM_TIMEFRAMES sig_tf_bear = tf;
-   bool bear_hit = IsStrongBearishEngulfingBreak(sym, tf, atr_50_bear, br_bear, cur_price, bh_bear, bl_bear);
+   bool bear_hit = IsStrongBearishEngulfingBreak(sym, tf, 0, atr_50_bear, br_bear, cur_price, bh_bear, bl_bear);
    if(!bear_hit && tf == PERIOD_M5)
    {
       double atr_m1 = 0.0;
-      if(IsStrongBearishEngulfingBreak(sym, PERIOD_M1, atr_m1, br_bear, cur_price, bh_bear, bl_bear))
+      if(IsStrongBearishEngulfingBreak(sym, PERIOD_M1, 0, atr_m1, br_bear, cur_price, bh_bear, bl_bear))
       {
          bear_hit = true;
          sig_tf_bear = PERIOD_M1;
@@ -683,13 +683,13 @@ double CalculateATR50(const string sym, const ENUM_TIMEFRAMES tf, int period)
    return (atr * 0.5); // 50% ATR
 }
 //+------------------------------------------------------------------+
-bool IsStrongBullishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf,
+bool IsStrongBullishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf, const int shift,
                                    double &out_atr_50, double &out_broken_range, double &out_cur_price,
                                    double &out_broken_high, double &out_broken_low)
 {
    MqlRates rates[];
    ArraySetAsSeries(rates, true);
-   if(CopyRates(sym, tf, 0, 3, rates) < 3) return false;
+   if(CopyRates(sym, tf, shift, 3, rates) < 3) return false;
    
    // rates[0] = Current active live forming candle
    // rates[1] = Previous candle (the candle being engulfed & broken)
@@ -734,13 +734,13 @@ bool IsStrongBullishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf,
 //+------------------------------------------------------------------+
 //| REALTIME TICK-LEVEL STRONG BEARISH ENGULFING BREAK               |
 //+------------------------------------------------------------------+
-bool IsStrongBearishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf,
+bool IsStrongBearishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf, const int shift,
                                    double &out_atr_50, double &out_broken_range, double &out_cur_price,
                                    double &out_broken_high, double &out_broken_low)
 {
    MqlRates rates[];
    ArraySetAsSeries(rates, true);
-   if(CopyRates(sym, tf, 0, 3, rates) < 3) return false;
+   if(CopyRates(sym, tf, shift, 3, rates) < 3) return false;
    
    // rates[0] = Current active live forming candle
    // rates[1] = Previous candle (the candle being engulfed & broken)
