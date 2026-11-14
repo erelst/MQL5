@@ -182,9 +182,20 @@ Dua catatan tambahan:
 - **Master power OFF berbeda dari auto-pause.** `if(!g_master_power_enabled) return;` berada **sebelum** `ProcessAutoTrailSLTP()`, jadi mematikan master power menghentikan trail juga.
 - **Trail butuh TP > 0.** Baris `if(cur_tp <= 0) continue;` membuat posisi tanpa TP tidak pernah di-trail, karena trail dihitung dari sisa jarak ke TP.
 
+## 6. Auto Trail SL/TP & Pemisahan Syarat ATR Exploding
+
+Mekanisme `ProcessAutoTrailSLTP()` mencakup dua hal:
+1. **Auto Trail SL (BE & Locked to Prev TP):** Memindahkan SL ke BreakEven + spread saat harga mendekati TP, lalu mengunci SL ke TP sebelumnya pada siklus berikutnya.
+2. **Auto Trail TP (TP Extension):** Memperpanjang TP sejauh `initial_tp_dist` saat volatilitas (ATR) meledak.
+
+**Penting (Pemisahan Syarat ATR Exploding):**
+Sebelumnya, syarat `atr_exploding` diletakkan *di dalam* gerbang jarak dekat TP (`remaining_dist <= total_dist * trigger_ratio`, default 5% menjelang TP). Akibatnya, TP tidak pernah tertrailing karena harga sering keburu *Hit TP* sebelum sempat mengevaluasi ATR di ujung akhir.
+- Saat ini, syarat `atr_exploding` dan syarat jarak dekat TP **dipisah secara independen**.
+- Begitu ATR memenuhi syarat multiplier (`current_atr100 >= initial_atr100 * atr_multiplier`), TP langsung diperpanjang sejak dini tanpa harus menunggu harga mendekati TP awal.
+
 ---
 
-## 6. Format File State (Versioning)
+## 7. Format File State (Versioning)
 
 File state biner (`*_State_<login>.bin`) memakai header versi agar upgrade tidak menghapus konfigurasi Anda.
 
