@@ -1580,8 +1580,8 @@ void CreateDashboardUI()
          else if(tf_e == PERIOD_D1) default_tf = "1440";
       }
       
-      string default_bull = "";
-      string default_bear = "";
+      string default_bull = "ALL";
+      string default_bear = "ALL";
       string default_delay = "0";
       if(is_edit)
       {
@@ -1604,16 +1604,31 @@ void CreateDashboardUI()
       color  mode_btn_clr = g_form_delay_close ? CLR_GOLD_NEON : CLR_CYAN_NEON;
       CreateButton("BTN_TOGGLE_RADAR_MODE", root_x + 110, add_deck_y + 64, 255, 22, mode_btn_txt, CLR_CANVAS_BG, mode_btn_clr, CLR_BORDER_HARD);
       
-      CreateLabel("LBL_F_DELAY", root_x + 28, add_deck_y + 94, "DELAY (DETIK):", CLR_TEXT_MED, 8, true);
-      CreateEdit("INP_NEW_DELAY", root_x + 110, add_deck_y + 90, 255, 22, default_delay, CLR_CANVAS_BG, CLR_TEXT_PURE);
-      
-      CreateLabel("LBL_F_BULL", root_x + 28, add_deck_y + 120, "BULLISH :", CLR_BULL_NEON, 8, true);
-      CreateEdit("INP_NEW_BULL", root_x + 110, add_deck_y + 116, 255, 22, default_bull, CLR_CANVAS_BG, CLR_TEXT_PURE);
-      
-      CreateLabel("LBL_F_BEAR", root_x + 28, add_deck_y + 152, "BEARISH :", CLR_BEAR_NEON, 8, true);
-      CreateEdit("INP_NEW_BEAR", root_x + 110, add_deck_y + 148, 255, 22, default_bear, CLR_CANVAS_BG, CLR_TEXT_PURE);
-      
-      CreateLabel("LBL_F_HINT", root_x + 28, add_deck_y + 180, "Isi: >65724  <64164  <=  >=  64164-65814  ALL  (kosong=off)", CLR_TEXT_MED, 7, false);
+      // DELAY field only visible in SECONDS mode
+      if(!g_form_delay_close)
+      {
+         CreateLabel("LBL_F_DELAY", root_x + 28, add_deck_y + 94, "DELAY (DETIK):", CLR_TEXT_MED, 8, true);
+         CreateEdit("INP_NEW_DELAY", root_x + 110, add_deck_y + 90, 255, 22, default_delay, CLR_CANVAS_BG, CLR_TEXT_PURE);
+         
+         CreateLabel("LBL_F_BULL", root_x + 28, add_deck_y + 120, "BULLISH :", CLR_BULL_NEON, 8, true);
+         CreateEdit("INP_NEW_BULL", root_x + 110, add_deck_y + 116, 255, 22, default_bull, CLR_CANVAS_BG, CLR_TEXT_PURE);
+         
+         CreateLabel("LBL_F_BEAR", root_x + 28, add_deck_y + 152, "BEARISH :", CLR_BEAR_NEON, 8, true);
+         CreateEdit("INP_NEW_BEAR", root_x + 110, add_deck_y + 148, 255, 22, default_bear, CLR_CANVAS_BG, CLR_TEXT_PURE);
+         
+         CreateLabel("LBL_F_HINT", root_x + 28, add_deck_y + 180, "Isi: >65724  <64164  <=  >=  64164-65814  ALL  (kosong=off)", CLR_TEXT_MED, 7, false);
+      }
+      else
+      {
+         // TF CLOSE mode: no delay field, hint for TF close
+         CreateLabel("LBL_F_BULL", root_x + 28, add_deck_y + 94, "BULLISH :", CLR_BULL_NEON, 8, true);
+         CreateEdit("INP_NEW_BULL", root_x + 110, add_deck_y + 90, 255, 22, default_bull, CLR_CANVAS_BG, CLR_TEXT_PURE);
+         
+         CreateLabel("LBL_F_BEAR", root_x + 28, add_deck_y + 126, "BEARISH :", CLR_BEAR_NEON, 8, true);
+         CreateEdit("INP_NEW_BEAR", root_x + 110, add_deck_y + 122, 255, 22, default_bear, CLR_CANVAS_BG, CLR_TEXT_PURE);
+         
+         CreateLabel("LBL_F_HINT", root_x + 28, add_deck_y + 156, "Alert di TF CLOSE: gunakan ALL atau operator (< > <= >= range). Kosong = off.", CLR_TEXT_MED, 7, false);
+      }
       
       if(is_edit)
       {
