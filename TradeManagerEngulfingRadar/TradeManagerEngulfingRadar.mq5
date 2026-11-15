@@ -1592,12 +1592,12 @@ void CreateDashboardUI()
       string form_title = is_edit ? "EDIT SELECTED RADAR" : "ADD SYMBOL TO RADAR";
       CreateLabel("LBL_ADD_RADAR", root_x + 28, add_deck_y + 10, form_title, is_edit ? CLR_GOLD_NEON : CLR_CYAN_NEON, 9, true);
       
-      string default_sym = is_edit ? g_form_sym : _Symbol;
-      string default_tf  = is_edit ? g_form_tf : "5";
+      string default_sym = g_form_sym;
+      string default_tf  = g_form_tf;
       
-      string default_bull = is_edit ? g_form_bull : "ALL";
-      string default_bear = is_edit ? g_form_bear : "ALL";
-      string default_delay = is_edit ? IntegerToString(g_form_delay_sec) : "0";
+      string default_bull = g_form_bull;
+      string default_bear = g_form_bear;
+      string default_delay = IntegerToString(g_form_delay_sec);
       
       CreateLabel("LBL_F_SYM", root_x + 28, add_deck_y + 38, "SYMBOL:", CLR_TEXT_MED, 8, true);
       CreateEdit("INP_NEW_SYM", root_x + 110, add_deck_y + 34, 120, 22, default_sym, CLR_CANVAS_BG, CLR_TEXT_PURE);
