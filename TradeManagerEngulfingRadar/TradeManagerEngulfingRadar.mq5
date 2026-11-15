@@ -90,6 +90,12 @@ SSelectedOrder    g_selected_orders[];
 
 int               g_active_tab = 1; // 1 = Orders Tab, 2 = Radar Tab
 bool                 g_form_delay_close = false;
+// Persistent Add/Edit Radar form state (mirrors AutoTrader g_form_* pattern).
+string               g_form_sym          = _Symbol;
+string               g_form_tf           = "5";
+string               g_form_bull         = "ALL";
+string               g_form_bear         = "ALL";
+int                  g_form_delay_sec    = 0;
 int               g_orders_page = 0;
 int               g_editing_radar_idx = -1; // -1 = Add mode, >= 0 = Edit mode index
 ENUM_BE_OFFSET_MODE g_be_offset_mode = BE_OFFSET_AUTO_SPREAD; // Selected Offset Mode for Trigger
@@ -403,13 +409,13 @@ void OnChartEvent(const int id,
       // Add / Update Watchlist Symbol
       else if(sparam == g_prefix + "BTN_ADD_RADAR")
       {
-         string raw_sym = ObjectGetString(0, g_prefix + "INP_NEW_SYM", OBJPROP_TEXT);
+         string raw_sym = g_form_sym;
          string matched_sym = FindExactOrMarketWatchSymbol(raw_sym);
          
          if(matched_sym != "")
          {
-            string str_bull = ObjectGetString(0, g_prefix + "INP_NEW_BULL", OBJPROP_TEXT);
-            string str_bear = ObjectGetString(0, g_prefix + "INP_NEW_BEAR", OBJPROP_TEXT);
+            string str_bull = g_form_bull;
+            string str_bear = g_form_bear;
             StringTrimLeft(str_bull); StringTrimRight(str_bull);
             StringTrimLeft(str_bear); StringTrimRight(str_bear);
             
@@ -422,7 +428,7 @@ void OnChartEvent(const int id,
                return;
             }
             
-            int tf_idx = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_NEW_TF", OBJPROP_TEXT));
+            int tf_idx = (int)StringToInteger(g_form_tf);
             ENUM_TIMEFRAMES tf = PERIOD_M5;
             if(tf_idx == 1) tf = PERIOD_M1;
             else if(tf_idx == 5) tf = PERIOD_M5;
@@ -432,7 +438,7 @@ void OnChartEvent(const int id,
             else if(tf_idx == 240) tf = PERIOD_H4;
             else if(tf_idx == 1440) tf = PERIOD_D1;
             
-            int delay_sec = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_NEW_DELAY", OBJPROP_TEXT));
+            int delay_sec = g_form_delay_sec;
             if(delay_sec < 0) delay_sec = 0;
             
             if(g_editing_radar_idx >= 0 && g_editing_radar_idx < ArraySize(g_radar_symbols))
@@ -444,6 +450,11 @@ void OnChartEvent(const int id,
             {
                AddRadarSymbol(matched_sym, tf, has_bull, str_bull, has_bear, str_bear, InpDefaultATRPeriod, g_form_delay_close, delay_sec);
             }
+            
+            // Persist typed values so they survive rebuilds (mirrors AutoTrader)
+            g_form_delay_sec = delay_sec;
+            g_form_bull      = str_bull;
+            g_form_bear      = str_bear;
             
             SaveStateToFile();
             CreateDashboardUI();
@@ -460,11 +471,16 @@ void OnChartEvent(const int id,
          UpdateDashboardUI();
          return;
       }
-      // Reset Radar Form
-      else if(sparam == g_prefix + "BTN_RESET_RADAR")
+      // Reset Radar Form / Cancel Edit (both reset to add-mode defaults)
+      else if(sparam == g_prefix + "BTN_RESET_RADAR" || sparam == g_prefix + "BTN_CANCEL_EDIT")
       {
          g_editing_radar_idx = -1;
-         g_form_delay_close = false;
+         g_form_delay_close  = false;
+         g_form_sym          = _Symbol;
+         g_form_tf           = "5";
+         g_form_bull         = "ALL";
+         g_form_bear         = "ALL";
+         g_form_delay_sec    = 0;
          CreateDashboardUI();
          UpdateDashboardUI();
          return;
@@ -534,6 +550,20 @@ void OnChartEvent(const int id,
          if(idx >= 0 && idx < ArraySize(g_radar_symbols))
          {
             g_editing_radar_idx = idx;
+            // Copy selected radar into persistent form globals (single source of truth)
+            g_form_delay_close  = g_radar_symbols[idx].delay_is_tf_close;
+            g_form_delay_sec    = g_radar_symbols[idx].delay_seconds;
+            g_form_sym          = g_radar_symbols[idx].symbol;
+            g_form_bull         = g_radar_symbols[idx].bull_enabled ? g_radar_symbols[idx].bull_price_filter : "ALL";
+            g_form_bear         = g_radar_symbols[idx].bear_enabled ? g_radar_symbols[idx].bear_price_filter : "ALL";
+            // normalize TF string from enum value
+            if(g_radar_symbols[idx].timeframe == PERIOD_M1) g_form_tf = "1";
+            else if(g_radar_symbols[idx].timeframe == PERIOD_M5) g_form_tf = "5";
+            else if(g_radar_symbols[idx].timeframe == PERIOD_M15) g_form_tf = "15";
+            else if(g_radar_symbols[idx].timeframe == PERIOD_M30) g_form_tf = "30";
+            else if(g_radar_symbols[idx].timeframe == PERIOD_H1) g_form_tf = "60";
+            else if(g_radar_symbols[idx].timeframe == PERIOD_H4) g_form_tf = "240";
+            else if(g_radar_symbols[idx].timeframe == PERIOD_D1) g_form_tf = "1440";
             CreateDashboardUI();
             UpdateDashboardUI();
          }
@@ -1427,8 +1457,8 @@ void CreateEdit(string name, int x, int y, int w, int h, string text, color bg_c
       ObjectSetInteger(0, name, OBJPROP_ALIGN, ALIGN_CENTER);
       ObjectSetString(0, name, OBJPROP_FONT, "Segoe UI Semibold");
       ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
-      ObjectSetString(0, name, OBJPROP_TEXT, text);
    }
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
    ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
    ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
    ObjectSetInteger(0, name, OBJPROP_XSIZE, w);
