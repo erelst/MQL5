@@ -473,16 +473,10 @@ void OnChartEvent(const int id,
          UpdateDashboardUI();
          return;
       }
-      // Reset Radar Form / Cancel Edit (both reset to add-mode defaults)
+      // Reset Radar Form / Cancel Edit (only clear editing index, keep form values)
       else if(sparam == g_prefix + "BTN_RESET_RADAR" || sparam == g_prefix + "BTN_CANCEL_EDIT")
       {
          g_editing_radar_idx = -1;
-         g_form_delay_close  = false;
-         g_form_sym          = _Symbol;
-         g_form_tf           = "5";
-         g_form_bull         = "ALL";
-         g_form_bear         = "ALL";
-         g_form_delay_sec    = 0;
          CreateDashboardUI();
          UpdateDashboardUI();
          return;
@@ -1875,8 +1869,8 @@ void SaveStateToFile()
    int handle = FileOpen(filename, FILE_WRITE|FILE_BIN);
    if(handle != INVALID_HANDLE)
    {
-      // Version header (4 = string price filters + delay mode + delay_seconds)
-      FileWriteInteger(handle, 4);
+      // Version header (5 = v4 plus persistent Add/Edit form state)
+      FileWriteInteger(handle, 5);
 
       // 0. Save UI Active Tab & Offset Mode
       FileWriteInteger(handle, g_active_tab);
@@ -1933,6 +1927,26 @@ void SaveStateToFile()
       // 3. Global BE fixed price (appended last for backward compatibility)
       FileWriteDouble(handle, g_be_fixed_price);
 
+      // 4. Persistent Add/Edit form state (so re-attach keeps last typed values)
+      int sym_len = StringLen(g_form_sym);
+      FileWriteInteger(handle, sym_len);
+      if(sym_len > 0) FileWriteString(handle, g_form_sym, sym_len);
+
+      int tf_len = StringLen(g_form_tf);
+      FileWriteInteger(handle, tf_len);
+      if(tf_len > 0) FileWriteString(handle, g_form_tf, tf_len);
+
+      int bull_len = StringLen(g_form_bull);
+      FileWriteInteger(handle, bull_len);
+      if(bull_len > 0) FileWriteString(handle, g_form_bull, bull_len);
+
+      int bear_len = StringLen(g_form_bear);
+      FileWriteInteger(handle, bear_len);
+      if(bear_len > 0) FileWriteString(handle, g_form_bear, bear_len);
+
+      FileWriteInteger(handle, g_form_delay_sec);
+      FileWriteInteger(handle, g_form_delay_close ? 1 : 0);
+
       FileClose(handle);
    }
 }
@@ -1960,6 +1974,11 @@ void LoadStateFromFile()
       else if(first == 2)
       {
          version = 2;
+         g_active_tab = FileReadInteger(handle);
+      }
+      else if(first == 5)
+      {
+         version = 5;
          g_active_tab = FileReadInteger(handle);
       }
       else
@@ -2048,6 +2067,32 @@ void LoadStateFromFile()
 
       if(version >= 2 && FileIsEnding(handle) == false)
          g_be_fixed_price = FileReadDouble(handle);
+
+      if(version >= 5 && FileIsEnding(handle) == false)
+      {
+         int form_sym_len = FileReadInteger(handle);
+         string form_sym = "";
+         if(form_sym_len > 0) form_sym = FileReadString(handle, form_sym_len);
+         if(form_sym != "") g_form_sym = form_sym;
+
+         int form_tf_len = FileReadInteger(handle);
+         string form_tf = "5";
+         if(form_tf_len > 0) form_tf = FileReadString(handle, form_tf_len);
+         if(form_tf != "") g_form_tf = form_tf;
+
+         int form_bull_len = FileReadInteger(handle);
+         string form_bull = "ALL";
+         if(form_bull_len > 0) form_bull = FileReadString(handle, form_bull_len);
+         g_form_bull = (form_bull != "") ? form_bull : "ALL";
+
+         int form_bear_len = FileReadInteger(handle);
+         string form_bear = "ALL";
+         if(form_bear_len > 0) form_bear = FileReadString(handle, form_bear_len);
+         g_form_bear = (form_bear != "") ? form_bear : "ALL";
+
+         g_form_delay_sec   = FileReadInteger(handle);
+         g_form_delay_close = (FileReadInteger(handle) == 1);
+      }
 
       FileClose(handle);
    }

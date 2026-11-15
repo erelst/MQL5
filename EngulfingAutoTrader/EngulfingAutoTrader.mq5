@@ -1103,7 +1103,7 @@ void SaveStateToFile()
    if(handle != INVALID_HANDLE)
    {
       FileWriteInteger(handle, g_master_power_enabled ? 1 : 0);
-      FileWriteInteger(handle, 2); // ponytail: format v2 = per-signal-TF slots
+      FileWriteInteger(handle, 3); // v3 = v2 plus persistent form state
       
       int total_rules = ArraySize(g_rules);
       FileWriteInteger(handle, total_rules);
@@ -1138,6 +1138,39 @@ void SaveStateToFile()
          FileWriteInteger(handle, g_rules[i].orders_opened_count);
          FileWriteInteger(handle, g_rules[i].active ? 1 : 0);
       }
+
+      // 3. Persistent Add/Edit form state (so re-attach keeps last typed values)
+      int form_sym_len = StringLen(g_form_sym);
+      FileWriteInteger(handle, form_sym_len);
+      if(form_sym_len > 0) FileWriteString(handle, g_form_sym, form_sym_len);
+
+      int form_tf_len = StringLen(g_form_tf);
+      FileWriteInteger(handle, form_tf_len);
+      if(form_tf_len > 0) FileWriteString(handle, g_form_tf, form_tf_len);
+
+      FileWriteDouble(handle, g_form_rr);
+
+      int form_bf_len = StringLen(g_form_bmax);
+      FileWriteInteger(handle, form_bf_len);
+      if(form_bf_len > 0) FileWriteString(handle, g_form_bmax, form_bf_len);
+
+      int form_sf_len = StringLen(g_form_smin);
+      FileWriteInteger(handle, form_sf_len);
+      if(form_sf_len > 0) FileWriteString(handle, g_form_smin, form_sf_len);
+
+      FileWriteInteger(handle, g_form_delay_sec);
+      FileWriteInteger(handle, g_form_delay_close ? 1 : 0);
+
+      FileWriteInteger(handle, g_form_max_orders);
+      FileWriteInteger(handle, g_form_entry_mult);
+
+      FileWriteInteger(handle, (int)g_form_direction);
+      FileWriteInteger(handle, (int)g_form_lot_mode);
+      FileWriteDouble(handle, g_form_lot_val);
+      FileWriteInteger(handle, g_form_trail_on ? 1 : 0);
+      FileWriteDouble(handle, g_form_trail_pct);
+      FileWriteDouble(handle, g_form_atr_mult);
+
       FileClose(handle);
    }
 }
@@ -1181,9 +1214,9 @@ void LoadStateFromFile()
    if(handle != INVALID_HANDLE)
    {
       g_master_power_enabled = (FileReadInteger(handle) == 1);
-      int state_ver = FileReadInteger(handle); // v2 files carry 2; v1 legacy files landed on the rule count
+      int state_ver = FileReadInteger(handle); // v3 files carry 3; v2 files carry 2; v1 legacy files landed on the rule count
       int total_rules;
-      if(state_ver == 2)
+      if(state_ver == 2 || state_ver == 3)
          total_rules = FileReadInteger(handle);
       else
          total_rules = state_ver; // legacy: this int was the rule count
@@ -1231,6 +1264,47 @@ void LoadStateFromFile()
          }
       }
       FileClose(handle);
+      
+      // 3. Persistent Add/Edit form state (so re-attach keeps last typed values)
+      if(state_ver >= 3 && FileIsEnding(handle) == false)
+      {
+         // Read persistent form state
+         int form_sym_len = FileReadInteger(handle);
+         string form_sym = "";
+         if(form_sym_len > 0) form_sym = FileReadString(handle, form_sym_len);
+         if(form_sym != "") g_form_sym = form_sym;
+
+         int form_tf_len = FileReadInteger(handle);
+         string form_tf = "5";
+         if(form_tf_len > 0) form_tf = FileReadString(handle, form_tf_len);
+         if(form_tf != "") g_form_tf = form_tf;
+
+         double form_rr_val = FileReadDouble(handle);
+         if(form_rr_val > 0) g_form_rr = form_rr_val;
+
+         int form_bf_len = FileReadInteger(handle);
+         string form_bull = "ALL";
+         if(form_bf_len > 0) form_bull = FileReadString(handle, form_bf_len);
+         g_form_bmax = (form_bull != "") ? form_bull : "ALL";
+
+         int form_sf_len = FileReadInteger(handle);
+         string form_bear = "ALL";
+         if(form_sf_len > 0) form_bear = FileReadString(handle, form_sf_len);
+         g_form_smin = (form_bear != "") ? form_bear : "ALL";
+
+         g_form_delay_sec   = FileReadInteger(handle);
+         g_form_delay_close = (FileReadInteger(handle) == 1);
+
+         g_form_max_orders  = FileReadInteger(handle);
+         g_form_entry_mult  = FileReadInteger(handle);
+
+         g_form_direction   = (ENUM_TRADE_DIRECTION)FileReadInteger(handle);
+         g_form_lot_mode    = (ENUM_LOT_MODE)FileReadInteger(handle);
+         g_form_lot_val     = FileReadDouble(handle);
+         g_form_trail_on    = (FileReadInteger(handle) == 1);
+         g_form_trail_pct   = FileReadDouble(handle);
+         g_form_atr_mult    = FileReadDouble(handle);
+      }
    }
 }
 
