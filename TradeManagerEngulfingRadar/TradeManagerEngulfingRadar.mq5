@@ -1520,22 +1520,28 @@ void CreateDashboardUI()
       CreateLabel("LBL_F_TF", root_x + 240, add_deck_y + 38, "TF (MIN):", CLR_TEXT_MED, 8, true);
       CreateEdit("INP_NEW_TF", root_x + 300, add_deck_y + 34, 65, 22, default_tf, CLR_CANVAS_BG, CLR_TEXT_PURE);
       
-      CreateLabel("LBL_F_BULL", root_x + 28, add_deck_y + 68, "BULLISH < :", CLR_BULL_NEON, 8, true);
-      CreateEdit("INP_NEW_BULL", root_x + 110, add_deck_y + 64, 255, 22, default_bull, CLR_CANVAS_BG, CLR_TEXT_PURE);
+      CreateLabel("LBL_F_MODE", root_x + 28, add_deck_y + 68, "MODE:", CLR_TEXT_MED, 8, true);
+      string mode_btn_txt = g_form_delay_close ? "TF CLOSE" : "SECONDS (0)";
+      color  mode_btn_clr = g_form_delay_close ? CLR_GOLD_NEON : CLR_CYAN_NEON;
+      CreateButton("BTN_TOGGLE_RADAR_MODE", root_x + 110, add_deck_y + 64, 255, 22, mode_btn_txt, CLR_CANVAS_BG, mode_btn_clr, CLR_BORDER_HARD);
+
+      CreateLabel("LBL_F_BULL", root_x + 28, add_deck_y + 98, "BULLISH < :", CLR_BULL_NEON, 8, true);
+      CreateEdit("INP_NEW_BULL", root_x + 110, add_deck_y + 94, 255, 22, default_bull, CLR_CANVAS_BG, CLR_TEXT_PURE);
       
-      CreateLabel("LBL_F_BEAR", root_x + 28, add_deck_y + 98, "BEARISH > :", CLR_BEAR_NEON, 8, true);
-      CreateEdit("INP_NEW_BEAR", root_x + 110, add_deck_y + 94, 255, 22, default_bear, CLR_CANVAS_BG, CLR_TEXT_PURE);
+      CreateLabel("LBL_F_BEAR", root_x + 28, add_deck_y + 128, "BEARISH > :", CLR_BEAR_NEON, 8, true);
+      CreateEdit("INP_NEW_BEAR", root_x + 110, add_deck_y + 124, 255, 22, default_bear, CLR_CANVAS_BG, CLR_TEXT_PURE);
       
-      CreateLabel("LBL_F_HINT", root_x + 28, add_deck_y + 118, "*Isi harga, ketik 'ALL' utk bebas, atau kosongkan utk OFF", CLR_TEXT_MED, 7, false);
+      CreateLabel("LBL_F_HINT", root_x + 28, add_deck_y + 148, "*Isi harga, ketik 'ALL' utk bebas, atau kosongkan utk OFF", CLR_TEXT_MED, 7, false);
       
       if(is_edit)
       {
-         CreateButton("BTN_ADD_RADAR", root_x + 28, add_deck_y + 128, 240, 26, "UPDATE SELECTED RADAR", CLR_TAB_ACTIVE_BG, CLR_GOLD_NEON, CLR_GOLD_NEON);
-         CreateButton("BTN_CANCEL_EDIT", root_x + 275, add_deck_y + 128, 90, 26, "CANCEL", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
+         CreateButton("BTN_ADD_RADAR", root_x + 28, add_deck_y + 158, 240, 26, "UPDATE SELECTED RADAR", CLR_TAB_ACTIVE_BG, CLR_GOLD_NEON, CLR_GOLD_NEON);
+         CreateButton("BTN_CANCEL_EDIT", root_x + 275, add_deck_y + 158, 90, 26, "CANCEL", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
       }
       else
       {
-         CreateButton("BTN_ADD_RADAR", root_x + 28, add_deck_y + 128, 337, 26, "+ SAVE TO ENGULFING RADAR", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
+         CreateButton("BTN_ADD_RADAR", root_x + 28, add_deck_y + 158, 240, 26, "+ SAVE TO RADAR", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
+         CreateButton("BTN_RESET_RADAR", root_x + 275, add_deck_y + 158, 90, 26, "RESET", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
       }
       
       // Box Right: Push Notification Preview & Test Alert
