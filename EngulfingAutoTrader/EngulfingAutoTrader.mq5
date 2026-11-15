@@ -1144,9 +1144,7 @@ void SaveStateToFile()
       FileWriteInteger(handle, form_sym_len);
       if(form_sym_len > 0) FileWriteString(handle, g_form_sym, form_sym_len);
 
-      int form_tf_len = StringLen(g_form_tf);
-      FileWriteInteger(handle, form_tf_len);
-      if(form_tf_len > 0) FileWriteString(handle, g_form_tf, form_tf_len);
+      FileWriteInteger(handle, (int)g_form_tf);
 
       FileWriteDouble(handle, g_form_rr);
 
@@ -1274,10 +1272,8 @@ void LoadStateFromFile()
          if(form_sym_len > 0) form_sym = FileReadString(handle, form_sym_len);
          if(form_sym != "") g_form_sym = form_sym;
 
-         int form_tf_len = FileReadInteger(handle);
-         string form_tf = "5";
-         if(form_tf_len > 0) form_tf = FileReadString(handle, form_tf_len);
-         if(form_tf != "") g_form_tf = form_tf;
+         int form_tf_val = FileReadInteger(handle);
+         if(form_tf_val > 0) g_form_tf = (ENUM_TIMEFRAMES)form_tf_val;
 
          double form_rr_val = FileReadDouble(handle);
          if(form_rr_val > 0) g_form_rr = form_rr_val;
