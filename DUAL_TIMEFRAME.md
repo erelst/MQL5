@@ -8,24 +8,46 @@ Dokumen ini menjelaskan dua aturan yang dipakai bersama oleh **EngulfingAutoTrad
 
 Nilai ATR(14) **tidak selalu** diambil dari timeframe rule itu sendiri.
 
-| Timeframe Rule | ATR diambil dari | Pengali |
+### Aturan Sumber ATR
+
+| Timeframe Rule | Sumber ATR | Alasan |
 |---|---|---|
-| **M1** | **M5** | **× 0.5** |
-| M5 | M5 | × 1.0 |
-| M15, M30, H1, H4, D1 | Timeframe rule itu sendiri | × 1.0 |
+| **M1** | **M5** | ATR M1 terlalu kecil/noisy; M5 lebih stabil |
+| M5 | M5 | TF rule itu sendiri |
+| M15, M30, H1, H4, D1 | Timeframe rule itu sendiri | TF rule itu sendiri |
+
+### Fungsi Pemilih Sumber
 
 ```mql5
+// M1 menggunakan ATR M5; TF lain menggunakan ATR mereka sendiri
 ENUM_TIMEFRAMES AtrBaseTF(const ENUM_TIMEFRAMES rule_tf)
 {
    return (rule_tf == PERIOD_M1) ? PERIOD_M5 : rule_tf;
 }
 ```
 
-**Alasan:** ATR M1 terlalu kecil dan terlalu *noisy* untuk dipakai sebagai buffer SL/TP — SL jadi terlalu rapat dan mudah kena *spread*. Dengan meminjam ATR M5 lalu dikali 0.5, Anda mendapat **setengah volatilitas candle 5 menit**, yang setara secara kasar dengan volatilitas beberapa menit namun jauh lebih stabil.
+### Perhitungan Buffer SL (50% ATR)
 
-**Dampak:** semua perhitungan SL/TP memakai nilai ATR ini — buffer SL 50% ATR pada radar, jarak TP berdasarkan Risk:Reward, dan ambang batas lonjakan ATR pada Auto Trail.
+```mql5
+// 1. Hitung ATR penuh dari sumber ATR
+ATR_penuh = CalculateATR100(sym, AtrBaseTF(rule_tf), period);
 
-> Konsistensi wajib: `CalculateATR50()` dan `CalculateATR100()` **harus** selalu dipanggil dengan `AtrBaseTF(tf)`, bukan `tf` langsung. Jika tidak, radar akan menampilkan SL yang berbeda dari yang dipakai EA saat membuka posisi.
+// 2. Ambil 50% untuk buffer SL
+atr_50 = ATR_penuh * 0.5;
+```
+
+### Dampak Praktis
+
+Semua perhitungan SL/TP memakai `atr_50` (50% ATR dari sumber yang dipilih):
+
+| Rule TF | Sumber ATR | Buffer SL (atr_50) |
+|---|---|---|
+| M1 | ATR M5 | 50% × ATR(M5) |
+| M5 | ATR M5 | 50% × ATR(M5) |
+| M15 | ATR M15 | 50% × ATR(M15) |
+| H1 | ATR H1 | 50% × ATR(H1) |
+
+**Konsistensi:** `CalculateATR50()` dan `CalculateATR100()` **harus** dipanggil dengan `AtrBaseTF(tf)`, bukan `tf` langsung, agar radar dan EA konsisten.
 
 ---
 
