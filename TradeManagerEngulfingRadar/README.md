@@ -48,9 +48,18 @@ Klik tombol `BE OFFSET MODE` untuk berpindah mode secara berurutan (siklus 4 mod
   - Masukkan harga batas (misal: hanya deteksi Bullish jika harga `< 1.08200` atau Bearish jika harga `> 1.09100`).
   - Ketik **`ALL`** pada kolom harga jika ingin mendeteksi di semua pergerakan harga tanpa batas (*Bebas / Any Price*).
   - Kosongkan kolom jika ingin menonaktifkan salah satu arah (misal hanya memantau Bullish saja).
+- **Mode Delay Detik (Continuous Timer) — Baru**:
+  - Kolom **`DELAY (DETIK)`** di form watchlist memungkinkan Anda menunda alert selama `N` detik setelah kondisi Engulfing terdeteksi.
+  - **`0` (default)** = alert instan (real-time tick).
+  - **`> 0`** = timer berjalan; alert hanya muncul **setelah** `N` detik berlalu *dan* kondisi Engulfing masih valid. Timer dihitung via `TimeCurrent()` (detik realtime, bukan candle-close).
+  - **Dua-Slot Timer (TF Utama + M1 Fallback)**:
+    - Slot **TF Utama**: memakai timeframe yang dipilih di kolom TF (contoh M5).
+    - Slot **M1 Fallback**: selalu memantau M1 secara paralel. Jika timer TF utama belum habis tapi M1 sudah habis, alert tetap keluar.
+    - Kedua slot direset otomatis saat **bar baru** terbentuk (bar time berubah), mencegah alert ganda pada bar yang sama.
+- **Mode `TF CLOSE` (Legacy)**: Toggle tombol `TF CLOSE / SECONDS (0)` — alert hanya dipicu pada *close* candle yang dipilih (M5 atau M1). Biasanya dipakai untuk confirmasi candle final.
 - **Edit & Hapus Simbol**: Dilengkapi tombol `EDIT` untuk mengubah konfigurasi pantauan yang sudah ada serta tombol `DELETE`.
 - **Tombol `TEST ALERT`**: Menguji koneksi notifikasi ke MetaTrader Mobile di HP Anda secara instan.
-- **Nama TF di Alert**: Teks alert menyertakan timeframe sumber sinyal (misal `EURUSD (M5)` atau `EURUSD (M1)`), sehingga Anda tahu sinyal mana yang terpicu saat mode dual-TF aktif.
+- **Nama TF di Alert**: Teks alert menyertakan timeframe sumber sinyal (misal `EURUSD (M5)` atau `EURUSD (M1)`), serta tag mode (`REALTIME TICK`, `DELAY 30s`, atau `TF CLOSE`) sehingga Anda tahu sumber & delay yang terpicu.
 
 ---
 
