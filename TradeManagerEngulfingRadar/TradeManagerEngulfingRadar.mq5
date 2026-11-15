@@ -49,6 +49,11 @@ struct SRadarSymbol
    datetime             last_bull_alert_bar;
    datetime             last_bear_alert_bar;
    bool                 delay_is_tf_close;
+   int                  delay_seconds;                    // detik delay sebelum alert muncul (0 = langsung)
+   datetime             bull_cond_start_time_main;        // TF utama
+   datetime             bull_cond_start_time_fallback;    // M1 fallback
+   datetime             bear_cond_start_time_main;        // TF utama
+   datetime             bear_cond_start_time_fallback;    // M1 fallback
 };
 
 struct SSelectedOrder
@@ -154,8 +159,8 @@ void ApplyBulkTP(double tp_price);
 void ApplyInstantBESpread();
 void ActivateBulkAutoBE(double trigger_price, ENUM_BE_OFFSET_MODE mode, int custom_pts);
 void DeactivateBulkAutoBE();
-void AddRadarSymbol(string sym, ENUM_TIMEFRAMES tf, bool bull_on, string bull_filter, bool bear_on, string bear_filter, int atr_p, bool tf_close);
-void UpdateRadarSymbol(int index, string sym, ENUM_TIMEFRAMES tf, bool bull_on, string bull_filter, bool bear_on, string bear_filter, int atr_p, bool tf_close);
+void AddRadarSymbol(string sym, ENUM_TIMEFRAMES tf, bool bull_on, string bull_filter, bool bear_on, string bear_filter, int atr_p, bool tf_close, int delay_sec);
+void UpdateRadarSymbol(int index, string sym, ENUM_TIMEFRAMES tf, bool bull_on, string bull_filter, bool bear_on, string bear_filter, int atr_p, bool tf_close, int delay_sec);
 void RemoveRadarSymbol(int index);
 bool IsOrderSelected(ulong ticket);
 void SetOrderSelected(ulong ticket, bool sel);
@@ -427,14 +432,17 @@ void OnChartEvent(const int id,
             else if(tf_idx == 240) tf = PERIOD_H4;
             else if(tf_idx == 1440) tf = PERIOD_D1;
             
+            int delay_sec = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_NEW_DELAY", OBJPROP_TEXT));
+            if(delay_sec < 0) delay_sec = 0;
+            
             if(g_editing_radar_idx >= 0 && g_editing_radar_idx < ArraySize(g_radar_symbols))
             {
-               UpdateRadarSymbol(g_editing_radar_idx, matched_sym, tf, has_bull, str_bull, has_bear, str_bear, InpDefaultATRPeriod, g_form_delay_close);
+               UpdateRadarSymbol(g_editing_radar_idx, matched_sym, tf, has_bull, str_bull, has_bear, str_bear, InpDefaultATRPeriod, g_form_delay_close, delay_sec);
                g_editing_radar_idx = -1;
             }
             else
             {
-               AddRadarSymbol(matched_sym, tf, has_bull, str_bull, has_bear, str_bear, InpDefaultATRPeriod, g_form_delay_close);
+               AddRadarSymbol(matched_sym, tf, has_bull, str_bull, has_bear, str_bear, InpDefaultATRPeriod, g_form_delay_close, delay_sec);
             }
             
             SaveStateToFile();
@@ -570,7 +578,7 @@ void ProcessEngulfingForSymbol(int index)
    
    if(!SymbolInfoInteger(sym, SYMBOL_SELECT))
       SymbolSelect(sym, true);
-      
+   
    double atr_50 = 0.0;
    double broken_range = 0.0;
    double cur_price = 0.0;
@@ -609,73 +617,161 @@ void ProcessEngulfingForSymbol(int index)
    // 1. Check Bullish Engulfing Break
    if(g_radar_symbols[index].bull_enabled)
    {
-      if(bull_hit && EvaluatePriceFilter(cur_price, g_radar_symbols[index].bull_price_filter))
+      bool can_alert = false;
+      
+      // ponytail: delay_seconds gates realtime alerts; 0 = instant
+      int delay_sec = g_radar_symbols[index].delay_seconds;
+      if(delay_sec == 0 && !g_radar_symbols[index].delay_is_tf_close)
       {
-         if(g_radar_symbols[index].last_bull_alert_bar != cur_bar_time)
+         can_alert = true;
+      }
+      else if(delay_sec > 0)
+      {
+         // Set cond_start_time when bull_hit becomes true
+         if(bull_hit && g_radar_symbols[index].bull_cond_start_time_main == 0)
          {
-            g_radar_symbols[index].last_bull_alert_bar = cur_bar_time;
-            
-            int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
-            double point = SymbolInfoDouble(sym, SYMBOL_POINT);
-            double pips_factor = (digits == 3 || digits == 5) ? 10.0 * point : point;
-            if(pips_factor == 0) pips_factor = point;
-            
-            double pips_val = atr_50 / pips_factor;
-            double points_val = atr_50 / point;
-            double rec_sl = broken_low - atr_50;
-            
-            string mode_tag = g_radar_symbols[index].delay_is_tf_close ? "TF CLOSE" : "REALTIME TICK";
-            string msg = StringFormat("[ENGULFING ALERT] %s (%s) [%s]\nType: Strong BULLISH Break\nPrice: %s\n50%% ATR(%d): %.1f pips (%.0f pts)\nSuggested SL: %s\nBroken Range: %.1f pips",
-                                      sym, EnumToString(sig_tf_bull), mode_tag,
-                                      DoubleToString(cur_price, digits),
-                                      g_radar_symbols[index].atr_period,
-                                      pips_val,
-                                      points_val,
-                                      DoubleToString(rec_sl, digits),
-                                      broken_range / pips_factor);
-            
-            if(InpEnableSoundAlerts) Alert(msg);
-            if(InpEnablePushAlerts)  SendNotification(msg);
-            Print(msg);
+            g_radar_symbols[index].bull_cond_start_time_main = TimeCurrent();
+            g_radar_symbols[index].bull_cond_start_time_fallback = TimeCurrent();
          }
+         
+         // Check if delay expired for main slot (TF)
+         if(g_radar_symbols[index].bull_cond_start_time_main > 0)
+         {
+            long elapsed_main = TimeCurrent() - g_radar_symbols[index].bull_cond_start_time_main;
+            if(elapsed_main >= delay_sec)
+               can_alert = true;
+         }
+         
+         // Check if delay expired for fallback slot (M1)
+         if(!can_alert && g_radar_symbols[index].bull_cond_start_time_fallback > 0)
+         {
+            long elapsed_fallback = TimeCurrent() - g_radar_symbols[index].bull_cond_start_time_fallback;
+            if(elapsed_fallback >= delay_sec)
+               can_alert = true;
+         }
+         
+         // Reset slots when bar changes (new bar)
+         if(cur_bar_time != g_radar_symbols[index].last_bull_alert_bar)
+         {
+            g_radar_symbols[index].bull_cond_start_time_main = 0;
+            g_radar_symbols[index].bull_cond_start_time_fallback = 0;
+         }
+      }
+      
+      // TF close mode: alert only on bar close
+      if(g_radar_symbols[index].delay_is_tf_close && cur_bar_time != g_radar_symbols[index].last_bull_alert_bar)
+      {
+         g_radar_symbols[index].last_bull_alert_bar = cur_bar_time;
+         can_alert = true;
+      }
+      
+      if(bull_hit && can_alert && EvaluatePriceFilter(cur_price, g_radar_symbols[index].bull_price_filter))
+      {
+         int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+         double point = SymbolInfoDouble(sym, SYMBOL_POINT);
+         double pips_factor = (digits == 3 || digits == 5) ? 10.0 * point : point;
+         if(pips_factor == 0) pips_factor = point;
+         
+         double pips_val = atr_50 / pips_factor;
+         double points_val = atr_50 / point;
+         double rec_sl = broken_low - atr_50;
+         
+         string mode_tag = g_radar_symbols[index].delay_is_tf_close ? "TF CLOSE" : 
+                           (delay_sec > 0 ? StringFormat("DELAY %ds", delay_sec) : "REALTIME TICK");
+         string msg = StringFormat("[ENGULFING ALERT] %s (%s) [%s]\nType: Strong BULLISH Break\nPrice: %s\n50%% ATR(%d): %.1f pips (%.0f pts)\nSuggested SL: %s\nBroken Range: %.1f pips",
+                                   sym, EnumToString(sig_tf_bull), mode_tag,
+                                   DoubleToString(cur_price, digits),
+                                   g_radar_symbols[index].atr_period,
+                                   pips_val,
+                                   points_val,
+                                   DoubleToString(rec_sl, digits),
+                                   broken_range / pips_factor);
+         
+         if(InpEnableSoundAlerts) Alert(msg);
+         if(InpEnablePushAlerts)  SendNotification(msg);
+         Print(msg);
       }
    }
    
    // 2. Check Bearish Engulfing Break
    if(g_radar_symbols[index].bear_enabled)
    {
-      if(bear_hit && EvaluatePriceFilter(cur_price, g_radar_symbols[index].bear_price_filter))
+      bool can_alert = false;
+      
+      // ponytail: delay_seconds gates realtime alerts; 0 = instant
+      int delay_sec = g_radar_symbols[index].delay_seconds;
+      if(delay_sec == 0 && !g_radar_symbols[index].delay_is_tf_close)
       {
-         if(g_radar_symbols[index].last_bear_alert_bar != cur_bar_time)
+         can_alert = true;
+      }
+      else if(delay_sec > 0)
+      {
+         // Set cond_start_time when bear_hit becomes true
+         if(bear_hit && g_radar_symbols[index].bear_cond_start_time_main == 0)
          {
-            g_radar_symbols[index].last_bear_alert_bar = cur_bar_time;
-            
-            int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
-            double point = SymbolInfoDouble(sym, SYMBOL_POINT);
-            double pips_factor = (digits == 3 || digits == 5) ? 10.0 * point : point;
-            if(pips_factor == 0) pips_factor = point;
-            
-            double pips_val = atr_50_bear / pips_factor;
-            double points_val = atr_50_bear / point;
-            double spread_val = (SymbolInfoDouble(sym, SYMBOL_ASK) - SymbolInfoDouble(sym, SYMBOL_BID));
-            double rec_sl = broken_high + atr_50_bear + spread_val;
-            
-            string mode_tag = g_radar_symbols[index].delay_is_tf_close ? "TF CLOSE" : "REALTIME TICK";
-            string msg = StringFormat("[ENGULFING ALERT] %s (%s) [%s]\nType: Strong BEARISH Break\nPrice: %s\n50%% ATR(%d): %.1f pips (%.0f pts)\nSuggested SL: %s\nBroken Range: %.1f pips",
-                                      sym, EnumToString(sig_tf_bear), mode_tag,
-                                      DoubleToString(cur_price, digits),
-                                      g_radar_symbols[index].atr_period,
-                                      pips_val,
-                                      points_val,
-                                      DoubleToString(rec_sl, digits),
-                                      br_bear / pips_factor);
-               
-               if(InpEnableSoundAlerts) Alert(msg);
-               if(InpEnablePushAlerts)  SendNotification(msg);
-               Print(msg);
-            }
+            g_radar_symbols[index].bear_cond_start_time_main = TimeCurrent();
+            g_radar_symbols[index].bear_cond_start_time_fallback = TimeCurrent();
+         }
+         
+         // Check if delay expired for main slot (TF)
+         if(g_radar_symbols[index].bear_cond_start_time_main > 0)
+         {
+            long elapsed_main = TimeCurrent() - g_radar_symbols[index].bear_cond_start_time_main;
+            if(elapsed_main >= delay_sec)
+               can_alert = true;
+         }
+         
+         // Check if delay expired for fallback slot (M1)
+         if(!can_alert && g_radar_symbols[index].bear_cond_start_time_fallback > 0)
+         {
+            long elapsed_fallback = TimeCurrent() - g_radar_symbols[index].bear_cond_start_time_fallback;
+            if(elapsed_fallback >= delay_sec)
+               can_alert = true;
+         }
+         
+         // Reset slots when bar changes (new bar)
+         if(cur_bar_time != g_radar_symbols[index].last_bear_alert_bar)
+         {
+            g_radar_symbols[index].bear_cond_start_time_main = 0;
+            g_radar_symbols[index].bear_cond_start_time_fallback = 0;
          }
       }
+      
+      // TF close mode: alert only on bar close
+      if(g_radar_symbols[index].delay_is_tf_close && cur_bar_time != g_radar_symbols[index].last_bear_alert_bar)
+      {
+         g_radar_symbols[index].last_bear_alert_bar = cur_bar_time;
+         can_alert = true;
+      }
+      
+      if(bear_hit && can_alert && EvaluatePriceFilter(cur_price, g_radar_symbols[index].bear_price_filter))
+      {
+         int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+         double point = SymbolInfoDouble(sym, SYMBOL_POINT);
+         double pips_factor = (digits == 3 || digits == 5) ? 10.0 * point : point;
+         if(pips_factor == 0) pips_factor = point;
+         
+         double pips_val = atr_50_bear / pips_factor;
+         double points_val = atr_50_bear / point;
+         double spread_val = (SymbolInfoDouble(sym, SYMBOL_ASK) - SymbolInfoDouble(sym, SYMBOL_BID));
+         double rec_sl = broken_high + atr_50_bear + spread_val;
+         
+         string mode_tag = g_radar_symbols[index].delay_is_tf_close ? "TF CLOSE" : 
+                           (delay_sec > 0 ? StringFormat("DELAY %ds", delay_sec) : "REALTIME TICK");
+         string msg = StringFormat("[ENGULFING ALERT] %s (%s) [%s]\nType: Strong BEARISH Break\nPrice: %s\n50%% ATR(%d): %.1f pips (%.0f pts)\nSuggested SL: %s\nBroken Range: %.1f pips",
+                                   sym, EnumToString(sig_tf_bear), mode_tag,
+                                   DoubleToString(cur_price, digits),
+                                   g_radar_symbols[index].atr_period,
+                                   pips_val,
+                                   points_val,
+                                   DoubleToString(rec_sl, digits),
+                                   br_bear / pips_factor);
+         
+         if(InpEnableSoundAlerts) Alert(msg);
+         if(InpEnablePushAlerts)  SendNotification(msg);
+         Print(msg);
+      }
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -1158,7 +1254,7 @@ void DeactivateBulkAutoBE()
 //+------------------------------------------------------------------+
 //| WATCHLIST & ORDER SELECTION HELPERS                              |
 //+------------------------------------------------------------------+
-void AddRadarSymbol(string sym, ENUM_TIMEFRAMES tf, bool bull_on, string bull_filter, bool bear_on, string bear_filter, int atr_p, bool tf_close)
+void AddRadarSymbol(string sym, ENUM_TIMEFRAMES tf, bool bull_on, string bull_filter, bool bear_on, string bear_filter, int atr_p, bool tf_close, int delay_sec)
 {
    int size = ArraySize(g_radar_symbols);
    ArrayResize(g_radar_symbols, size + 1);
@@ -1172,9 +1268,14 @@ void AddRadarSymbol(string sym, ENUM_TIMEFRAMES tf, bool bull_on, string bull_fi
    g_radar_symbols[size].last_bull_alert_bar = 0;
    g_radar_symbols[size].last_bear_alert_bar = 0;
    g_radar_symbols[size].delay_is_tf_close   = tf_close;
+   g_radar_symbols[size].delay_seconds       = delay_sec;
+   g_radar_symbols[size].bull_cond_start_time_main = 0;
+   g_radar_symbols[size].bull_cond_start_time_fallback = 0;
+   g_radar_symbols[size].bear_cond_start_time_main = 0;
+   g_radar_symbols[size].bear_cond_start_time_fallback = 0;
 }
 
-void UpdateRadarSymbol(int index, string sym, ENUM_TIMEFRAMES tf, bool bull_on, string bull_filter, bool bear_on, string bear_filter, int atr_p, bool tf_close)
+void UpdateRadarSymbol(int index, string sym, ENUM_TIMEFRAMES tf, bool bull_on, string bull_filter, bool bear_on, string bear_filter, int atr_p, bool tf_close, int delay_sec)
 {
    if(index < 0 || index >= ArraySize(g_radar_symbols)) return;
    g_radar_symbols[index].symbol            = sym;
@@ -1185,6 +1286,7 @@ void UpdateRadarSymbol(int index, string sym, ENUM_TIMEFRAMES tf, bool bull_on, 
    g_radar_symbols[index].bear_price_filter = bear_filter;
    g_radar_symbols[index].atr_period        = atr_p;
    g_radar_symbols[index].delay_is_tf_close = tf_close;
+   g_radar_symbols[index].delay_seconds     = delay_sec;
 }
 
 void RemoveRadarSymbol(int index)
@@ -1334,7 +1436,7 @@ void CreateDashboardUI()
    int root_x = 20;
    int root_y = 20;
    int win_w  = 840;
-   int win_h  = 540;
+   int win_h  = 600;
    
    // Outer Pitch-black window
    CreateRect("WIN_BG", root_x, root_y, win_w, win_h, CLR_PANEL_BG, CLR_BORDER_HARD);
@@ -1446,7 +1548,7 @@ void CreateDashboardUI()
       int box_w = (win_w - 42) / 2;
       
       // Box Left: Add / Edit Watchlist Symbol Form
-      CreateRect("CARD_ADD_RADAR", root_x + 16, add_deck_y, box_w, 170, CLR_CARD_BG, CLR_BORDER_HARD);
+      CreateRect("CARD_ADD_RADAR", root_x + 16, add_deck_y, box_w, 210, CLR_CARD_BG, CLR_BORDER_HARD);
       
       bool is_edit = (g_editing_radar_idx >= 0 && g_editing_radar_idx < ArraySize(g_radar_symbols));
       string form_title = is_edit ? "EDIT SELECTED RADAR" : "ADD SYMBOL TO RADAR";
@@ -1468,6 +1570,7 @@ void CreateDashboardUI()
       
       string default_bull = "";
       string default_bear = "";
+      string default_delay = "0";
       if(is_edit)
       {
          if(g_radar_symbols[g_editing_radar_idx].bull_enabled)
@@ -1475,6 +1578,7 @@ void CreateDashboardUI()
          if(g_radar_symbols[g_editing_radar_idx].bear_enabled)
             default_bear = g_radar_symbols[g_editing_radar_idx].bear_price_filter;
          g_form_delay_close = g_radar_symbols[g_editing_radar_idx].delay_is_tf_close;
+         default_delay = IntegerToString(g_radar_symbols[g_editing_radar_idx].delay_seconds);
       }
       
       CreateLabel("LBL_F_SYM", root_x + 28, add_deck_y + 38, "SYMBOL:", CLR_TEXT_MED, 8, true);
@@ -1487,29 +1591,32 @@ void CreateDashboardUI()
       string mode_btn_txt = g_form_delay_close ? "TF CLOSE" : "SECONDS (0)";
       color  mode_btn_clr = g_form_delay_close ? CLR_GOLD_NEON : CLR_CYAN_NEON;
       CreateButton("BTN_TOGGLE_RADAR_MODE", root_x + 110, add_deck_y + 64, 255, 22, mode_btn_txt, CLR_CANVAS_BG, mode_btn_clr, CLR_BORDER_HARD);
-
-      CreateLabel("LBL_F_BULL", root_x + 28, add_deck_y + 98, "BULLISH < :", CLR_BULL_NEON, 8, true);
-      CreateEdit("INP_NEW_BULL", root_x + 110, add_deck_y + 94, 255, 22, default_bull, CLR_CANVAS_BG, CLR_TEXT_PURE);
       
-      CreateLabel("LBL_F_BEAR", root_x + 28, add_deck_y + 128, "BEARISH > :", CLR_BEAR_NEON, 8, true);
-      CreateEdit("INP_NEW_BEAR", root_x + 110, add_deck_y + 124, 255, 22, default_bear, CLR_CANVAS_BG, CLR_TEXT_PURE);
+      CreateLabel("LBL_F_DELAY", root_x + 28, add_deck_y + 94, "DELAY (DETIK):", CLR_TEXT_MED, 8, true);
+      CreateEdit("INP_NEW_DELAY", root_x + 110, add_deck_y + 90, 255, 22, default_delay, CLR_CANVAS_BG, CLR_TEXT_PURE);
       
-      CreateLabel("LBL_F_HINT", root_x + 28, add_deck_y + 148, "*Harga: angka, <, >, <=, >=, range (3051-3040), atau ALL", CLR_TEXT_MED, 7, false);
+      CreateLabel("LBL_F_BULL", root_x + 28, add_deck_y + 120, "BULLISH :", CLR_BULL_NEON, 8, true);
+      CreateEdit("INP_NEW_BULL", root_x + 110, add_deck_y + 116, 255, 22, default_bull, CLR_CANVAS_BG, CLR_TEXT_PURE);
+      
+      CreateLabel("LBL_F_BEAR", root_x + 28, add_deck_y + 152, "BEARISH :", CLR_BEAR_NEON, 8, true);
+      CreateEdit("INP_NEW_BEAR", root_x + 110, add_deck_y + 148, 255, 22, default_bear, CLR_CANVAS_BG, CLR_TEXT_PURE);
+      
+      CreateLabel("LBL_F_HINT", root_x + 28, add_deck_y + 180, "Isi: >65724  <64164  <=  >=  64164-65814  ALL  (kosong=off)", CLR_TEXT_MED, 7, false);
       
       if(is_edit)
       {
-         CreateButton("BTN_ADD_RADAR", root_x + 28, add_deck_y + 158, 240, 26, "UPDATE SELECTED RADAR", CLR_TAB_ACTIVE_BG, CLR_GOLD_NEON, CLR_GOLD_NEON);
-         CreateButton("BTN_CANCEL_EDIT", root_x + 275, add_deck_y + 158, 90, 26, "CANCEL", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
+         CreateButton("BTN_ADD_RADAR", root_x + 28, add_deck_y + 198, 240, 26, "UPDATE SELECTED RADAR", CLR_TAB_ACTIVE_BG, CLR_GOLD_NEON, CLR_GOLD_NEON);
+         CreateButton("BTN_CANCEL_EDIT", root_x + 275, add_deck_y + 198, 90, 26, "CANCEL", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
       }
       else
       {
-         CreateButton("BTN_ADD_RADAR", root_x + 28, add_deck_y + 158, 240, 26, "+ SAVE TO RADAR", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
-         CreateButton("BTN_RESET_RADAR", root_x + 275, add_deck_y + 158, 90, 26, "RESET", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
+         CreateButton("BTN_ADD_RADAR", root_x + 28, add_deck_y + 198, 240, 26, "+ SAVE TO RADAR", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
+         CreateButton("BTN_RESET_RADAR", root_x + 275, add_deck_y + 198, 90, 26, "RESET", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
       }
       
       // Box Right: Push Notification Preview & Test Alert
       int box_r_x = root_x + 24 + box_w;
-      CreateRect("CARD_NOTIF_PREV", box_r_x, add_deck_y, box_w, 170, CLR_CANVAS_BG, CLR_BORDER_HARD);
+      CreateRect("CARD_NOTIF_PREV", box_r_x, add_deck_y, box_w, 210, CLR_CANVAS_BG, CLR_BORDER_HARD);
       CreateLabel("LBL_NOTIF_TITLE", box_r_x + 12, add_deck_y + 10, "MOBILE PUSH ALERT PREVIEW", CLR_CYAN_NEON, 9, true);
       CreateButton("BTN_TEST_ALERT", box_r_x + box_w - 110, add_deck_y + 6, 98, 22, "TEST ALERT", C'26,42,65', CLR_CYAN_NEON, CLR_CYAN_NEON);
       
@@ -1729,8 +1836,8 @@ void SaveStateToFile()
    int handle = FileOpen(filename, FILE_WRITE|FILE_BIN);
    if(handle != INVALID_HANDLE)
    {
-      // Version header (3 = has string price filters + delay_is_tf_close)
-      FileWriteInteger(handle, 3);
+      // Version header (4 = string price filters + delay mode + delay_seconds)
+      FileWriteInteger(handle, 4);
 
       // 0. Save UI Active Tab & Offset Mode
       FileWriteInteger(handle, g_active_tab);
@@ -1761,6 +1868,7 @@ void SaveStateToFile()
 
          FileWriteInteger(handle, g_radar_symbols[i].atr_period);
          FileWriteInteger(handle, g_radar_symbols[i].delay_is_tf_close ? 1 : 0);
+         FileWriteInteger(handle, g_radar_symbols[i].delay_seconds);
       }
       
       // 2. Save Auto BE List
@@ -1800,7 +1908,12 @@ void LoadStateFromFile()
    {
       int first = FileReadInteger(handle);
       int version;
-      if(first == 3)
+      if(first == 4)
+      {
+         version = 4;
+         g_active_tab = FileReadInteger(handle);
+      }
+      else if(first == 3)
       {
          version = 3;
          g_active_tab = FileReadInteger(handle);
@@ -1846,6 +1959,10 @@ void LoadStateFromFile()
 
             g_radar_symbols[i].atr_period = FileReadInteger(handle);
             g_radar_symbols[i].delay_is_tf_close = (FileReadInteger(handle) == 1);
+            if(version >= 4)
+               g_radar_symbols[i].delay_seconds = FileReadInteger(handle);
+            else
+               g_radar_symbols[i].delay_seconds = 0;
          }
          else
          {
@@ -1856,10 +1973,15 @@ void LoadStateFromFile()
             g_radar_symbols[i].bear_price_filter = (s_min > 0) ? DoubleToString(s_min, 5) : "ALL";
             g_radar_symbols[i].atr_period = FileReadInteger(handle);
             g_radar_symbols[i].delay_is_tf_close = false;
+            g_radar_symbols[i].delay_seconds = 0;
          }
          
          g_radar_symbols[i].last_bull_alert_bar = 0;
          g_radar_symbols[i].last_bear_alert_bar = 0;
+         g_radar_symbols[i].bull_cond_start_time_main = 0;
+         g_radar_symbols[i].bull_cond_start_time_fallback = 0;
+         g_radar_symbols[i].bear_cond_start_time_main = 0;
+         g_radar_symbols[i].bear_cond_start_time_fallback = 0;
       }
       
       // 2. Read Auto BE List
