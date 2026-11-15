@@ -1531,7 +1531,7 @@ void CreateDashboardUI()
       CreateLabel("LBL_F_BEAR", root_x + 28, add_deck_y + 128, "BEARISH > :", CLR_BEAR_NEON, 8, true);
       CreateEdit("INP_NEW_BEAR", root_x + 110, add_deck_y + 124, 255, 22, default_bear, CLR_CANVAS_BG, CLR_TEXT_PURE);
       
-      CreateLabel("LBL_F_HINT", root_x + 28, add_deck_y + 148, "*Isi harga, ketik 'ALL' utk bebas, atau kosongkan utk OFF", CLR_TEXT_MED, 7, false);
+      CreateLabel("LBL_F_HINT", root_x + 28, add_deck_y + 148, "*Harga: angka, <, >, <=, >=, range (3051-3040), atau ALL", CLR_TEXT_MED, 7, false);
       
       if(is_edit)
       {
