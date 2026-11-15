@@ -83,6 +83,7 @@ SRadarSymbol      g_radar_symbols[];
 SAutoBEItem       g_auto_be_list[];
 SSelectedOrder    g_selected_orders[];
 
+int               g_active_tab = 1; // 1 = Orders Tab, 2 = Radar Tab
 bool                 g_form_delay_close = false;
 int               g_orders_page = 0;
 int               g_editing_radar_idx = -1; // -1 = Add mode, >= 0 = Edit mode index
