@@ -473,8 +473,29 @@ void OnChartEvent(const int id,
          UpdateDashboardUI();
          return;
       }
-      // Reset Radar Form / Cancel Edit (only clear editing index, keep form values)
-      else if(sparam == g_prefix + "BTN_RESET_RADAR" || sparam == g_prefix + "BTN_CANCEL_EDIT")
+      // Reset Radar Form / Cancel Edit
+      // RESET -> kembalikan form ke nilai built-in; CANCEL -> tetap pertahankan nilai
+      else if(sparam == g_prefix + "BTN_RESET_RADAR")
+      {
+         // Kembalikan semua nilai form ke default bawaan
+         g_form_sym          = _Symbol;
+         g_form_tf           = "5";
+         g_form_bull         = "ALL";
+         g_form_bear         = "ALL";
+         g_form_delay_sec    = 0;
+         g_form_delay_close  = false;
+         g_editing_radar_idx = -1;
+
+         // Simpan ke file state
+         SaveStateToFile();
+
+         // Rebuild UI dengan nilai default
+         CreateDashboardUI();
+         UpdateDashboardUI();
+         return;
+      }
+      // Cancel Edit: hanya keluar dari mode edit, form tetap dipertahankan
+      else if(sparam == g_prefix + "BTN_CANCEL_EDIT")
       {
          g_editing_radar_idx = -1;
          CreateDashboardUI();
@@ -1644,7 +1665,7 @@ void CreateDashboardUI()
       else
       {
          CreateButton("BTN_ADD_RADAR", root_x + 28, add_deck_y + 198, 240, 26, "+ SAVE TO RADAR", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
-         CreateButton("BTN_RESET_RADAR", root_x + 275, add_deck_y + 198, 90, 26, "RESET", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
+         CreateButton("BTN_RESET_RADAR", root_x + 275, add_deck_y + 198, 90, 26, "DEFAULT", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
       }
       
       // Box Right: Push Notification Preview & Test Alert
