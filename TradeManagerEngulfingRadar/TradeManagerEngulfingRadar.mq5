@@ -621,7 +621,7 @@ void ProcessEngulfingForSymbol(int index)
       
       // ponytail: delay_seconds gates realtime alerts; 0 = instant
       int delay_sec = g_radar_symbols[index].delay_seconds;
-      if(delay_sec == 0 && !g_radar_symbols[index].delay_is_tf_close)
+      if(delay_sec == 0 && !g_radar_symbols[index].delay_is_tf_close && cur_bar_time != g_radar_symbols[index].last_bull_alert_bar)
       {
          can_alert = true;
       }
@@ -690,6 +690,12 @@ void ProcessEngulfingForSymbol(int index)
          if(InpEnableSoundAlerts) Alert(msg);
          if(InpEnablePushAlerts)  SendNotification(msg);
          Print(msg);
+         
+         // ponytail: mark alert sent for this bar so no repeat in same bar
+         g_radar_symbols[index].last_bull_alert_bar = cur_bar_time;
+         g_radar_symbols[index].bull_cond_start_time_main = 0;
+         g_radar_symbols[index].bull_cond_start_time_fallback = 0;
+         can_alert = false;
       }
    }
    
@@ -700,7 +706,7 @@ void ProcessEngulfingForSymbol(int index)
       
       // ponytail: delay_seconds gates realtime alerts; 0 = instant
       int delay_sec = g_radar_symbols[index].delay_seconds;
-      if(delay_sec == 0 && !g_radar_symbols[index].delay_is_tf_close)
+      if(delay_sec == 0 && !g_radar_symbols[index].delay_is_tf_close && cur_bar_time != g_radar_symbols[index].last_bear_alert_bar)
       {
          can_alert = true;
       }
@@ -770,6 +776,12 @@ void ProcessEngulfingForSymbol(int index)
          if(InpEnableSoundAlerts) Alert(msg);
          if(InpEnablePushAlerts)  SendNotification(msg);
          Print(msg);
+         
+         // ponytail: mark alert sent for this bar so no repeat in same bar
+         g_radar_symbols[index].last_bear_alert_bar = cur_bar_time;
+         g_radar_symbols[index].bear_cond_start_time_main = 0;
+         g_radar_symbols[index].bear_cond_start_time_fallback = 0;
+         can_alert = false;
       }
    }
 }
