@@ -488,10 +488,19 @@ void OnChartEvent(const int id,
          else Alert("Simbol '", raw_sym, "' tidak ditemukan di broker/Market Watch!");
          return;
       }
-      // Cancel Edit Mode
-      else if(sparam == g_prefix + "BTN_CANCEL_EDIT")
+      // Toggle Radar Mode (Seconds vs TF Close)
+      else if(sparam == g_prefix + "BTN_TOGGLE_RADAR_MODE")
+      {
+         g_form_delay_close = !g_form_delay_close;
+         CreateDashboardUI();
+         UpdateDashboardUI();
+         return;
+      }
+      // Reset Radar Form
+      else if(sparam == g_prefix + "BTN_RESET_RADAR")
       {
          g_editing_radar_idx = -1;
+         g_form_delay_close = false;
          CreateDashboardUI();
          UpdateDashboardUI();
          return;
