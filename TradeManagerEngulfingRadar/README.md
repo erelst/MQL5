@@ -57,6 +57,9 @@ Klik tombol `BE OFFSET MODE` untuk berpindah mode secara berurutan (siklus 4 mod
     - Slot **M1 Fallback**: selalu memantau M1 secara paralel. Jika timer TF utama belum habis tapi M1 sudah habis, alert tetap keluar.
     - Kedua slot direset otomatis saat **bar baru** terbentuk (bar time berubah), mencegah alert ganda pada bar yang sama.
 - **Mode `TF CLOSE` (Legacy)**: Toggle tombol `TF CLOSE / SECONDS (0)` — alert hanya dipicu pada *close* candle yang dipilih (M5 atau M1). Biasanya dipakai untuk confirmasi candle final.
+- **Indikator Mode di List Radar**:
+  - `[CLOSE]` = mode *TF CLOSE*.
+  - `[SEC Ns]` = mode *SECONDS* dengan nilai delay `N` detik (contoh `[SEC 30s]`, `[SEC 0s]` = realtime tick).
 - **Edit & Hapus Simbol**: Dilengkapi tombol `EDIT` untuk mengubah konfigurasi pantauan yang sudah ada serta tombol `DELETE`.
 - **Tombol `TEST ALERT`**: Menguji koneksi notifikasi ke MetaTrader Mobile di HP Anda secara instan.
 - **Nama TF di Alert**: Teks alert menyertakan timeframe sumber sinyal (misal `EURUSD (M5)` atau `EURUSD (M1)`), serta tag mode (`REALTIME TICK`, `DELAY 30s`, atau `TF CLOSE`) sehingga Anda tahu sumber & delay yang terpicu.
@@ -66,7 +69,9 @@ Klik tombol `BE OFFSET MODE` untuk berpindah mode secara berurutan (siklus 4 mod
 ### 3. State Persistence (Pengaturan Tidak Hilang)
 Sistem penyimpanan persisten otomatis (`.bin`) menjaga data Anda tetap utuh:
 - **Tahan Ganti Timeframe & Restart MT5**: Seluruh daftar simbol pantauan di Radar, batas harga filter, posisi tab aktif, mode offset Break-Even, dan trigger Auto-BE yang sedang aktif akan otomatis tersimpan.
-- **Auto-Restore saat Re-Attach**: Saat EA ditutup atau dipasang ulang (*re-attach*), EA otomatis membaca data penyimpanan dan mengembalikan kondisi panel persis seperti sebelum ditutup tanpa perlu mengetik ulang.
+- **Form Tambah/Edit Tetap Tersimpan**: Nilai yang Anda ketik di form radar (SYMBOL, TF, BULLISH, BEARISH, DELAY) disimpan ke file state per akun (`TMER_State_<login>.bin`). Setelah re-attach EA, form menampilkan nilai terakhir yang diketik — tidak perlu mengetik ulang.
+- **CANCEL / RESET tidak Mereset Form**: Klik CANCEL atau RESET hanya menutup form tanpa menghapus nilai yang sudah Anda isi. Form tetap menampilkan nilai terakhir.
+- **Auto-Restore saat Re-Attach**: Saat EA ditutup atau dipasang ulang (*re-attach*), EA otomatis membaca data penyimpanan dan mengembalikan kondisi panel persis seperti sebelum ditutup.
 
 ---
 
