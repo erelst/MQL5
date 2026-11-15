@@ -1832,7 +1832,7 @@ void UpdateDashboardUI()
          string str_tf = StringSubstr(EnumToString(g_radar_symbols[i].timeframe), 7);
          CreateLabel(r_pfx + "TF", root_x + 130, cur_y + 8, "[" + str_tf + "]", CLR_CYAN_NEON, 8, true);
          
-         string mode_tag = g_radar_symbols[i].delay_is_tf_close ? "CLOSE" : "SEC";
+         string mode_tag = g_radar_symbols[i].delay_is_tf_close ? "CLOSE" : "SEC " + IntegerToString(g_radar_symbols[i].delay_seconds) + "s";
          CreateLabel(r_pfx + "MODE", root_x + 130, cur_y + 22, "[" + mode_tag + "]", g_radar_symbols[i].delay_is_tf_close ? CLR_GOLD_NEON : CLR_TEXT_MED, 7, false);
 
          string str_bull = g_radar_symbols[i].bull_enabled ? ("BULL: " + g_radar_symbols[i].bull_price_filter) : "BULL: OFF";
