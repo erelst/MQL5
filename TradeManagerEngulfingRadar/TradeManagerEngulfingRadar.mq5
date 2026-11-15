@@ -42,12 +42,13 @@ struct SRadarSymbol
    string               symbol;
    ENUM_TIMEFRAMES      timeframe;
    bool                 bull_enabled;
-   double               bull_price_max; // Deteksi Bullish jika Harga < bull_price_max
+   double               bull_price_max;
    bool                 bear_enabled;
-   double               bear_price_min; // Deteksi Bearish jika Harga > bear_price_min
+   double               bear_price_min;
    int                  atr_period;
    datetime             last_bull_alert_bar;
    datetime             last_bear_alert_bar;
+   bool                 delay_is_tf_close;
 };
 
 struct SSelectedOrder
@@ -82,7 +83,7 @@ SRadarSymbol      g_radar_symbols[];
 SAutoBEItem       g_auto_be_list[];
 SSelectedOrder    g_selected_orders[];
 
-int               g_active_tab = 1; // 1 = Orders Tab, 2 = Radar Tab
+bool                 g_form_delay_close = false;
 int               g_orders_page = 0;
 int               g_editing_radar_idx = -1; // -1 = Add mode, >= 0 = Edit mode index
 ENUM_BE_OFFSET_MODE g_be_offset_mode = BE_OFFSET_AUTO_SPREAD; // Selected Offset Mode for Trigger
@@ -152,7 +153,8 @@ void ApplyBulkTP(double tp_price);
 void ApplyInstantBESpread();
 void ActivateBulkAutoBE(double trigger_price, ENUM_BE_OFFSET_MODE mode, int custom_pts);
 void DeactivateBulkAutoBE();
-void AddRadarSymbol(string sym, ENUM_TIMEFRAMES tf, bool bull_on, double bull_max, bool bear_on, double bear_min, int atr_p);
+void AddRadarSymbol(string sym, ENUM_TIMEFRAMES tf, bool bull_on, double bull_max, bool bear_on, double bear_min, int atr_p, bool tf_close);
+void UpdateRadarSymbol(int index, string sym, ENUM_TIMEFRAMES tf, bool bull_on, double bull_max, bool bear_on, double bear_min, int atr_p, bool tf_close);
 void RemoveRadarSymbol(int index);
 bool IsOrderSelected(ulong ticket);
 void SetOrderSelected(ulong ticket, bool sel);
