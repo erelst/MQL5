@@ -409,13 +409,13 @@ void OnChartEvent(const int id,
       // Add / Update Watchlist Symbol
       else if(sparam == g_prefix + "BTN_ADD_RADAR")
       {
-         string raw_sym = g_form_sym;
+         string raw_sym = ObjectGetString(0, g_prefix + "INP_NEW_SYM", OBJPROP_TEXT);
          string matched_sym = FindExactOrMarketWatchSymbol(raw_sym);
          
          if(matched_sym != "")
          {
-            string str_bull = g_form_bull;
-            string str_bear = g_form_bear;
+            string str_bull = ObjectGetString(0, g_prefix + "INP_NEW_BULL", OBJPROP_TEXT);
+            string str_bear = ObjectGetString(0, g_prefix + "INP_NEW_BEAR", OBJPROP_TEXT);
             StringTrimLeft(str_bull); StringTrimRight(str_bull);
             StringTrimLeft(str_bear); StringTrimRight(str_bear);
             
@@ -428,7 +428,7 @@ void OnChartEvent(const int id,
                return;
             }
             
-            int tf_idx = (int)StringToInteger(g_form_tf);
+            int tf_idx = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_NEW_TF", OBJPROP_TEXT));
             ENUM_TIMEFRAMES tf = PERIOD_M5;
             if(tf_idx == 1) tf = PERIOD_M1;
             else if(tf_idx == 5) tf = PERIOD_M5;
@@ -438,7 +438,7 @@ void OnChartEvent(const int id,
             else if(tf_idx == 240) tf = PERIOD_H4;
             else if(tf_idx == 1440) tf = PERIOD_D1;
             
-            int delay_sec = g_form_delay_sec;
+            int delay_sec = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_NEW_DELAY", OBJPROP_TEXT));
             if(delay_sec < 0) delay_sec = 0;
             
             if(g_editing_radar_idx >= 0 && g_editing_radar_idx < ArraySize(g_radar_symbols))
@@ -455,6 +455,8 @@ void OnChartEvent(const int id,
             g_form_delay_sec = delay_sec;
             g_form_bull      = str_bull;
             g_form_bear      = str_bear;
+            g_form_sym       = matched_sym;
+            g_form_tf        = IntegerToString((int)tf);
             
             SaveStateToFile();
             CreateDashboardUI();
@@ -1596,32 +1598,12 @@ void CreateDashboardUI()
       string form_title = is_edit ? "EDIT SELECTED RADAR" : "ADD SYMBOL TO RADAR";
       CreateLabel("LBL_ADD_RADAR", root_x + 28, add_deck_y + 10, form_title, is_edit ? CLR_GOLD_NEON : CLR_CYAN_NEON, 9, true);
       
-      string default_sym = is_edit ? g_radar_symbols[g_editing_radar_idx].symbol : _Symbol;
-      string default_tf = "5";
-      if(is_edit)
-      {
-         ENUM_TIMEFRAMES tf_e = g_radar_symbols[g_editing_radar_idx].timeframe;
-         if(tf_e == PERIOD_M1) default_tf = "1";
-         else if(tf_e == PERIOD_M5) default_tf = "5";
-         else if(tf_e == PERIOD_M15) default_tf = "15";
-         else if(tf_e == PERIOD_M30) default_tf = "30";
-         else if(tf_e == PERIOD_H1) default_tf = "60";
-         else if(tf_e == PERIOD_H4) default_tf = "240";
-         else if(tf_e == PERIOD_D1) default_tf = "1440";
-      }
+      string default_sym = is_edit ? g_form_sym : _Symbol;
+      string default_tf  = is_edit ? g_form_tf : "5";
       
-      string default_bull = "ALL";
-      string default_bear = "ALL";
-      string default_delay = "0";
-      if(is_edit)
-      {
-         if(g_radar_symbols[g_editing_radar_idx].bull_enabled)
-            default_bull = g_radar_symbols[g_editing_radar_idx].bull_price_filter;
-         if(g_radar_symbols[g_editing_radar_idx].bear_enabled)
-            default_bear = g_radar_symbols[g_editing_radar_idx].bear_price_filter;
-         g_form_delay_close = g_radar_symbols[g_editing_radar_idx].delay_is_tf_close;
-         default_delay = IntegerToString(g_radar_symbols[g_editing_radar_idx].delay_seconds);
-      }
+      string default_bull = is_edit ? g_form_bull : "ALL";
+      string default_bear = is_edit ? g_form_bear : "ALL";
+      string default_delay = is_edit ? IntegerToString(g_form_delay_sec) : "0";
       
       CreateLabel("LBL_F_SYM", root_x + 28, add_deck_y + 38, "SYMBOL:", CLR_TEXT_MED, 8, true);
       CreateEdit("INP_NEW_SYM", root_x + 110, add_deck_y + 34, 120, 22, default_sym, CLR_CANVAS_BG, CLR_TEXT_PURE);
