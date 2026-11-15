@@ -195,7 +195,16 @@ Sebelumnya, syarat `atr_exploding` diletakkan *di dalam* gerbang jarak dekat TP 
 
 ---
 
-## 7. Format File State (Versioning)
+## 8. Sinkronisasi Radar & Fitur Terbaru
+
+- **Shared Shift Detector:** Baik AutoTrader maupun TradeManagerEngulfingRadar menggunakan fungsi detektor engulfing parameter `shift` (`0` untuk live tick / seconds, `1` untuk TF close).
+- **Koreksi Multiplier SELL:** Sisi SELL pada radar menggunakan perkalian pengali `* InpBodyRatioMultiplier` agar simetris dan adil dengan sisi BUY.
+- **Filter Harga Fleksibel (`EvaluatePriceFilter`):** Radar mewarisi dukungan operator lengkap (`<`, `>`, `<=`, `>=`), rentang harga bolak-balik (`3051-3040`), serta keyword bebas (`ALL`, `BEBAS`).
+- **Persistensi Form Radar:** Kolom input form Watchlist mempertahankan nilai terakhirnya saat tombol tambah/edit diklik.
+
+---
+
+## 9. Format File State (Versioning)
 
 File state biner (`*_State_<login>.bin`) memakai header versi agar upgrade tidak menghapus konfigurasi Anda.
 
