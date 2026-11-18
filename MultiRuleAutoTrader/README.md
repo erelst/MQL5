@@ -1,4 +1,4 @@
-# Engulfing Auto Trader (EA 2) - Multi-Rule Realtime Tick Engine
+# MultiRule Auto Trader (EA 2) - Multi-Rule Realtime Tick Engine
 
 Expert Advisor MetaTrader 5 (MQL5) untuk eksekusi otomatis pola **Strong Engulfing Breakout** pada level tick realtime, dilengkapi **Sistem Multi-Rule Auto Trader**, manajemen resiko dinamis (Risk-to-Reward), serta mesin **Auto Trail SL (BE)** dan **Volatility Trail TP**.
 
@@ -7,7 +7,7 @@ Expert Advisor MetaTrader 5 (MQL5) untuk eksekusi otomatis pola **Strong Engulfi
 ## Fitur Utama
 
 ### 1. Multi-Rule Auto Trader List (Kombinasi Bebas Tanpa Batas)
-Berbeda dengan EA konvensional yang hanya memiliki satu pasang pengaturan, Engulfing Auto Trader memungkinkan Anda menambahkan **banyak aturan (*rules*) independen** langsung di chart:
+Berbeda dengan EA konvensional yang hanya memiliki satu pasang pengaturan, MultiRule Auto Trader memungkinkan Anda menambahkan **banyak aturan (*rules*) independen** langsung di chart:
 - **Aturan Berbeda per Simbol**: Pasang strategi di EURUSD, GBPUSD, XAUUSD, dsb. dalam satu EA.
 - **Kombinasi Skenario pada Simbol yang Sama**:
   - *Skenario A*: Buy EURUSD dengan lot kecil (0.01) saat harga murah `< 1.0820` (RR 1:2.0).
@@ -149,7 +149,7 @@ Logika distribusi:
 - Jika jumlah posisi lebih kecil, satu unit entri dibagi menjadi beberapa bagian.
 - Jika permintaan TP melebihi kapasitas lot, tingkat aktif dipotong secara memadai.
 
-Dalam implementasi `EngulfingAutoTrader.mq5`, dua pengatur berikut bekerja bersama:
+Dalam implementasi `MultiRuleAutoTrader.mq5`, dua pengatur berikut bekerja bersama:
 
 - `InpMultiTP` (default `1`): jumlah tingkat TP. Nilai `1` berarti single TP tanpa pembagian. Nilai `2` berarti TP satu dan TP dua.
 - `InpEntryMultiplier` (default `1`): jumlah entri per trigger.
@@ -194,4 +194,4 @@ Alur eksekusi pada EA:
 ---
 
 ## Preview Visual Dashboard
-Buka file `EngulfingAutoTrader_preview.html` di browser Anda untuk melihat simulasi visual cyberpunk neon pitch-black dan interaksi penambahan/pengeditan rule.
+Buka file `MultiRuleAutoTrader_preview.html` di browser Anda untuk melihat simulasi visual cyberpunk neon pitch-black dan interaksi penambahan/pengeditan rule.

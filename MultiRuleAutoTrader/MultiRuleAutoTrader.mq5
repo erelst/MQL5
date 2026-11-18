@@ -1,5 +1,5 @@
 //+------------------------------------------------------------------+
-//|                                   EngulfingAutoTrader.mq5        |
+//|                                   MultiRuleAutoTrader.mq5        |
 //|                             Copyright 2026, Multi-Symbol Manager |
 //|                                  https://github.com/1jehuang/jcode|
 //+------------------------------------------------------------------+
@@ -754,7 +754,7 @@ void CreateDashboardUI()
    
    CreateRect("WIN_BG", root_x, root_y, win_w, win_h, CLR_PANEL_BG, CLR_BORDER_HARD);
    CreateRect("WIN_TOP", root_x, root_y, win_w, 36, CLR_CARD_BG, CLR_BORDER_HARD);
-   CreateLabel("WIN_TITLE", root_x + 14, root_y + 9, "ENGULFING AUTO TRADER", CLR_TEXT_PURE, 10, true);
+   CreateLabel("WIN_TITLE", root_x + 14, root_y + 9, "MULTIRULE AUTO TRADER", CLR_TEXT_PURE, 10, true);
    CreateLabel("WIN_TAG", root_x + 220, root_y + 10, "[MULTI-RULE REALTIME TICK ENGINE]", CLR_CYAN_NEON, 8, true);
    
    string status_txt = g_master_power_enabled ? "ALL ACTIVE" : "ALL PAUSED";
@@ -1348,7 +1348,7 @@ int OnInit()
    
    CreateDashboardUI();
    
-   PrintFormat("EngulfingAutoTrader Initialized | Multi-Rules Active: %d rules loaded", ArraySize(g_rules));
+   PrintFormat("MultiRuleAutoTrader Initialized | Multi-Rules Active: %d rules loaded", ArraySize(g_rules));
    return(INIT_SUCCEEDED);
 }
 
@@ -1359,7 +1359,7 @@ void OnDeinit(const int reason)
 {
    SaveStateToFile();
    DestroyDashboardUI();
-   Print("EngulfingAutoTrader Deinitialized.");
+   Print("MultiRuleAutoTrader Deinitialized.");
 }
 
 //+------------------------------------------------------------------+

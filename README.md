@@ -4,7 +4,7 @@ Kumpulan Expert Advisor (EA) MQL5 kustom dengan desain antarmuka cyberpunk neon 
 
 ---
 
-## 1. Engulfing Auto Trader (`EngulfingAutoTrader.mq5`)
+## 1. Engulfing Auto Trader (`MultiRuleAutoTrader.mq5`)
 
 EA otomatis multi-aturan (*Multi-Rule List*) untuk eksekusi posisi berdasarkan pola Strong Engulfing dan filter tingkat lanjut.
 
@@ -42,10 +42,10 @@ README.md                          (file ini)
 DUAL_TIMEFRAME.md                  (dokumen lintas-EA: ATR base TF & duel M5/M1)
 test_autotrader.py                 (self-check logika sinyal & entry AutoTrader)
 .gitignore
-EngulfingAutoTrader/
-   EngulfingAutoTrader.mq5
+MultiRuleAutoTrader/
+   MultiRuleAutoTrader.mq5
    README.md
-   EngulfingAutoTrader_preview.html
+   MultiRuleAutoTrader_preview.html
 TradeManagerEngulfingRadar/
    TradeManagerEngulfingRadar.mq5
    README.md
