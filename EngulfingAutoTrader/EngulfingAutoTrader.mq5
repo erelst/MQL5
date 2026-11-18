@@ -43,6 +43,7 @@ struct AutoTraderRule
    string               bear_price_filter; // e.g. "> 1.0900", ">= 1.0910", "4040-4078", "ALL"
    int                  max_orders;        // 1 = 1x open then paused, 0/-1 = Unlimited
    int                  entry_multiplier;  // Number of positions to open per trigger (1 = 1 order)
+   int                  multi_tp;          // Number of TP tiers per entry (1 = single TP / no splitting)
    int                  delay_seconds;     // Delay in seconds (5 = default, 0 = instant)
    bool                 delay_is_tf_close; // true = wait for TF candle close, false = seconds delay
    int                  orders_opened_count; // Tracks total opened orders for this rule lifecycle
@@ -76,7 +77,8 @@ input group "=== DEFAULT NEW RULE SETTINGS ==="
 input ENUM_TRADE_DIRECTION InpTradeDirection   = TRADE_DIR_BOTH; // Default Direction
 input double               InpRiskRewardRatio  = 2.0;            // Default RR Ratio (1:RR)
 input int                  InpMaxOrders        = 1;              // Default Max Orders (1 = 1x open then paused, 0 = Unlimited)
-input int                  InpEntryMultiplier  = 1;              // Default Entry Multiplier (Multi-Position per Trigger)
+input int                  InpEntryMultiplier  = 1;              // Default Entri Multiplier (Multi-Position per Trigger)
+input int                  InpMultiTP          = 1;              // Default Multi TP (Tiered Take Profit per entry; 1 = single TP)
 input int                  InpDelaySeconds     = 5;              // Default Entry Delay Seconds (0 = Instant)
 input bool                 InpDelayIsTfClose   = false;          // Default Entry Delay Mode (false = Seconds, true = TF Close)
 input int                  InpSlippage         = 10;             // Max Slippage (Points)
@@ -141,6 +143,7 @@ double               g_form_trail_pct   = 5.0;
 double               g_form_atr_mult    = 1.5;
 int                  g_form_max_orders  = 1;
 int                  g_form_entry_mult  = 1;
+int                  g_form_multi_tp   = 1;
 int                  g_form_delay_sec   = 5;
 bool                 g_form_delay_close = false;
 string               g_form_bmax        = "ALL";
@@ -480,9 +483,9 @@ void ProcessAutoTrailSLTP()
          
          double remaining_dist = cur_tp - bid;
          
-         // ponytail: ATR explosion triggers independently of remaining distance to TP,
-         // allowing TP to extend as soon as volatility spikes.
-         if(atr_exploding)
+         // ponytail: ATR explosion only triggers when price is near TP (within trigger_ratio),
+         // so trail extended only executes while within the proximity gate.
+         if(atr_exploding && remaining_dist <= total_dist * trigger_ratio)
          {
             if(g_tracking_list[i].trail_cycle == 0)
             {
@@ -551,8 +554,9 @@ void ProcessAutoTrailSLTP()
          
          double remaining_dist = ask - cur_tp;
          
-         // TP extension on ATR explosion: independent of remaining distance to TP (same as BUY)
-         if(atr_exploding)
+         // ponytail: ATR explosion only triggers when price is near TP (within trigger_ratio),
+         // so trail extended only executes while within the proximity gate.
+         if(atr_exploding && remaining_dist <= total_dist * trigger_ratio)
          {
             if(g_tracking_list[i].trail_cycle == 0)
             {
@@ -624,25 +628,31 @@ string FindExactOrMarketWatchSymbol(string input_sym)
    StringTrimLeft(input_sym);
    StringTrimRight(input_sym);
    if(input_sym == "") return "";
-   if(SymbolInfoInteger(input_sym, SYMBOL_SELECT)) return input_sym;
-   if(SymbolSelect(input_sym, true)) return input_sym;
    
-   int total_symbols = SymbolsTotal(false);
-   string input_upper = input_sym;
-   StringToUpper(input_upper);
-   
-   for(int i = 0; i < total_symbols; i++)
+   // First check if symbol exists in Market Watch using SymbolSelect to add it if needed
+   if(!SymbolSelect(input_sym, true))
    {
-      string cur_name = SymbolName(i, false);
-      string cur_upper = cur_name;
-      StringToUpper(cur_upper);
-      if(cur_upper == input_upper || StringFind(cur_upper, input_upper) >= 0)
+      // SymbolSelect failed, symbol doesn't exist - check all symbols for match
+      int total_symbols = SymbolsTotal(false);
+      string input_upper = input_sym;
+      StringToUpper(input_upper);
+      
+      for(int i = 0; i < total_symbols; i++)
       {
-         SymbolSelect(cur_name, true);
-         return cur_name;
+         string cur_name = SymbolName(i, false);
+         string cur_upper = cur_name;
+         StringToUpper(cur_upper);
+         if(cur_upper == input_upper || StringFind(cur_upper, input_upper) >= 0)
+         {
+            SymbolSelect(cur_name, true);
+            return cur_name;
+         }
       }
+      return "";
    }
-   return "";
+   
+   // If SymbolSelect succeeded, symbol now exists in Market Watch
+   return input_sym;
 }
 
 //+------------------------------------------------------------------+
@@ -825,9 +835,12 @@ void CreateDashboardUI()
    CreateLabel("LBL_ATR_MULT_LBL", root_x + 183, row_d_y + 3, "ATR:", CLR_TEXT_MED, 7, true);
    CreateEdit("INP_ATR_MULT", root_x + 215, row_d_y, 40, 20, DoubleToString(g_form_atr_mult, 1), CLR_CANVAS_BG, CLR_CYAN_NEON);
    
-   CreateLabel("LBL_MULT", root_x + 260, row_d_y + 3, "MULT:", CLR_TEXT_MED, 7, true);
-   CreateEdit("INP_MULT", root_x + 300, row_d_y, 35, 20, IntegerToString(g_form_entry_mult), CLR_CANVAS_BG, CLR_GOLD_NEON);
-   CreateLabel("LBL_X", root_x + 340, row_d_y + 3, "x", CLR_CYAN_NEON, 8, true);
+   CreateLabel("LBL_ENTRI_MULT", root_x + 260, row_d_y + 3, "ENTRI MULTIPLIER:", CLR_TEXT_MED, 7, true);
+   CreateEdit("INP_ENTRI_MULT", root_x + 300, row_d_y, 35, 20, IntegerToString(g_form_entry_mult), CLR_CANVAS_BG, CLR_GOLD_NEON);
+   CreateLabel("LBL_ENTRI_X", root_x + 340, row_d_y + 3, "x", CLR_CYAN_NEON, 8, true);
+   
+   CreateLabel("LBL_MULTI_TP", root_x + 348, row_d_y + 3, "MULTI TP:", CLR_TEXT_MED, 7, true);
+   CreateEdit("INP_MULTI_TP", root_x + 378, row_d_y, 25, 20, IntegerToString(g_form_multi_tp), CLR_CANVAS_BG, CLR_GOLD_NEON);
    
    // Row G: Entry Delay & Mode (y = upper_y + 120)
    int row_g_y = upper_y + 120;
@@ -935,6 +948,8 @@ void UpdatePreviewTerminalBox()
    bool   prev_trail = g_form_trail_on;
    double prev_pct   = g_form_trail_pct;
    double prev_atr_m = g_form_atr_mult;
+   int    prev_mult = g_form_entry_mult;
+   int    prev_mtp  = g_form_multi_tp;
    string prev_rule_tag = (g_editing_rule_idx >= 0) ? StringFormat("[RULE #%d EDIT]", g_editing_rule_idx + 1) : "[FORM INPUT]";
    
    int total_rules = ArraySize(g_rules);
@@ -948,6 +963,8 @@ void UpdatePreviewTerminalBox()
       prev_trail = g_rules[idx].enable_trail;
       prev_pct   = g_rules[idx].trail_trigger_pct;
       prev_atr_m = g_rules[idx].atr_multiplier;
+      prev_mult  = g_rules[idx].entry_multiplier;
+      prev_mtp   = g_rules[idx].multi_tp;
       if(g_rules[idx].direction == TRADE_DIR_BUY)  prev_dir = "BUY ONLY";
       else if(g_rules[idx].direction == TRADE_DIR_SELL) prev_dir = "SELL ONLY";
       prev_rule_tag = StringFormat("[RULE #%d PREVIEW]", idx + 1);
@@ -955,11 +972,13 @@ void UpdatePreviewTerminalBox()
    
    string l1 = StringFormat("Target: %s (%s) | %s | %s", prev_sym, prev_tf, prev_dir, prev_rule_tag);
    string l2 = StringFormat("Rasio RR: 1:%.2f | Mode Lot: %s | SL Buffer: 50%% ATR(14)", prev_rr, prev_lot);
+   string l2b = StringFormat("Entri Mult: %d | Multi TP: %d", prev_mult, prev_mtp);
    string l3 = "-------------------------------------------------------------";
    
    CreateLabel("SIM_L1", prev_x + 10, line_y, l1, CLR_TEXT_PURE, 8, true);
    CreateLabel("SIM_L2", prev_x + 10, line_y + 18, l2, CLR_CYAN_NEON, 8, false);
    CreateLabel("SIM_L3", prev_x + 10, line_y + 32, l3, CLR_BORDER_HARD, 7, false);
+   CreateLabel("SIM_L2B", prev_x + 10, line_y + 36, l2b, CLR_TEXT_MED, 8, false);
    
    if(prev_trail)
    {
@@ -1044,6 +1063,9 @@ void UpdateDashboardUI()
       
       int mult_disp = (g_rules[i].entry_multiplier <= 0) ? 1 : g_rules[i].entry_multiplier;
       CreateLabel(r_pfx + "MULT", root_x + 412, cur_y + 9, IntegerToString(mult_disp) + "x", CLR_GOLD_NEON, 8, true);
+      
+      int mtp_disp = (g_rules[i].multi_tp <= 0) ? 1 : g_rules[i].multi_tp;
+      CreateLabel(r_pfx + "MTP", root_x + 540, cur_y + 9, StringFormat("%dx TP", mtp_disp), CLR_TEXT_MED, 7, false);
       
       string delay_disp = g_rules[i].delay_is_tf_close ? "TF Close" : (IntegerToString(g_rules[i].delay_seconds) + "s");
       CreateLabel(r_pfx + "DELAY", root_x + 450, cur_y + 9, delay_disp, CLR_CYAN_NEON, 8, false);
@@ -1133,6 +1155,7 @@ void SaveStateToFile()
          
          FileWriteInteger(handle, g_rules[i].max_orders);
          FileWriteInteger(handle, g_rules[i].entry_multiplier);
+         FileWriteInteger(handle, g_rules[i].multi_tp);
          FileWriteInteger(handle, g_rules[i].delay_seconds);
          FileWriteInteger(handle, g_rules[i].delay_is_tf_close ? 1 : 0);
          FileWriteInteger(handle, g_rules[i].orders_opened_count);
@@ -1161,6 +1184,7 @@ void SaveStateToFile()
 
       FileWriteInteger(handle, g_form_max_orders);
       FileWriteInteger(handle, g_form_entry_mult);
+      FileWriteInteger(handle, g_form_multi_tp);
 
       FileWriteInteger(handle, (int)g_form_direction);
       FileWriteInteger(handle, (int)g_form_lot_mode);
@@ -1192,6 +1216,7 @@ void LoadStateFromFile()
       g_rules[0].bear_price_filter = "ALL";
       g_rules[0].max_orders        = InpMaxOrders;
       g_rules[0].entry_multiplier  = InpEntryMultiplier;
+      g_rules[0].multi_tp          = InpMultiTP;
       g_rules[0].delay_seconds     = InpDelaySeconds;
       g_rules[0].delay_is_tf_close = InpDelayIsTfClose;
       g_rules[0].orders_opened_count = 0;
@@ -1247,6 +1272,8 @@ void LoadStateFromFile()
          g_rules[i].max_orders        = FileReadInteger(handle);
          g_rules[i].entry_multiplier  = FileReadInteger(handle);
          if(g_rules[i].entry_multiplier <= 0) g_rules[i].entry_multiplier = 1;
+         g_rules[i].multi_tp          = FileReadInteger(handle);
+         if(g_rules[i].multi_tp <= 0) g_rules[i].multi_tp = 1;
          g_rules[i].delay_seconds     = FileReadInteger(handle);
          g_rules[i].delay_is_tf_close = (FileReadInteger(handle) == 1);
          g_rules[i].orders_opened_count = FileReadInteger(handle);
@@ -1293,6 +1320,7 @@ void LoadStateFromFile()
 
          g_form_max_orders  = FileReadInteger(handle);
          g_form_entry_mult  = FileReadInteger(handle);
+         g_form_multi_tp   = FileReadInteger(handle);
 
          g_form_direction   = (ENUM_TRADE_DIRECTION)FileReadInteger(handle);
          g_form_lot_mode    = (ENUM_LOT_MODE)FileReadInteger(handle);
@@ -1371,8 +1399,11 @@ void OnChartEvent(const int id,
          int cur_mord = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MAX_ORD", OBJPROP_TEXT));
          if(cur_mord >= 0) g_form_max_orders = cur_mord;
          
-         int cur_mult = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MULT", OBJPROP_TEXT));
-         if(cur_mult > 0) g_form_entry_mult = cur_mult;
+         int cur_entri_mult = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_ENTRI_MULT", OBJPROP_TEXT));
+         if(cur_entri_mult > 0) g_form_entry_mult = cur_entri_mult;
+         
+         int cur_multi_tp = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MULTI_TP", OBJPROP_TEXT));
+         if(cur_multi_tp > 0) g_form_multi_tp = cur_multi_tp;
          
          // Object is absent in TF CLOSE mode; keep the stored value instead of
          // reading "" as 0.
@@ -1471,6 +1502,7 @@ void OnChartEvent(const int id,
          g_form_atr_mult   = InpATRMultiplier;
          g_form_max_orders = InpMaxOrders;
          g_form_entry_mult = InpEntryMultiplier;
+         g_form_multi_tp  = InpMultiTP;
          g_form_delay_sec  = InpDelaySeconds;
          g_form_delay_close= InpDelayIsTfClose;
          g_form_bmax       = "ALL";
@@ -1527,8 +1559,11 @@ void OnChartEvent(const int id,
          
          int max_ord_val = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MAX_ORD", OBJPROP_TEXT));
          
-         int mult_val = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MULT", OBJPROP_TEXT));
+         int mult_val = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_ENTRI_MULT", OBJPROP_TEXT));
          if(mult_val <= 0) mult_val = 1;
+         
+         int multi_tp_val = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MULTI_TP", OBJPROP_TEXT));
+         if(multi_tp_val <= 0) multi_tp_val = 1;
          
          // Object absent in TF CLOSE mode: fall back to the stored value so
          // switching modes does not silently zero the saved seconds.
@@ -1583,6 +1618,7 @@ void OnChartEvent(const int id,
          g_form_trail_pct = trail_pct;
          g_form_atr_mult  = atr_mult;
          g_form_entry_mult= mult_val;
+         g_form_multi_tp = multi_tp_val;
          g_form_delay_sec = delay_sec_val;
          g_form_max_orders= max_ord_val;
          g_form_bmax      = b_filter;
@@ -1610,6 +1646,7 @@ void OnChartEvent(const int id,
          g_rules[target_idx].bear_price_filter   = s_filter;
          g_rules[target_idx].max_orders          = max_ord_val;
          g_rules[target_idx].entry_multiplier    = mult_val;
+         g_rules[target_idx].multi_tp          = multi_tp_val;
          g_rules[target_idx].delay_seconds       = delay_sec_val;
          g_rules[target_idx].delay_is_tf_close   = g_form_delay_close;
          for(int k = 0; k < 2; k++)
@@ -1638,7 +1675,7 @@ void OnChartEvent(const int id,
             sparam == g_prefix + r_pfx + "NO" || sparam == g_prefix + r_pfx + "DIR" ||
             sparam == g_prefix + r_pfx + "LOT" || sparam == g_prefix + r_pfx + "RR" ||
             sparam == g_prefix + r_pfx + "TF" || sparam == g_prefix + r_pfx + "FLT" ||
-            sparam == g_prefix + r_pfx + "TRL")
+            sparam == g_prefix + r_pfx + "TRL" || sparam == g_prefix + r_pfx + "MTP")
          {
             g_selected_rule_idx = i;
             UpdatePreviewTerminalBox();
@@ -1659,6 +1696,7 @@ void OnChartEvent(const int id,
             g_form_trail_pct    = g_rules[i].trail_trigger_pct;
             g_form_atr_mult     = g_rules[i].atr_multiplier;
             g_form_entry_mult   = g_rules[i].entry_multiplier;
+            g_form_multi_tp    = g_rules[i].multi_tp;
             g_form_delay_sec    = g_rules[i].delay_seconds;
             g_form_delay_close  = g_rules[i].delay_is_tf_close;
             g_form_max_orders   = g_rules[i].max_orders;
@@ -1847,25 +1885,78 @@ void OnTick()
             
             int mult = g_rules[r].entry_multiplier;
             if(mult <= 0) mult = 1;
+            int mtp = g_rules[r].multi_tp;
+            if(mtp <= 0) mtp = 1;
+            if(mtp > 16) mtp = 16;
+            
+            // Multi TP: tier t (1..mtp) takes Profit = base TP x t.
+            // - M >= T: entries are assigned to tiers (remainder goes to the lowest tier).
+            // - M < T: the entry lot pool is split across tiers.
+            int   plan_cnt = 0;
+            double plan_tp[16];
+            double plan_lot[16];
+            int   plan_ent[16];
+            
+            if(mtp > 1 && mult >= mtp)
+            {
+               int base_n = mult / mtp;
+               int rem_n = mult % mtp;
+               for(int t = 1; t <= mtp; t++)
+               {
+                  int cnt = base_n + ((t <= rem_n) ? 1 : 0);
+                  if(cnt <= 0) continue;
+                  plan_tp[plan_cnt] = NormalizeDouble(tp_price * (double)t, digits);
+                  plan_lot[plan_cnt] = lots;
+                  plan_ent[plan_cnt] = cnt;
+                  plan_cnt++;
+               }
+            }
+            else if(mtp > 1)
+            {
+               double pool = lots * (double)mult;
+               double per = pool / (double)mtp;
+               for(int t = 1; t <= mtp; t++)
+               {
+                  plan_tp[plan_cnt] = NormalizeDouble(tp_price * (double)t, digits);
+                  plan_lot[plan_cnt] = per;
+                  plan_ent[plan_cnt] = 1;
+                  plan_cnt++;
+               }
+            }
+            else
+            {
+               plan_tp[0] = tp_price;
+               plan_lot[0] = lots;
+               plan_ent[0] = mult;
+               plan_cnt = 1;
+            }
             
             int opened = 0;
-            for(int m = 0; m < mult; m++)
+            int m_ord = 0;
+            for(int p = 0; p < plan_cnt; p++)
             {
-               if(m_trade.Buy(lots, sym, ask, sl_price, tp_price, StringFormat("Engulfing Buy #%d (RR 1:%.1f)", m + 1, g_rules[r].risk_reward_ratio)))
+               for(int e = 0; e < plan_ent[p]; e++)
                {
-                  ulong deal_tkt = m_trade.ResultOrder();
-                  opened++;
-                  
-                  double atr100 = atr_50 * 2.0;
-                  if(g_rules[r].enable_trail)
-                     RegisterPositionTracking(deal_tkt, sym, tf, atr100, ask, tp_price, g_rules[r].trail_trigger_pct, g_rules[r].atr_multiplier);
-                  
-                  string msg = StringFormat("[AUTO TRADER - ORDER OPENED (%d/%d)]\nSymbol: %s (%s signal)\nTicket: #%d (BUY)\nLot: %.2f | Ask: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)",
-                                            m + 1, mult, sym, EnumToString(sig_tf), deal_tkt, lots, ask, sl_price, tp_price, g_rules[r].risk_reward_ratio);
-                  // ponytail: name the candle that fired, so the user can check it
-                  msg += " | Signal bar: " + TimeToString(sig_bar_time);
-                  if(InpEnableSoundAlerts) Alert(msg);
-                  if(InpEnablePushAlerts)  SendNotification(msg);
+                  int m = m_ord;
+                  m_ord++;
+                  double cur_tp = plan_tp[p];
+                  double cur_lot = plan_lot[p];
+                  if(m_trade.Buy(cur_lot, sym, ask, sl_price, cur_tp, StringFormat("Engulfing Buy #%d (RR 1:%.1f)", m + 1, g_rules[r].risk_reward_ratio)))
+                  {
+                     ulong deal_tkt = m_trade.ResultOrder();
+                     opened++;
+                     
+                     double atr100 = atr_50 * 2.0;
+                     if(g_rules[r].enable_trail)
+                        RegisterPositionTracking(deal_tkt, sym, tf, atr100, ask, cur_tp, g_rules[r].trail_trigger_pct, g_rules[r].atr_multiplier);
+                     
+                     string msg = StringFormat("[AUTO TRADER - ORDER OPENED (%d/%d)]\nSymbol: %s (%s signal)\nTicket: #%d (BUY)\nLot: %.2f | Ask: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)",
+                                               m + 1, plan_cnt, sym, EnumToString(sig_tf), deal_tkt, cur_lot, ask, sl_price, cur_tp, g_rules[r].risk_reward_ratio);
+                     // ponytail: name the candle that fired, so the user can check it
+                     msg += " | Signal bar: " + TimeToString(sig_bar_time);
+                     if(InpEnableSoundAlerts) Alert(msg);
+                     if(InpEnablePushAlerts)  SendNotification(msg);
+                  }
                }
             }
             
@@ -1964,24 +2055,77 @@ void OnTick()
             
             int mult_s = g_rules[r].entry_multiplier;
             if(mult_s <= 0) mult_s = 1;
+            int mtp = g_rules[r].multi_tp;
+            if(mtp <= 0) mtp = 1;
+            if(mtp > 16) mtp = 16;
+            
+            // Multi TP: tier t (1..mtp) takes Profit = base TP x t.
+            // - M >= T: entries are assigned to tiers (remainder goes to the lowest tier).
+            // - M < T: the entry lot pool is split across tiers.
+            int   plan_cnt = 0;
+            double plan_tp[16];
+            double plan_lot[16];
+            int   plan_ent[16];
+            
+            if(mtp > 1 && mult_s >= mtp)
+            {
+               int base_n = mult_s / mtp;
+               int rem_n = mult_s % mtp;
+               for(int t = 1; t <= mtp; t++)
+               {
+                  int cnt = base_n + ((t <= rem_n) ? 1 : 0);
+                  if(cnt <= 0) continue;
+                  plan_tp[plan_cnt] = NormalizeDouble(tp_price * (double)t, digits);
+                  plan_lot[plan_cnt] = lots;
+                  plan_ent[plan_cnt] = cnt;
+                  plan_cnt++;
+               }
+            }
+            else if(mtp > 1)
+            {
+               double pool = lots * (double)mult_s;
+               double per = pool / (double)mtp;
+               for(int t = 1; t <= mtp; t++)
+               {
+                  plan_tp[plan_cnt] = NormalizeDouble(tp_price * (double)t, digits);
+                  plan_lot[plan_cnt] = per;
+                  plan_ent[plan_cnt] = 1;
+                  plan_cnt++;
+               }
+            }
+            else
+            {
+               plan_tp[0] = tp_price;
+               plan_lot[0] = lots;
+               plan_ent[0] = mult_s;
+               plan_cnt = 1;
+            }
             
             int opened = 0;
-            for(int m = 0; m < mult_s; m++)
+            int m_ord = 0;
+            for(int p = 0; p < plan_cnt; p++)
             {
-               if(m_trade.Sell(lots, sym, bid, sl_price, tp_price, StringFormat("Engulfing Sell #%d (RR 1:%.1f)", m + 1, g_rules[r].risk_reward_ratio)))
+               for(int e = 0; e < plan_ent[p]; e++)
                {
-                  ulong deal_tkt = m_trade.ResultOrder();
-                  opened++;
-                  
-                  double atr100 = atr_50 * 2.0;
-                  if(g_rules[r].enable_trail)
-                     RegisterPositionTracking(deal_tkt, sym, tf, atr100, bid, tp_price, g_rules[r].trail_trigger_pct, g_rules[r].atr_multiplier);
-                  
-                  string msg = StringFormat("[AUTO TRADER - ORDER OPENED (%d/%d)]\nSymbol: %s (%s signal)\nTicket: #%d (SELL)\nLot: %.2f | Bid: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)",
-                                            m + 1, mult_s, sym, EnumToString(sig_tf), deal_tkt, lots, bid, sl_price, tp_price, g_rules[r].risk_reward_ratio);
-                  msg += " | Signal bar: " + TimeToString(sig_bar_time);
-                  if(InpEnableSoundAlerts) Alert(msg);
-                  if(InpEnablePushAlerts)  SendNotification(msg);
+                  int m = m_ord;
+                  m_ord++;
+                  double cur_tp = plan_tp[p];
+                  double cur_lot = plan_lot[p];
+                  if(m_trade.Sell(cur_lot, sym, bid, sl_price, cur_tp, StringFormat("Engulfing Sell #%d (RR 1:%.1f)", m + 1, g_rules[r].risk_reward_ratio)))
+                  {
+                     ulong deal_tkt = m_trade.ResultOrder();
+                     opened++;
+                     
+                     double atr100 = atr_50 * 2.0;
+                     if(g_rules[r].enable_trail)
+                        RegisterPositionTracking(deal_tkt, sym, tf, atr100, bid, cur_tp, g_rules[r].trail_trigger_pct, g_rules[r].atr_multiplier);
+                     
+                     string msg = StringFormat("[AUTO TRADER - ORDER OPENED (%d/%d)]\nSymbol: %s (%s signal)\nTicket: #%d (SELL)\nLot: %.2f | Bid: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)",
+                                               m + 1, plan_cnt, sym, EnumToString(sig_tf), deal_tkt, cur_lot, bid, sl_price, cur_tp, g_rules[r].risk_reward_ratio);
+                     msg += " | Signal bar: " + TimeToString(sig_bar_time);
+                     if(InpEnableSoundAlerts) Alert(msg);
+                     if(InpEnablePushAlerts)  SendNotification(msg);
+                  }
                }
             }
             

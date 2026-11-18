@@ -60,12 +60,26 @@ Detail lengkap (termasuk alasan, slot state per-TF, dan versioning file state) a
 ---
 
 ### 3. Auto Trail SL (BE) & Volatility Trail TP Engine
+
+#### 3.1 Mekanisme Trailing yang Ada
+
 1. **Auto Trail SL ke BE (Break-Even)**:
    - Saat profit posisi telah menempuh perjalanan hingga sisa persentase menuju TP (default sisa 5% TP), Stop Loss otomatis dipindahkan ke harga `Open ± Spread`.
 2. **Volatility Trail TP Extension**:
    - Jika ATR Realtime saat mendekati target mencapai $\ge 2\times$ ATR acuan saat open, TP otomatis diperpanjang sejauh $+1\times$ target awal.
 3. **Penguncian Profit Bertingkat (Cycle 2+)**:
    - Saat harga mendekati target TP baru yang diperpanjang, SL otomatis dikunci di level harga TP sebelumnya.
+
+#### 3.2 Perbaikan Mekanisme Trailing
+
+Untuk mencegah aktivasi trail yang terlalu dini (misal: volatilitas naik tetapi masih jauh dari TP), logika pada `ProcessAutoTrailSLTP()` telah diperbaiki. Berikut adalah urutan yang benar:
+
+1. **ATR dipantau secara realtime dan terpisah.** Nilai ATR dihitung setiap tick, dan keputusan apakah ATR "explode" (ATR sekarang $\ge$ ATR awal × multiplier) disimpan sebagai penanda. Penanda ini tidak langsung mengeksekusi apa pun.
+2. **ATR explode tanpa cek jarak ke TP = tidak mengeksekusi.** Jika ATR explode terjadi tapi harga masih jauh dari TP, tidak ada TP yang diperpanjang dan tidak ada SL yang digeser. Harga harus terlebih dahulu masuk ke zona 5% dari TP.
+3. **Harga $\le$ 5% dari TP = trail pertama.** Saat kondisi ini terpenuhi, SL dipindahkan ke Break-Even (`Open ± Spread`). Pada saat yang sama, jika ATR sedang explode dan memenuhi syarat jarak TP, TP juga diperpanjang sekali sebagai ekstensi awal. Trail pertama selalu menghasilkan SL di BE, tanpa memandang apakah TP ikut diperpanjang atau tidak.
+4. **Trail SL kedua dan seterusnya (Cycle $\ge$ 1).** Trail kedua hanya aktif setelah TP pernah diperpanjang setidaknya satu kali. Saat harga kembali mendekati TP (masih $\le$ 5%) dan trail_cycle $\ge$ 1, SL dipindahkan ke Previous TP (level TP sebelum perpanjangan terakhir) dan TP diperpanjang lagi sebesar satu jarak TP awal. Pola ini berulang setiap kali trail_cycle naik.
+
+Dengan perbaikan ini, EA tidak akan memperpanjang TP atau menarik SL ke BE saat masih berada di area entry. ATR explode tetap digunakan sebagai pemicu volatilitas, tapi eksekusi trail tertunda sampai harga memenuhi syarat jarak ke TP.
 
 #### Prilaku Saat Rule Auto-Pause (MAX ORDER Tercapai)
 
@@ -112,6 +126,50 @@ Sistem penyimpanan persisten otomatis (`.bin`) menjaga data Multi-Rule Auto Trad
 
 ---
 
+### 6. Multi Take Profit (Multi TP)
+
+Multi TP adalah fitur yang memungkinkan satu entry dipisah menjadi beberapa bagian entri, masing-masing dengan tingkat Take Profit berbeda. Tujuannya adalah membuat profit booking bertingkat.
+
+Aturan dasar Multi TP:
+
+- TP pertama memakai jarak TP berdasarkan rasio Risk to Reward (RR) yang ditentukan.
+- TP kedua memakai dua kali jarak TP dari RR.
+- Seterusnya, tingkat ke-n memiliki jarak TP sebesar n kali jarak TP dasar dari RR.
+
+Multi TP dipengaruhi oleh jumlah lot entri dan entry multiplier. Ini informasi penting yang perlu dimasukkan ke dalam dokumentasi: dua pengatur ini bersama-sama menentukan hasil akhir pembagian TP.
+
+Contoh:
+
+- RR 1:1, lot entri 0,05, entry multiplier 1, dan Multi TP diisi 2, maka lot entri dibagi menjadi dua bagian. Karena 0,05 tidak bisa dibagi rata menjadi dua lot 0,025, maka split memakai lot step dan sisanya masuk ke TP terendah. Hasil akhir: TP satu di 0,03 dan TP dua di 0,02.
+- RR 1:1, lot entri 0,05, entry multiplier 3, dan Multi TP diisi 2, maka tidak perlu membagi lagi. Dua entri memakai TP dari RR 1:1 dan satu entri memakai TP dari RR 1:2.
+
+Logika distribusi:
+
+- Jika jumlah posisi lebih besar atau sama dengan jumlah TP, sisa order ditempatkan di TP terendah.
+- Jika jumlah posisi lebih kecil, satu unit entri dibagi menjadi beberapa bagian.
+- Jika permintaan TP melebihi kapasitas lot, tingkat aktif dipotong secara memadai.
+
+Dalam implementasi `EngulfingAutoTrader.mq5`, dua pengatur berikut bekerja bersama:
+
+- `InpMultiTP` (default `1`): jumlah tingkat TP. Nilai `1` berarti single TP tanpa pembagian. Nilai `2` berarti TP satu dan TP dua.
+- `InpEntryMultiplier` (default `1`): jumlah entri per trigger.
+
+Alur eksekusi pada EA:
+
+- Jika entry multiplier lebih besar atau sama dengan Multi TP, entri diberikan ke tingkat TP secara proporsional. Sisa entri ditempatkan di TP terendah.
+- Jika entry multiplier lebih kecil dari Multi TP, satu pool lot entri dibagi rata ke setiap tingkat TP.
+- Multi TP bernilai `1` tetap menghasilkan satu TP saja, sehingga perilaku lama tidak berubah.
+
+### 7. Tampilan Form dan Preview
+
+- Form disusun dengan kategori yang jelas agar lebih mudah dipahami.
+- Preview dan simulasi menampilkan seluruh informasi penting, masing-masing dikelompokkan per kategori.
+- Informasi yang sebelumnya tidak berguna diganti dengan tampilan bertingkat yang mudah dipahami.
+- Form sekarang menampilkan field utama dengan label lengkap, tidak ambigu. Field Entri Multiplier ditulis lengkap sebagai `ENTRI MULTIPLIER` dan field Multi TP ditulis `MULTI TP`.
+- Preview menampilkan baris info utama, lalu blok trailing, lengkap dengan nilai Entri Multiplier dan jumlah tingkat Multi TP yang dipakai.
+
+---
+
 ## Parameter Input Dasar
 
 | Parameter | Default | Keterangan |
@@ -122,6 +180,7 @@ Sistem penyimpanan persisten otomatis (`.bin`) menjaga data Multi-Rule Auto Trad
 | `InpTrailTriggerPct` | `5.0` | Sisa jarak menuju TP untuk memicu trailing (%) |
 | `InpATRMultiplier` | `2.0` | Syarat lonjakan ATR realtime untuk perpanjangan TP ($\ge$ 2.0x) |
 | `InpMaxOpenTrades` | `1` | Maksimal posisi terbuka per simbol (0 = tanpa batas) |
+| `InpMultiTP` | `1` | Default jumlah tingkat TP (Multi TP; `1` = single TP) |
 | `InpLotMode` | `LOT_FIXED` | Mode lot: `LOT_FIXED` atau `LOT_RISK_PCT` |
 | `InpFixedLot` | `0.01` | Ukuran lot jika mode Fixed Lot |
 | `InpRiskPercent` | `1.0` | Risiko % saldo jika mode Risk Percentage |
