@@ -128,29 +128,30 @@ string FindExactOrMarketWatchSymbol(string input_sym)
    StringTrimRight(input_sym);
    if(input_sym == "") return "";
    
-   // 1. Check exact name in SymbolsTotal(false)
-   if(SymbolInfoInteger(input_sym, SYMBOL_SELECT)) return input_sym;
-   if(SymbolSelect(input_sym, true)) return input_sym;
-   
-   // 2. Case-insensitive / suffix / prefix scan across all broker symbols
-   int total_symbols = SymbolsTotal(false);
-   string input_upper = input_sym;
-   StringToUpper(input_upper);
-   
-   for(int i = 0; i < total_symbols; i++)
+   // First check if symbol exists in Market Watch using SymbolSelect to add it if needed
+   if(!SymbolSelect(input_sym, true))
    {
-      string cur_name = SymbolName(i, false);
-      string cur_upper = cur_name;
-      StringToUpper(cur_upper);
+      // SymbolSelect failed, symbol doesn't exist - check all symbols for match
+      int total_symbols = SymbolsTotal(false);
+      string input_upper = input_sym;
+      StringToUpper(input_upper);
       
-      // Match exact case-insensitive or base currency pair without broker suffix (e.g. EURUSD.m, EURUSD_i)
-      if(cur_upper == input_upper || StringFind(cur_upper, input_upper) >= 0)
+      for(int i = 0; i < total_symbols; i++)
       {
-         SymbolSelect(cur_name, true);
-         return cur_name;
+         string cur_name = SymbolName(i, false);
+         string cur_upper = cur_name;
+         StringToUpper(cur_upper);
+         if(cur_upper == input_upper || StringFind(cur_upper, input_upper) >= 0)
+         {
+            SymbolSelect(cur_name, true);
+            return cur_name;
+         }
       }
+      return "";
    }
-   return "";
+   
+   // If SymbolSelect succeeded, symbol now exists in Market Watch
+   return input_sym;
 }
 void CreateDashboardUI();
 void UpdateDashboardUI();
@@ -571,8 +572,9 @@ void OnChartEvent(const int id,
             g_form_delay_close  = g_radar_symbols[idx].delay_is_tf_close;
             g_form_delay_sec    = g_radar_symbols[idx].delay_seconds;
             g_form_sym          = g_radar_symbols[idx].symbol;
-            g_form_bull         = g_radar_symbols[idx].bull_enabled ? g_radar_symbols[idx].bull_price_filter : "ALL";
-            g_form_bear         = g_radar_symbols[idx].bear_enabled ? g_radar_symbols[idx].bear_price_filter : "ALL";
+            // Preserve OFF state: if disabled, show empty (OFF) instead of "ALL"
+            g_form_bull         = g_radar_symbols[idx].bull_enabled ? g_radar_symbols[idx].bull_price_filter : "";
+            g_form_bear         = g_radar_symbols[idx].bear_enabled ? g_radar_symbols[idx].bear_price_filter : "";
             // normalize TF string from enum value
             if(g_radar_symbols[idx].timeframe == PERIOD_M1) g_form_tf = "1";
             else if(g_radar_symbols[idx].timeframe == PERIOD_M5) g_form_tf = "5";

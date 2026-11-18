@@ -39,7 +39,7 @@ Klik tombol `BE OFFSET MODE` untuk berpindah mode secara berurutan (siklus 4 mod
 ### 2. Engulfing Radar & Mobile Push Alert (Tab 2)
 - **Real-time Tick-Level Detection**: Pola dideteksi langsung saat harga running menembus (*breakout*) High/Low candle sebelumnya tanpa perlu menunggu candle selesai (*close*).
 - **Dual-Timeframe (M5 + M1)**: Untuk pantauan **M5**, radar juga menerima sinyal dari **M1** dengan prioritas M5. TF lain tetap eksklusif. Lihat [`DUAL_TIMEFRAME.md`](../DUAL_TIMEFRAME.md) untuk detailnya.
-- **Basis ATR M1**: Bila simbol dipantau di **M1**, nilai ATR(14) dipinjam dari **M5** lalu dikali **0.5** agar buffer SL tidak terlalu rapat. Sama seperti yang dipakai `EngulfingAutoTrader`.
+- **Basis ATR M1**: Bila simbol dipantau di **M1**, nilai ATR(14) dipinjam dari **M5** lalu dikali **0.5** agar buffer SL tidak terlalu rapat. Sama seperti yang dipakai `MultiRuleAutoTrader`.
 - **Kalkulasi Otomatis 50% ATR**: Menghitung 50% nilai ATR dari candle yang ditembus dan menyajikannya dalam satuan **pips** dan **points**.
 - **Suggested SL Otomatis**:
   - *Bullish Engulfing*: `Low Candle Sebelumnya - 50% ATR`
