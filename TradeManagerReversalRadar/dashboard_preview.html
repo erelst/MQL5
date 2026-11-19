@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MQL5 Trade Manager & Engulfing Radar</title>
+  <title>MQL5 Trade Manager & Reversal Radar</title>
   <style>
     :root {
       /* Pitch-dark obsidian & pure black container palette */
@@ -613,8 +613,8 @@
     <div class="top-bar">
       <div class="brand">
         <div class="ico ico-bolt"></div>
-        <span>TRADE MANAGER & RADAR</span>
-        <span class="brand-tag">MQL5 GLOBAL</span>
+        <span>TRADE MANAGER & REVERSAL RADAR</span>
+        <span class="brand-tag">[MQL5 MULTI-SIGNAL REALTIME]</span>
       </div>
       
       <!-- Nav Tabs -->
@@ -625,7 +625,7 @@
         </button>
         <button class="tab-item" onclick="switchNav('tab-scanner', this)">
           <div class="ico ico-radar"></div>
-          <span>ENGULFING RADAR</span>
+          <span>REVERSAL RADAR</span>
         </button>
       </div>
     </div>
@@ -760,7 +760,7 @@
           <div class="card-title">
             <span>DAFTAR PANTAUAN MULTI-SIMBOL AKTIF</span>
             <span style="display:flex; align-items:center; gap:6px; color:var(--bull-bright); font-size:11px; font-weight:800;">
-              <span class="pulse-dot"></span> REALTIME TICK BREAK ACTIVE
+              <span class="pulse-dot"></span> REALTIME MULTI-SIGNAL ACTIVE
             </span>
           </div>
 
@@ -771,22 +771,23 @@
               <div>
                 <div class="radar-symbol">EURUSD</div>
               </div>
-              <div class="radar-tf">[M5]</div>
+              <div class="radar-tf">[M5]<br><span style="font-size:9px; color:var(--text-med)">30% TF</span></div>
               <div class="radar-conditions">
                 <div class="cond-row">
                   <span class="cond-bull">Bullish:</span>
-                  <span class="cond-val">BEBAS (Any Price)</span>
+                  <span class="cond-val">ALL (Bebas)</span>
                 </div>
                 <div class="cond-row">
                   <span class="cond-bear">Bearish:</span>
-                  <span class="cond-val">BEBAS (Any Price)</span>
+                  <span class="cond-val">ALL (Bebas)</span>
                 </div>
               </div>
-              <div class="radar-atr-box">
-                <strong>50% ATR(14)</strong><br>
-                auto-included in alert
+              <div class="radar-atr-box" style="font-size:10px;">
+                <span style="color:var(--cyan-bright); font-weight:bold;">[ENG] [HMR/SS] [ST+HA]</span><br>
+                <span style="color:var(--gold-bright);">MODE: ANY (OR)</span>
               </div>
               <div style="display:flex; justify-content:flex-end; gap:6px;">
+                <button class="btn btn-green btn-sm" onclick="toggleActiveRadar(this)">ACTIVE</button>
                 <button class="btn btn-neutral btn-sm" onclick="editRadar(0, 'EURUSD', '5', 'ALL', 'ALL')">EDIT</button>
                 <button class="btn btn-red btn-sm" onclick="deleteRadar(this)"><div class="ico ico-trash"></div></button>
               </div>
@@ -797,23 +798,24 @@
               <div>
                 <div class="radar-symbol">XAUUSD</div>
               </div>
-              <div class="radar-tf">[H1]</div>
+              <div class="radar-tf">[H1]<br><span style="font-size:9px; color:var(--gold-bright)">CLOSE</span></div>
               <div class="radar-conditions">
                 <div class="cond-row">
-                  <span class="cond-bull">Bullish jika &lt;</span>
-                  <span class="cond-val">2720.00</span>
+                  <span class="cond-bull">Bullish:</span>
+                  <span class="cond-val">&lt; 2720.00</span>
                 </div>
                 <div class="cond-row">
-                  <span class="cond-bear">Bearish jika &gt;</span>
-                  <span class="cond-val">2765.00</span>
+                  <span class="cond-bear">Bearish:</span>
+                  <span class="cond-val">&gt; 2765.00</span>
                 </div>
               </div>
-              <div class="radar-atr-box">
-                <strong>50% ATR(14)</strong><br>
-                auto-included in alert
+              <div class="radar-atr-box" style="font-size:10px;">
+                <span style="color:var(--cyan-bright); font-weight:bold;">[ENG] [ST+HA]</span><br>
+                <span style="color:var(--gold-bright);">MODE: COMBO (AND)</span>
               </div>
               <div style="display:flex; justify-content:flex-end; gap:6px;">
-                <button class="btn btn-neutral btn-sm" onclick="editRadar(1, 'XAUUSD', '60', '2720.00', '2765.00')">EDIT</button>
+                <button class="btn btn-green btn-sm" onclick="toggleActiveRadar(this)">ACTIVE</button>
+                <button class="btn btn-neutral btn-sm" onclick="editRadar(1, 'XAUUSD', '60', '< 2720.00', '> 2765.00')">EDIT</button>
                 <button class="btn btn-red btn-sm" onclick="deleteRadar(this)"><div class="ico ico-trash"></div></button>
               </div>
             </div>
@@ -838,24 +840,44 @@
               <span class="form-label" style="width:70px; text-align:right;">TF (MIN):</span>
               <input type="text" value="5" style="width:45%;" id="new-tf">
             </div>
-            
+
             <div class="form-row">
-              <span class="form-label" style="color:var(--bull-bright);">BULLISH &lt; :</span>
-              <input type="text" placeholder="Harga batas, 'ALL' utk bebas, kosong = OFF" id="bull-price">
+              <span class="form-label">SIGNALS:</span>
+              <div style="display:flex; gap:6px; flex:1;">
+                <button type="button" class="btn btn-blue btn-sm" id="btn-sig-eng" onclick="toggleSigBtn('ENG')">[X] ENGULF</button>
+                <button type="button" class="btn btn-gold btn-sm" id="btn-sig-hmr" onclick="toggleSigBtn('HMR')">[X] HMR/SS</button>
+                <button type="button" class="btn btn-green btn-sm" id="btn-sig-stoch" onclick="toggleSigBtn('STOCH')">[X] STOCH+HA</button>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <span class="form-label">SIG MODE:</span>
+              <button type="button" class="btn btn-neutral btn-sm" style="flex:1; color:var(--cyan-bright);" id="btn-sig-mode" onclick="toggleSigModeBtn()">MODE: ANY (OR)</button>
+            </div>
+
+            <div class="form-row">
+              <span class="form-label">DELAY:</span>
+              <button type="button" class="btn btn-neutral btn-sm" style="width:140px; color:var(--cyan-bright);" id="btn-delay-mode" onclick="toggleDelayModeBtn()">% TF PROGRESS</button>
+              <input type="text" value="30%" style="width:70px; color:var(--gold-bright); text-align:center;" id="new-delay">
             </div>
             
             <div class="form-row">
-              <span class="form-label" style="color:var(--bear-bright);">BEARISH &gt; :</span>
-              <input type="text" placeholder="Harga batas, 'ALL' utk bebas, kosong = OFF" id="bear-price">
+              <span class="form-label" style="color:var(--bull-bright);">BULLISH :</span>
+              <input type="text" placeholder="Harga batas, 'ALL' utk bebas, kosong = OFF" value="ALL" id="bull-price">
+            </div>
+            
+            <div class="form-row">
+              <span class="form-label" style="color:var(--bear-bright);">BEARISH :</span>
+              <input type="text" placeholder="Harga batas, 'ALL' utk bebas, kosong = OFF" value="ALL" id="bear-price">
             </div>
 
             <div style="font-size:11px; color:var(--text-med); margin-bottom:10px;">
-              *Isi harga, ketik 'ALL' utk bebas, atau kosongkan utk OFF
+              *Isi operator (&lt;, &gt;, &lt;=, &gt;=), rentang (3040-3051), 'ALL', atau kosong utk OFF
             </div>
             
             <div style="display:flex; gap:8px;" id="form-actions">
               <button class="btn btn-blue" style="flex:1;" onclick="saveRadar()" id="btn-save-radar">
-                <div class="ico ico-plus"></div> + SAVE TO ENGULFING RADAR
+                <div class="ico ico-plus"></div> + SAVE TO REVERSAL RADAR
               </button>
             </div>
           </div>
@@ -871,13 +893,15 @@
             </div>
             
             <div class="notif-terminal">
-              [ENGULFING ALERT] <span class="hl-title">EURUSD (M5)</span><br>
-              Type: <span class="hl-bull">Realtime Strong BULLISH Break</span><br>
+              [REVERSAL ALERT] <span class="hl-title">EURUSD (M5) [30% TF DELAY]</span><br>
+              Signal: <span class="hl-title">Strong Bullish Engulfing</span><br>
+              Direction: <span class="hl-bull">BULLISH (BUY)</span><br>
               Price: 1.08250<br>
               <span class="hl-atr">50% ATR(14): 11.5 pips (115 pts)</span><br>
               Suggested SL: 1.08135 (Low - 50% ATR)<br>
               -------------------------------------<br>
-              Broken Range: 14.5 pips (Instantly Triggered)
+              *Sell SL automatically adds broker spread buffer.<br>
+              *Multi-signal support: Engulfing, Hammer, Shooting Star, Stoch+HA.
             </div>
           </div>
 
@@ -943,6 +967,71 @@
       alert(`Auto-BE dinonaktifkan untuk ${selected} order terpilih.`);
     }
 
+    let rSigEng = true;
+    let rSigHmr = true;
+    let rSigStoch = true;
+    let rSigMode = 'ANY';
+    let rDelayClose = false;
+
+    function toggleSigBtn(which) {
+      if (which === 'ENG') {
+        rSigEng = !rSigEng;
+        if (rSigMode === 'COMBO' && rSigEng) rSigHmr = false;
+      }
+      if (which === 'HMR') {
+        rSigHmr = !rSigHmr;
+        if (rSigMode === 'COMBO' && rSigHmr) rSigEng = false;
+      }
+      if (which === 'STOCH') rSigStoch = !rSigStoch;
+      updateSigButtons();
+    }
+
+    function toggleSigModeBtn() {
+      rSigMode = (rSigMode === 'ANY') ? 'COMBO' : 'ANY';
+      if (rSigMode === 'COMBO' && rSigEng && rSigHmr) rSigHmr = false;
+      const btn = document.getElementById('btn-sig-mode');
+      btn.innerText = `MODE: ${rSigMode} (${rSigMode === 'ANY' ? 'OR' : 'AND'})`;
+      btn.style.color = (rSigMode === 'COMBO') ? 'var(--gold-bright)' : 'var(--cyan-bright)';
+      updateSigButtons();
+    }
+
+    function updateSigButtons() {
+      const bEng = document.getElementById('btn-sig-eng');
+      const bHmr = document.getElementById('btn-sig-hmr');
+      const bStoch = document.getElementById('btn-sig-stoch');
+      bEng.innerText = rSigEng ? '[X] ENGULF' : '[ ] ENGULF';
+      bEng.className = rSigEng ? 'btn btn-blue btn-sm' : 'btn btn-neutral btn-sm';
+      bHmr.innerText = rSigHmr ? '[X] HMR/SS' : '[ ] HMR/SS';
+      bHmr.className = rSigHmr ? 'btn btn-gold btn-sm' : 'btn btn-neutral btn-sm';
+      bStoch.innerText = rSigStoch ? '[X] STOCH+HA' : '[ ] STOCH+HA';
+      bStoch.className = rSigStoch ? 'btn btn-green btn-sm' : 'btn btn-neutral btn-sm';
+    }
+
+    function toggleDelayModeBtn() {
+      rDelayClose = !rDelayClose;
+      const btn = document.getElementById('btn-delay-mode');
+      const inp = document.getElementById('new-delay');
+      if (rDelayClose) {
+        btn.innerText = 'TF CLOSE';
+        btn.style.color = 'var(--gold-bright)';
+        inp.style.display = 'none';
+      } else {
+        btn.innerText = '% TF PROGRESS';
+        btn.style.color = 'var(--cyan-bright)';
+        inp.style.display = 'inline-block';
+      }
+    }
+
+    function toggleActiveRadar(btn) {
+      if (btn.innerText === 'ACTIVE') {
+        btn.innerText = 'PAUSED';
+        btn.className = 'btn btn-red btn-sm';
+      } else {
+        btn.innerText = 'ACTIVE';
+        btn.className = 'btn btn-green btn-sm';
+      }
+    }
+
     function editRadar(idx, sym, tf, bull, bear) {
       editingIndex = idx;
       document.querySelectorAll('.radar-card').forEach(c => c.classList.remove('editing'));
@@ -969,12 +1058,12 @@
       document.getElementById('form-title').style.color = 'var(--cyan-bright)';
       document.getElementById('new-symbol').value = 'GBPUSD';
       document.getElementById('new-tf').value = '5';
-      document.getElementById('bull-price').value = '';
-      document.getElementById('bear-price').value = '';
+      document.getElementById('bull-price').value = 'ALL';
+      document.getElementById('bear-price').value = 'ALL';
 
       document.getElementById('form-actions').innerHTML = `
         <button class="btn btn-blue" style="flex:1;" onclick="saveRadar()" id="btn-save-radar">
-          <div class="ico ico-plus"></div> + SAVE TO ENGULFING RADAR
+          <div class="ico ico-plus"></div> + SAVE TO REVERSAL RADAR
         </button>
       `;
     }
@@ -986,7 +1075,7 @@
         alert(`Pantauan simbol ${sym} (TF: ${tf}) berhasil diperbarui!`);
         cancelEdit();
       } else {
-        alert(`Simbol ${sym} (TF: ${tf}) berhasil ditambahkan ke Radar Pantauan!`);
+        alert(`Simbol ${sym} (TF: ${tf}) berhasil ditambahkan ke Reversal Radar!`);
       }
     }
 
@@ -995,7 +1084,7 @@
     }
 
     function testAlert() {
-      alert(`[TEST NOTIFICATION SENT]\nSymbol: EURUSD (M5)\nType: Realtime Strong BULLISH Break\n50% ATR: 11.5 pips (115 pts)\nSuggested SL: 1.08135\nStatus: Push Alert Sukses!`);
+      alert(`[REVERSAL ALERT TEST]\nSymbol: EURUSD (M5) [30% TF DELAY]\nSignal: Strong Bullish Engulfing\nDirection: BULLISH (BUY)\n50% ATR: 11.5 pips (115 pts)\nSuggested SL: 1.08135\nStatus: Push Notification Sukses!`);
     }
   </script>
 </body>

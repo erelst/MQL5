@@ -1234,19 +1234,18 @@ void CreateDashboardUI()
    // Table Header Bar
    CreateRect("TH_BG", root_x + 14, table_y, win_w - 28, 24, CLR_CARD_BG, CLR_BORDER_HARD);
    CreateLabel("TH_NO",     root_x + 24,  table_y + 6, "NO",        CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_SYM",    root_x + 55,  table_y + 6, "SYMBOL",    CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_DIR",    root_x + 130, table_y + 6, "DIRECTION", CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_SIGS",   root_x + 215, table_y + 6, "SIGNALS",   CLR_CYAN_NEON, 8, true);
-   CreateLabel("TH_LOT",    root_x + 335, table_y + 6, "LOT/RISK",  CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_RR",     root_x + 400, table_y + 6, "RR",        CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_TF",     root_x + 445, table_y + 6, "TF",        CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_MAX",    root_x + 480, table_y + 6, "MAX",       CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_MULT",   root_x + 515, table_y + 6, "MULT",      CLR_GOLD_NEON, 8, true);
-   CreateLabel("TH_DELAY",  root_x + 555, table_y + 6, "DELAY",     CLR_CYAN_NEON, 8, true);
-   CreateLabel("TH_FILTER", root_x + 615, table_y + 6, "PRICE BOUNDS", CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_SYM",    root_x + 60,  table_y + 6, "SYMBOL",    CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_DIR",    root_x + 150, table_y + 6, "DIRECTION", CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_LOT",    root_x + 250, table_y + 6, "LOT/RISK",  CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_RR",     root_x + 325, table_y + 6, "RR",        CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_TF",     root_x + 375, table_y + 6, "TF",        CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_MAX",    root_x + 420, table_y + 6, "MAX",       CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_MULT",   root_x + 465, table_y + 6, "MULT",      CLR_GOLD_NEON, 8, true);
+   CreateLabel("TH_DELAY",  root_x + 515, table_y + 6, "DELAY",     CLR_CYAN_NEON, 8, true);
+   CreateLabel("TH_FILTER", root_x + 585, table_y + 6, "PRICE BOUNDS", CLR_TEXT_MED, 8, true);
    CreateLabel("TH_TRAIL",  root_x + 725, table_y + 6, "AUTO TRAIL",CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_STATUS", root_x + 820, table_y + 6, "STATUS",    CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_ACT",    root_x + 890, table_y + 6, "ACTIONS",   CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_STATUS", root_x + 825, table_y + 6, "STATUS",    CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_ACT",    root_x + 895, table_y + 6, "ACTIONS",   CLR_TEXT_MED, 8, true);
    
    UpdatePreviewTerminalBox();
    UpdateDashboardUI();
@@ -1374,38 +1373,30 @@ void UpdateDashboardUI()
       CreateRect(r_pfx + "BG", root_x + 20, cur_y, win_w - 40, 32, row_bg, is_selected ? CLR_GOLD_NEON : CLR_BORDER_SOFT);
       
       CreateLabel(r_pfx + "NO", root_x + 24, cur_y + 9, StringFormat("#%d", i + 1), CLR_TEXT_PURE, 8, true);
-      CreateLabel(r_pfx + "SYM", root_x + 55, cur_y + 9, g_rules[i].symbol, CLR_TEXT_PURE, 8, true);
+      CreateLabel(r_pfx + "SYM", root_x + 60, cur_y + 9, g_rules[i].symbol, CLR_TEXT_PURE, 8, true);
       
       string dir_str = "BUY & SELL";
       color  dir_clr = CLR_CYAN_NEON;
       if(g_rules[i].direction == TRADE_DIR_BUY)  { dir_str = "BUY ONLY";  dir_clr = CLR_BULL_NEON; }
       if(g_rules[i].direction == TRADE_DIR_SELL) { dir_str = "SELL ONLY"; dir_clr = CLR_BEAR_NEON; }
-      CreateLabel(r_pfx + "DIR", root_x + 130, cur_y + 9, dir_str, dir_clr, 8, true);
-      
-      // Signals column: [ENG] [HMR/SS] [ST+HA] [OR/AND]
-      string sigs_str = "";
-      if(g_rules[i].sig_engulfing) sigs_str += "[ENG] ";
-      if(g_rules[i].sig_hammer_ss) sigs_str += "[HMR/SS] ";
-      if(g_rules[i].sig_stoch_ha)  sigs_str += "[ST+HA] ";
-      sigs_str += (g_rules[i].signal_mode == SIGNAL_MODE_ANY) ? "[OR]" : "[AND]";
-      CreateLabel(r_pfx + "SIGS", root_x + 215, cur_y + 9, sigs_str, CLR_CYAN_NEON, 7, true);
+      CreateLabel(r_pfx + "DIR", root_x + 150, cur_y + 9, dir_str, dir_clr, 8, true);
       
       string lot_str = (g_rules[i].lot_mode == LOT_FIXED) ? DoubleToString(g_rules[i].lot_value, 2) + "L" : DoubleToString(g_rules[i].lot_value, 1) + "%R";
-      CreateLabel(r_pfx + "LOT", root_x + 335, cur_y + 9, lot_str, CLR_TEXT_PURE, 8, false);
+      CreateLabel(r_pfx + "LOT", root_x + 250, cur_y + 9, lot_str, CLR_TEXT_PURE, 8, false);
       
-      CreateLabel(r_pfx + "RR", root_x + 400, cur_y + 9, StringFormat("1:%.1f", g_rules[i].risk_reward_ratio), CLR_CYAN_NEON, 8, true);
+      CreateLabel(r_pfx + "RR", root_x + 325, cur_y + 9, StringFormat("1:%.1f", g_rules[i].risk_reward_ratio), CLR_CYAN_NEON, 8, true);
       
       string str_tf = StringSubstr(EnumToString(g_rules[i].timeframe), 7);
-      CreateLabel(r_pfx + "TF", root_x + 445, cur_y + 9, "[" + str_tf + "]", CLR_GOLD_NEON, 8, true);
+      CreateLabel(r_pfx + "TF", root_x + 375, cur_y + 9, "[" + str_tf + "]", CLR_GOLD_NEON, 8, true);
       
       string max_ord_disp = (g_rules[i].max_orders <= 0) ? "UNL" : IntegerToString(g_rules[i].max_orders);
-      CreateLabel(r_pfx + "MAX", root_x + 480, cur_y + 9, max_ord_disp, CLR_TEXT_PURE, 8, true);
+      CreateLabel(r_pfx + "MAX", root_x + 420, cur_y + 9, max_ord_disp, CLR_TEXT_PURE, 8, true);
       
       int mult_disp = (g_rules[i].entry_multiplier <= 0) ? 1 : g_rules[i].entry_multiplier;
-      CreateLabel(r_pfx + "MULT", root_x + 515, cur_y + 9, IntegerToString(mult_disp) + "x", CLR_GOLD_NEON, 8, true);
+      CreateLabel(r_pfx + "MULT", root_x + 465, cur_y + 9, IntegerToString(mult_disp) + "x", CLR_GOLD_NEON, 8, true);
       
       string delay_disp = g_rules[i].delay_is_tf_close ? "TF Close" : (IntegerToString(g_rules[i].delay_tf_pct) + "%");
-      CreateLabel(r_pfx + "DELAY", root_x + 555, cur_y + 9, delay_disp, CLR_CYAN_NEON, 8, false);
+      CreateLabel(r_pfx + "DELAY", root_x + 515, cur_y + 9, delay_disp, CLR_CYAN_NEON, 8, false);
       
       string f_str = "";
       if(g_rules[i].direction == TRADE_DIR_BUY)
@@ -1420,7 +1411,7 @@ void UpdateDashboardUI()
       {
          f_str = "B:" + g_rules[i].bull_price_filter + " | S:" + g_rules[i].bear_price_filter;
       }
-      CreateLabel(r_pfx + "FLT", root_x + 615, cur_y + 9, f_str, CLR_TEXT_MED, 7, false);
+      CreateLabel(r_pfx + "FLT", root_x + 585, cur_y + 9, f_str, CLR_TEXT_MED, 7, false);
       
       string trail_str = g_rules[i].enable_trail ? StringFormat("ON (EWMA %.1fx)", g_rules[i].atr_multiplier) : "OFF";
       CreateLabel(r_pfx + "TRL", root_x + 725, cur_y + 9, trail_str, g_rules[i].enable_trail ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, false);
@@ -2105,7 +2096,8 @@ void OnChartEvent(const int id,
             sparam == g_prefix + r_pfx + "LOT" || sparam == g_prefix + r_pfx + "RR" ||
             sparam == g_prefix + r_pfx + "TF" || sparam == g_prefix + r_pfx + "FLT" ||
             sparam == g_prefix + r_pfx + "TRL" || sparam == g_prefix + r_pfx + "MTP" ||
-            sparam == g_prefix + r_pfx + "SIGS")
+            sparam == g_prefix + r_pfx + "MAX" || sparam == g_prefix + r_pfx + "MULT" ||
+            sparam == g_prefix + r_pfx + "DELAY")
          {
             g_selected_rule_idx = i;
             UpdatePreviewTerminalBox();

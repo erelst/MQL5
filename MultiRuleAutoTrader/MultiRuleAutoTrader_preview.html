@@ -478,19 +478,18 @@
           <thead>
             <tr>
               <th style="width: 35px;">NO</th>
-              <th style="width: 75px;">SYMBOL</th>
-              <th style="width: 85px;">DIRECTION</th>
-              <th style="width: 140px;">SIGNALS</th>
-              <th style="width: 75px;">LOT/RISK</th>
+              <th style="width: 85px;">SYMBOL</th>
+              <th style="width: 100px;">DIRECTION</th>
+              <th style="width: 80px;">LOT/RISK</th>
               <th style="width: 60px;">RR</th>
-              <th style="width: 45px;">TF</th>
-              <th style="width: 45px;">MAX</th>
-              <th style="width: 45px;">MULT</th>
-              <th style="width: 65px;">DELAY</th>
+              <th style="width: 50px;">TF</th>
+              <th style="width: 50px;">MAX</th>
+              <th style="width: 50px;">MULT</th>
+              <th style="width: 75px;">DELAY</th>
               <th>PRICE BOUNDS</th>
               <th style="width: 110px;">AUTO TRAIL</th>
-              <th style="width: 65px;">STATUS</th>
-              <th style="width: 75px; text-align: center;">ACTIONS</th>
+              <th style="width: 70px;">STATUS</th>
+              <th style="width: 80px; text-align: center;">ACTIONS</th>
             </tr>
           </thead>
           <tbody id="rule-tbody">
@@ -702,7 +701,6 @@
           <td>#${idx + 1}</td>
           <td style="color:var(--text-pure); font-weight:800;">${r.symbol}</td>
           <td>${dirBadge}</td>
-          <td style="color:var(--cyan-bright); font-size:9px;">${sigsTxt}</td>
           <td>${lotTxt}</td>
           <td style="color:var(--cyan-bright);">1:${r.rr}</td>
           <td style="color:var(--gold-bright); font-weight:800;">[${r.tf}]</td>

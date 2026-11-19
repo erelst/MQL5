@@ -1,12 +1,12 @@
 //+------------------------------------------------------------------+
-//|                                     TradeManagerEngulfingRadar.mq5|
+//|                                       TradeManagerReversalRadar.mq5|
 //|                             Copyright 2026, Multi-Symbol Manager |
 //|                                  https://github.com/1jehuang/jcode|
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Multi-Symbol Manager"
 #property link      "https://github.com/1jehuang/jcode"
-#property version   "1.00"
-#property description "Multi-Symbol Trade Manager & Realtime Engulfing Break Radar"
+#property version   "2.00"
+#property description "Multi-Symbol Trade Manager & Realtime Multi-Signal Reversal Radar"
 
 #include <Trade\Trade.mqh>
 #include <Trade\PositionInfo.mqh>
@@ -22,6 +22,12 @@ enum ENUM_BE_OFFSET_MODE
    BE_OFFSET_ZERO,          // Exact Open Price (+0 points)
    BE_OFFSET_CUSTOM_POINTS, // Custom Lock Points
    BE_OFFSET_CUSTOM_PRICE   // Fixed SL Price (input below)
+};
+
+enum ENUM_SIGNAL_MODE
+{
+   SIGNAL_MODE_ANY,   // ANY (OR): Alert jika salah satu sinyal aktif terpenuhi
+   SIGNAL_MODE_COMBO  // COMBO (AND): Alert jika semua sinyal aktif terpenuhi
 };
 
 struct SAutoBEItem
@@ -49,7 +55,12 @@ struct SRadarSymbol
    datetime             last_bull_alert_bar;
    datetime             last_bear_alert_bar;
    bool                 delay_is_tf_close;
-   int                  delay_seconds;                    // detik delay sebelum alert muncul (0 = langsung)
+   int                  delay_tf_pct;                     // % TF Progress delay (0-99%)
+   bool                 active;                           // true = ACTIVE, false = PAUSED
+   bool                 sig_engulfing;                    // Strong Engulfing Reversal
+   bool                 sig_hammer_ss;                    // Strong Hammer (Buy) / Shooting Star (Sell)
+   bool                 sig_stoch_ha;                     // Stochastic + Heikin Ashi Reversal
+   ENUM_SIGNAL_MODE     signal_mode;                      // ANY vs COMBO
    datetime             bull_cond_start_time_main;        // TF utama
    datetime             bull_cond_start_time_fallback;    // M1 fallback
    datetime             bear_cond_start_time_main;        // TF utama
@@ -72,9 +83,20 @@ input ulong    InpMagicNumber          = 0;          // Filter Magic (0 = All Tr
 input bool     InpEnablePushAlerts     = true;       // Send Mobile Push Alerts
 input bool     InpEnableSoundAlerts    = true;       // Enable Sound/Pop-up Alerts
 
-input group "=== ENGULFING SETTINGS ==="
+input group "=== REVERSAL SIGNALS SETTINGS ==="
 input double   InpBodyRatioMultiplier  = 1.0;        // Min Body Ratio vs Previous Candle
 input int      InpDefaultATRPeriod     = 14;         // Default ATR Period for 50% calculation
+input bool     InpDefaultSigEng        = true;       // Default Enable Engulfing
+input bool     InpDefaultSigHmrSS      = true;       // Default Enable Hammer/Shooting Star
+input bool     InpDefaultSigStochHA    = true;       // Default Enable Stoch + Heikin Ashi
+input ENUM_SIGNAL_MODE InpDefaultSigMode= SIGNAL_MODE_ANY; // Default Signal Mode (ANY/COMBO)
+
+input group "=== STOCHASTIC & HEIKIN ASHI ==="
+input int      InpStochLength          = 14;         // Stochastic Length
+input int      InpStochK               = 1;          // %K Smoothing
+input int      InpStochD               = 3;          // %D Smoothing
+input double   InpStochOB              = 80.0;       // Overbought Level
+input double   InpStochOS              = 20.0;       // Oversold Level
 
 //+------------------------------------------------------------------+
 //| GLOBAL OBJECTS & STATE                                           |
@@ -89,19 +111,23 @@ SAutoBEItem       g_auto_be_list[];
 SSelectedOrder    g_selected_orders[];
 
 int               g_active_tab = 1; // 1 = Orders Tab, 2 = Radar Tab
-bool                 g_form_delay_close = false;
+bool              g_form_delay_close = false;
+int               g_form_delay_pct   = 30;
 // Persistent Add/Edit Radar form state (mirrors AutoTrader g_form_* pattern).
-string               g_form_sym          = _Symbol;
-string               g_form_tf           = "5";
-string               g_form_bull         = "ALL";
-string               g_form_bear         = "ALL";
-int                  g_form_delay_sec    = 0;
+string            g_form_sym          = _Symbol;
+string            g_form_tf           = "5";
+string            g_form_bull         = "ALL";
+string            g_form_bear         = "ALL";
+bool              g_form_sig_eng      = true;
+bool              g_form_sig_hmr      = true;
+bool              g_form_sig_stoch    = true;
+ENUM_SIGNAL_MODE  g_form_sig_mode     = SIGNAL_MODE_ANY;
 int               g_orders_page = 0;
 int               g_editing_radar_idx = -1; // -1 = Add mode, >= 0 = Edit mode index
 ENUM_BE_OFFSET_MODE g_be_offset_mode = BE_OFFSET_AUTO_SPREAD; // Selected Offset Mode for Trigger
 double            g_be_fixed_price = 0.0; // Fixed SL price for BE_OFFSET_CUSTOM_PRICE (0 = off)
 const int         MAX_ROWS_PER_PAGE = 8;
-string            g_prefix = "TMER_";
+string            g_prefix = "TMRR_";
 
 // UI Coordinates & Colors
 #define CLR_CANVAS_BG       C'0,0,0'
@@ -157,17 +183,20 @@ void CreateDashboardUI();
 void UpdateDashboardUI();
 void DestroyDashboardUI();
 void CheckAutoBETriggers();
-void CheckEngulfingRadar();
-void ProcessEngulfingForSymbol(int index);
+void CheckReversalRadar();
+void ProcessReversalForSymbol(int index);
 bool IsStrongBullishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf, const int shift, double &out_atr_50, double &out_broken_range, double &out_cur_price, double &out_broken_high, double &out_broken_low);
 bool IsStrongBearishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf, const int shift, double &out_atr_50, double &out_broken_range, double &out_cur_price, double &out_broken_high, double &out_broken_low);
+bool IsStrongHammer(const string sym, const ENUM_TIMEFRAMES tf, const int shift, double &out_low, double &out_cur_price);
+bool IsStrongShootingStar(const string sym, const ENUM_TIMEFRAMES tf, const int shift, double &out_high, double &out_cur_price);
+bool CheckStochHA(const string sym, const ENUM_TIMEFRAMES tf, const int shift, bool check_buy);
 void ApplyBulkSL(double sl_price);
 void ApplyBulkTP(double tp_price);
 void ApplyInstantBESpread();
 void ActivateBulkAutoBE(double trigger_price, ENUM_BE_OFFSET_MODE mode, int custom_pts);
 void DeactivateBulkAutoBE();
-void AddRadarSymbol(string sym, ENUM_TIMEFRAMES tf, bool bull_on, string bull_filter, bool bear_on, string bear_filter, int atr_p, bool tf_close, int delay_sec);
-void UpdateRadarSymbol(int index, string sym, ENUM_TIMEFRAMES tf, bool bull_on, string bull_filter, bool bear_on, string bear_filter, int atr_p, bool tf_close, int delay_sec);
+void AddRadarSymbol(string sym, ENUM_TIMEFRAMES tf, bool bull_on, string bull_filter, bool bear_on, string bear_filter, int atr_p, bool tf_close, int delay_pct, bool active_on, bool sig_eng, bool sig_hmr, bool sig_stoch, ENUM_SIGNAL_MODE sig_mode);
+void UpdateRadarSymbol(int index, string sym, ENUM_TIMEFRAMES tf, bool bull_on, string bull_filter, bool bear_on, string bear_filter, int atr_p, bool tf_close, int delay_pct, bool sig_eng, bool sig_hmr, bool sig_stoch, ENUM_SIGNAL_MODE sig_mode);
 void RemoveRadarSymbol(int index);
 bool IsOrderSelected(ulong ticket);
 void SetOrderSelected(ulong ticket, bool sel);
@@ -259,7 +288,7 @@ int OnInit()
    CreateDashboardUI();
    UpdateDashboardUI();
    
-   Print("TradeManagerEngulfingRadar initialized successfully.");
+   Print("TradeManagerReversalRadar initialized successfully.");
    return(INIT_SUCCEEDED);
 }
 
@@ -272,7 +301,7 @@ void OnDeinit(const int reason)
    SaveStateToFile();
    DestroyDashboardUI();
    ChartRedraw();
-   Print("TradeManagerEngulfingRadar deinitialized.");
+   Print("TradeManagerReversalRadar deinitialized.");
 }
 
 //+------------------------------------------------------------------+
@@ -283,8 +312,8 @@ void OnTick()
    // Real-time Auto-BE check on every tick
    CheckAutoBETriggers();
    
-   // Real-time Engulfing break scan across symbols
-   CheckEngulfingRadar();
+   // Real-time Reversal radar scan across symbols
+   CheckReversalRadar();
 }
 
 //+------------------------------------------------------------------+
@@ -294,7 +323,7 @@ void OnTimer()
 {
    // Background check for non-current chart symbol ticks
    CheckAutoBETriggers();
-   CheckEngulfingRadar();
+   CheckReversalRadar();
    
    // Periodically refresh order list in UI
    UpdateDashboardUI();
@@ -439,21 +468,30 @@ void OnChartEvent(const int id,
             else if(tf_idx == 240) tf = PERIOD_H4;
             else if(tf_idx == 1440) tf = PERIOD_D1;
             
-            int delay_sec = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_NEW_DELAY", OBJPROP_TEXT));
-            if(delay_sec < 0) delay_sec = 0;
+            int delay_pct = 30;
+            if(!g_form_delay_close)
+            {
+               delay_pct = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_NEW_DELAY", OBJPROP_TEXT));
+               if(delay_pct < 0) delay_pct = 0;
+               if(delay_pct > 99) delay_pct = 99;
+            }
+            
+            // Check fallback if no signals selected
+            if(!g_form_sig_eng && !g_form_sig_hmr && !g_form_sig_stoch)
+               g_form_sig_eng = true;
             
             if(g_editing_radar_idx >= 0 && g_editing_radar_idx < ArraySize(g_radar_symbols))
             {
-               UpdateRadarSymbol(g_editing_radar_idx, matched_sym, tf, has_bull, str_bull, has_bear, str_bear, InpDefaultATRPeriod, g_form_delay_close, delay_sec);
+               UpdateRadarSymbol(g_editing_radar_idx, matched_sym, tf, has_bull, str_bull, has_bear, str_bear, InpDefaultATRPeriod, g_form_delay_close, delay_pct, g_form_sig_eng, g_form_sig_hmr, g_form_sig_stoch, g_form_sig_mode);
                g_editing_radar_idx = -1;
             }
             else
             {
-               AddRadarSymbol(matched_sym, tf, has_bull, str_bull, has_bear, str_bear, InpDefaultATRPeriod, g_form_delay_close, delay_sec);
+               AddRadarSymbol(matched_sym, tf, has_bull, str_bull, has_bear, str_bear, InpDefaultATRPeriod, g_form_delay_close, delay_pct, true, g_form_sig_eng, g_form_sig_hmr, g_form_sig_stoch, g_form_sig_mode);
             }
             
-            // Persist typed values so they survive rebuilds (mirrors AutoTrader)
-            g_form_delay_sec = delay_sec;
+            // Persist typed values so they survive rebuilds
+            g_form_delay_pct = delay_pct;
             g_form_bull      = str_bull;
             g_form_bear      = str_bear;
             g_form_sym       = matched_sym;
@@ -466,31 +504,74 @@ void OnChartEvent(const int id,
          else Alert("Simbol '", raw_sym, "' tidak ditemukan di broker/Market Watch!");
          return;
       }
-      // Toggle Radar Mode (Seconds vs TF Close)
+      // Toggle Radar Signals in Form
+      else if(sparam == g_prefix + "BTN_RADAR_SIG_ENG")
+      {
+         g_form_sig_eng = !g_form_sig_eng;
+         // Mutual exclusion in COMBO mode
+         if(g_form_sig_mode == SIGNAL_MODE_COMBO && g_form_sig_eng)
+            g_form_sig_hmr = false;
+         CreateDashboardUI();
+         UpdateDashboardUI();
+         return;
+      }
+      else if(sparam == g_prefix + "BTN_RADAR_SIG_HMR")
+      {
+         g_form_sig_hmr = !g_form_sig_hmr;
+         // Mutual exclusion in COMBO mode
+         if(g_form_sig_mode == SIGNAL_MODE_COMBO && g_form_sig_hmr)
+            g_form_sig_eng = false;
+         CreateDashboardUI();
+         UpdateDashboardUI();
+         return;
+      }
+      else if(sparam == g_prefix + "BTN_RADAR_SIG_STOCH")
+      {
+         g_form_sig_stoch = !g_form_sig_stoch;
+         CreateDashboardUI();
+         UpdateDashboardUI();
+         return;
+      }
+      else if(sparam == g_prefix + "BTN_RADAR_SIG_MODE")
+      {
+         g_form_sig_mode = (g_form_sig_mode == SIGNAL_MODE_ANY) ? SIGNAL_MODE_COMBO : SIGNAL_MODE_ANY;
+         if(g_form_sig_mode == SIGNAL_MODE_COMBO)
+         {
+            if(g_form_sig_eng && g_form_sig_hmr) g_form_sig_hmr = false;
+         }
+         CreateDashboardUI();
+         UpdateDashboardUI();
+         return;
+      }
+      // Toggle Radar Delay Mode (% TF Progress vs TF Close)
       else if(sparam == g_prefix + "BTN_TOGGLE_RADAR_MODE")
       {
+         if(!g_form_delay_close)
+         {
+            int cur_pct = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_NEW_DELAY", OBJPROP_TEXT));
+            if(cur_pct >= 0) g_form_delay_pct = cur_pct;
+         }
          g_form_delay_close = !g_form_delay_close;
          CreateDashboardUI();
          UpdateDashboardUI();
          return;
       }
       // Reset Radar Form / Cancel Edit
-      // RESET -> kembalikan form ke nilai built-in; CANCEL -> tetap pertahankan nilai
       else if(sparam == g_prefix + "BTN_RESET_RADAR")
       {
-         // Kembalikan semua nilai form ke default bawaan
          g_form_sym          = _Symbol;
          g_form_tf           = "5";
          g_form_bull         = "ALL";
          g_form_bear         = "ALL";
-         g_form_delay_sec    = 0;
+         g_form_delay_pct    = 30;
          g_form_delay_close  = false;
+         g_form_sig_eng      = true;
+         g_form_sig_hmr      = true;
+         g_form_sig_stoch    = true;
+         g_form_sig_mode     = SIGNAL_MODE_ANY;
          g_editing_radar_idx = -1;
 
-         // Simpan ke file state
          SaveStateToFile();
-
-         // Rebuild UI dengan nilai default
          CreateDashboardUI();
          UpdateDashboardUI();
          return;
@@ -560,6 +641,20 @@ void OnChartEvent(const int id,
          return;
       }
       
+      // Toggle Active / Pause Watchlist Item
+      if(StringFind(sparam, g_prefix + "BTN_TOGGLE_ACT_") == 0)
+      {
+         string str_idx = StringSubstr(sparam, StringLen(g_prefix + "BTN_TOGGLE_ACT_"));
+         int idx = (int)StringToInteger(str_idx);
+         if(idx >= 0 && idx < ArraySize(g_radar_symbols))
+         {
+            g_radar_symbols[idx].active = !g_radar_symbols[idx].active;
+            SaveStateToFile();
+            UpdateDashboardUI();
+         }
+         return;
+      }
+      
       // Edit Watchlist Item
       if(StringFind(sparam, g_prefix + "BTN_EDIT_RADAR_") == 0)
       {
@@ -570,8 +665,12 @@ void OnChartEvent(const int id,
             g_editing_radar_idx = idx;
             // Copy selected radar into persistent form globals (single source of truth)
             g_form_delay_close  = g_radar_symbols[idx].delay_is_tf_close;
-            g_form_delay_sec    = g_radar_symbols[idx].delay_seconds;
+            g_form_delay_pct    = g_radar_symbols[idx].delay_tf_pct;
             g_form_sym          = g_radar_symbols[idx].symbol;
+            g_form_sig_eng      = g_radar_symbols[idx].sig_engulfing;
+            g_form_sig_hmr      = g_radar_symbols[idx].sig_hammer_ss;
+            g_form_sig_stoch    = g_radar_symbols[idx].sig_stoch_ha;
+            g_form_sig_mode     = g_radar_symbols[idx].signal_mode;
             // Preserve OFF state: if disabled, show empty (OFF) instead of "ALL"
             g_form_bull         = g_radar_symbols[idx].bull_enabled ? g_radar_symbols[idx].bull_price_filter : "";
             g_form_bear         = g_radar_symbols[idx].bear_enabled ? g_radar_symbols[idx].bear_price_filter : "";
@@ -608,229 +707,265 @@ void OnChartEvent(const int id,
 //+------------------------------------------------------------------+
 //| REALTIME ENGULFING BREAK DETECTION & ATR CALCULATION             |
 //+------------------------------------------------------------------+
-void CheckEngulfingRadar()
+//+------------------------------------------------------------------+
+//| REALTIME REVERSAL SCAN ACROSS SYMBOLS                            |
+//+------------------------------------------------------------------+
+int CandidateTFs(const ENUM_TIMEFRAMES rule_tf, ENUM_TIMEFRAMES &out[])
+{
+   if(rule_tf == PERIOD_M5)
+   {
+      ArrayResize(out, 2);
+      out[0] = PERIOD_M5;
+      out[1] = PERIOD_M1;
+      return 2;
+   }
+   ArrayResize(out, 1);
+   out[0] = rule_tf;
+   return 1;
+}
+
+void CheckReversalRadar()
 {
    int total = ArraySize(g_radar_symbols);
    for(int i = 0; i < total; i++)
    {
-      ProcessEngulfingForSymbol(i);
+      ProcessReversalForSymbol(i);
    }
 }
 
-void ProcessEngulfingForSymbol(int index)
+void ProcessReversalForSymbol(int index)
 {
    if(index < 0 || index >= ArraySize(g_radar_symbols)) return;
    
+   // SAKLAR ACTIVE / PAUSE CHECK
+   if(!g_radar_symbols[index].active) return;
+   
    string sym = g_radar_symbols[index].symbol;
    ENUM_TIMEFRAMES tf = g_radar_symbols[index].timeframe;
-   int shift_val = g_radar_symbols[index].delay_is_tf_close ? 1 : 0;
    
    if(!SymbolInfoInteger(sym, SYMBOL_SELECT))
       SymbolSelect(sym, true);
    
-   double atr_50 = 0.0;
-   double broken_range = 0.0;
-   double cur_price = 0.0;
-   double broken_high = 0.0;
-   double broken_low = 0.0;
+   ENUM_TIMEFRAMES cand_tf[];
+   int cand_total = CandidateTFs(tf, cand_tf);
    
-   datetime cur_bar_time = (datetime)SeriesInfoInteger(sym, tf, SERIES_LASTBAR_DATE);
-   
-   // ponytail: M5 watches also accept M1 signals; every other TF stays exclusive
-   ENUM_TIMEFRAMES sig_tf_bull = tf;
-   bool bull_hit = IsStrongBullishEngulfingBreak(sym, tf, shift_val, atr_50, broken_range, cur_price, broken_high, broken_low);
-   if(!bull_hit && tf == PERIOD_M5)
+   for(int c = 0; c < cand_total; c++)
    {
-      double atr_m1 = 0.0;
-      if(IsStrongBullishEngulfingBreak(sym, PERIOD_M1, shift_val, atr_m1, broken_range, cur_price, broken_high, broken_low))
-      {
-         bull_hit = true;
-         sig_tf_bull = PERIOD_M1;
-      }
-   }
-   
-   double atr_50_bear = 0.0;
-   double br_bear = 0.0, bh_bear = 0.0, bl_bear = 0.0;
-   ENUM_TIMEFRAMES sig_tf_bear = tf;
-   bool bear_hit = IsStrongBearishEngulfingBreak(sym, tf, shift_val, atr_50_bear, br_bear, cur_price, bh_bear, bl_bear);
-   if(!bear_hit && tf == PERIOD_M5)
-   {
-      double atr_m1 = 0.0;
-      if(IsStrongBearishEngulfingBreak(sym, PERIOD_M1, shift_val, atr_m1, br_bear, cur_price, bh_bear, bl_bear))
-      {
-         bear_hit = true;
-         sig_tf_bear = PERIOD_M1;
-      }
-   }
-   
-   // 1. Check Bullish Engulfing Break
-   if(g_radar_symbols[index].bull_enabled)
-   {
-      bool can_alert = false;
+      ENUM_TIMEFRAMES sig_tf = cand_tf[c];
       
-      // ponytail: delay_seconds gates realtime alerts; 0 = instant
-      int delay_sec = g_radar_symbols[index].delay_seconds;
-      if(delay_sec == 0 && !g_radar_symbols[index].delay_is_tf_close && cur_bar_time != g_radar_symbols[index].last_bull_alert_bar)
+      datetime cur_bar_open_time = (datetime)SeriesInfoInteger(sym, sig_tf, SERIES_LASTBAR_DATE);
+      if(cur_bar_open_time <= 0) continue;
+      
+      long sig_tf_sec = PeriodSeconds(sig_tf);
+      if(sig_tf_sec <= 0) sig_tf_sec = 300;
+      
+      // % TF PROGRESS DELAY GATE
+      if(!g_radar_symbols[index].delay_is_tf_close && g_radar_symbols[index].delay_tf_pct > 0)
       {
-         can_alert = true;
-      }
-      else if(delay_sec > 0)
-      {
-         // Set cond_start_time when bull_hit becomes true
-         if(bull_hit && g_radar_symbols[index].bull_cond_start_time_main == 0)
-         {
-            g_radar_symbols[index].bull_cond_start_time_main = TimeCurrent();
-            g_radar_symbols[index].bull_cond_start_time_fallback = TimeCurrent();
-         }
-         
-         // Check if delay expired for main slot (TF)
-         if(g_radar_symbols[index].bull_cond_start_time_main > 0)
-         {
-            long elapsed_main = TimeCurrent() - g_radar_symbols[index].bull_cond_start_time_main;
-            if(elapsed_main >= delay_sec)
-               can_alert = true;
-         }
-         
-         // Check if delay expired for fallback slot (M1)
-         if(!can_alert && g_radar_symbols[index].bull_cond_start_time_fallback > 0)
-         {
-            long elapsed_fallback = TimeCurrent() - g_radar_symbols[index].bull_cond_start_time_fallback;
-            if(elapsed_fallback >= delay_sec)
-               can_alert = true;
-         }
-         
-         // Reset slots when bar changes (new bar)
-         if(cur_bar_time != g_radar_symbols[index].last_bull_alert_bar)
-         {
-            g_radar_symbols[index].bull_cond_start_time_main = 0;
-            g_radar_symbols[index].bull_cond_start_time_fallback = 0;
-         }
+         datetime bar_open_time = (datetime)SeriesInfoInteger(sym, sig_tf, SERIES_LASTBAR_DATE);
+         datetime cur_tick_time = TimeCurrent();
+         long elapsed_sec = cur_tick_time - bar_open_time;
+         long min_required_sec = (long)((g_radar_symbols[index].delay_tf_pct / 100.0) * sig_tf_sec);
+         if(elapsed_sec < min_required_sec) continue;
       }
       
-      // TF close mode: alert only on bar close
-      if(g_radar_symbols[index].delay_is_tf_close && cur_bar_time != g_radar_symbols[index].last_bull_alert_bar)
-      {
-         g_radar_symbols[index].last_bull_alert_bar = cur_bar_time;
-         can_alert = true;
-      }
+      int shift_to_check = g_radar_symbols[index].delay_is_tf_close ? 1 : 0;
       
-      if(bull_hit && can_alert && EvaluatePriceFilter(cur_price, g_radar_symbols[index].bull_price_filter))
-      {
-         int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
-         double point = SymbolInfoDouble(sym, SYMBOL_POINT);
-         double pips_factor = (digits == 3 || digits == 5) ? 10.0 * point : point;
-         if(pips_factor == 0) pips_factor = point;
-         
-         double pips_val = atr_50 / pips_factor;
-         double points_val = atr_50 / point;
-         double rec_sl = broken_low - atr_50;
-         
-         string mode_tag = g_radar_symbols[index].delay_is_tf_close ? "TF CLOSE" : 
-                           (delay_sec > 0 ? StringFormat("DELAY %ds", delay_sec) : "REALTIME TICK");
-         string msg = StringFormat("[ENGULFING ALERT] %s (%s) [%s]\nType: Strong BULLISH Break\nPrice: %s\n50%% ATR(%d): %.1f pips (%.0f pts)\nSuggested SL: %s\nBroken Range: %.1f pips",
-                                   sym, EnumToString(sig_tf_bull), mode_tag,
-                                   DoubleToString(cur_price, digits),
-                                   g_radar_symbols[index].atr_period,
-                                   pips_val,
-                                   points_val,
-                                   DoubleToString(rec_sl, digits),
-                                   broken_range / pips_factor);
-         
-         if(InpEnableSoundAlerts) Alert(msg);
-         if(InpEnablePushAlerts)  SendNotification(msg);
-         Print(msg);
-         
-         // ponytail: mark alert sent for this bar so no repeat in same bar
-         g_radar_symbols[index].last_bull_alert_bar = cur_bar_time;
-         g_radar_symbols[index].bull_cond_start_time_main = 0;
-         g_radar_symbols[index].bull_cond_start_time_fallback = 0;
-         can_alert = false;
-      }
-   }
-   
-   // 2. Check Bearish Engulfing Break
-   if(g_radar_symbols[index].bear_enabled)
-   {
-      bool can_alert = false;
+      double atr_50 = CalculateATR50(sym, AtrBaseTF(sig_tf), g_radar_symbols[index].atr_period);
+      double cur_price = 0.0;
       
-      // ponytail: delay_seconds gates realtime alerts; 0 = instant
-      int delay_sec = g_radar_symbols[index].delay_seconds;
-      if(delay_sec == 0 && !g_radar_symbols[index].delay_is_tf_close && cur_bar_time != g_radar_symbols[index].last_bear_alert_bar)
+      int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+      double point = SymbolInfoDouble(sym, SYMBOL_POINT);
+      double pips_factor = (digits == 3 || digits == 5) ? 10.0 * point : point;
+      if(pips_factor == 0) pips_factor = point;
+      double spread = (SymbolInfoDouble(sym, SYMBOL_ASK) - SymbolInfoDouble(sym, SYMBOL_BID));
+      
+      // 1. EVALUASI BULLISH REVERSAL
+      if(g_radar_symbols[index].bull_enabled && cur_bar_open_time != g_radar_symbols[index].last_bull_alert_bar)
       {
-         can_alert = true;
-      }
-      else if(delay_sec > 0)
-      {
-         // Set cond_start_time when bear_hit becomes true
-         if(bear_hit && g_radar_symbols[index].bear_cond_start_time_main == 0)
+         bool buy_eng_valid   = false;
+         bool buy_hmr_valid   = false;
+         bool buy_stoch_valid = false;
+         double eng_broken_h = 0.0, eng_broken_l = 0.0, eng_broken_r = 0.0;
+         double hmr_low = 0.0;
+         
+         if(g_radar_symbols[index].sig_engulfing)
          {
-            g_radar_symbols[index].bear_cond_start_time_main = TimeCurrent();
-            g_radar_symbols[index].bear_cond_start_time_fallback = TimeCurrent();
+            double atr_d = 0.0;
+            if(IsStrongBullishEngulfingBreak(sym, sig_tf, shift_to_check, atr_d, eng_broken_r, cur_price, eng_broken_h, eng_broken_l))
+               buy_eng_valid = true;
          }
          
-         // Check if delay expired for main slot (TF)
-         if(g_radar_symbols[index].bear_cond_start_time_main > 0)
+         if(g_radar_symbols[index].sig_hammer_ss)
          {
-            long elapsed_main = TimeCurrent() - g_radar_symbols[index].bear_cond_start_time_main;
-            if(elapsed_main >= delay_sec)
-               can_alert = true;
+            if(IsStrongHammer(sym, sig_tf, shift_to_check, hmr_low, cur_price))
+               buy_hmr_valid = true;
          }
          
-         // Check if delay expired for fallback slot (M1)
-         if(!can_alert && g_radar_symbols[index].bear_cond_start_time_fallback > 0)
+         if(g_radar_symbols[index].sig_stoch_ha)
          {
-            long elapsed_fallback = TimeCurrent() - g_radar_symbols[index].bear_cond_start_time_fallback;
-            if(elapsed_fallback >= delay_sec)
-               can_alert = true;
+            if(CheckStochHA(sym, sig_tf, shift_to_check, true))
+               buy_stoch_valid = true;
          }
          
-         // Reset slots when bar changes (new bar)
-         if(cur_bar_time != g_radar_symbols[index].last_bear_alert_bar)
+         bool trigger_buy = false;
+         string sig_name = "";
+         double rec_sl = 0.0;
+         
+         if(g_radar_symbols[index].signal_mode == SIGNAL_MODE_COMBO)
          {
-            g_radar_symbols[index].bear_cond_start_time_main = 0;
-            g_radar_symbols[index].bear_cond_start_time_fallback = 0;
+            bool all_ok = true;
+            if(g_radar_symbols[index].sig_engulfing && !buy_eng_valid)   all_ok = false;
+            if(g_radar_symbols[index].sig_hammer_ss && !buy_hmr_valid)   all_ok = false;
+            if(g_radar_symbols[index].sig_stoch_ha  && !buy_stoch_valid) all_ok = false;
+            
+            if(all_ok && (g_radar_symbols[index].sig_engulfing || g_radar_symbols[index].sig_hammer_ss || g_radar_symbols[index].sig_stoch_ha))
+            {
+               trigger_buy = true;
+               sig_name = "COMBO: ";
+               if(buy_eng_valid) { sig_name += "[ENG] "; rec_sl = eng_broken_l - atr_50; }
+               if(buy_hmr_valid) { sig_name += "[HAMMER] "; rec_sl = hmr_low - atr_50; }
+               if(buy_stoch_valid) { sig_name += "[STOCH+HA]"; if(rec_sl == 0) rec_sl = cur_price - (atr_50 * 2.0); }
+            }
+         }
+         else
+         {
+            if(g_radar_symbols[index].sig_engulfing && buy_eng_valid)
+            {
+               trigger_buy = true;
+               sig_name = "Strong Bullish Engulfing";
+               rec_sl = eng_broken_l - atr_50;
+            }
+            else if(g_radar_symbols[index].sig_hammer_ss && buy_hmr_valid)
+            {
+               trigger_buy = true;
+               sig_name = "Strong Hammer Reversal";
+               rec_sl = hmr_low - atr_50;
+            }
+            else if(g_radar_symbols[index].sig_stoch_ha && buy_stoch_valid)
+            {
+               trigger_buy = true;
+               sig_name = "Stochastic + Heikin Ashi Buy";
+               rec_sl = cur_price - (atr_50 * 2.0);
+            }
+         }
+         
+         if(trigger_buy && EvaluatePriceFilter(cur_price, g_radar_symbols[index].bull_price_filter))
+         {
+            string mode_tag = g_radar_symbols[index].delay_is_tf_close ? "TF CLOSE" : 
+                              (g_radar_symbols[index].delay_tf_pct > 0 ? StringFormat("%d%% TF DELAY", g_radar_symbols[index].delay_tf_pct) : "REALTIME TICK");
+            
+            double pips_val = atr_50 / pips_factor;
+            double points_val = atr_50 / point;
+            
+            string msg = StringFormat("[REVERSAL ALERT] %s (%s) [%s]\nSignal: %s\nDirection: BULLISH (BUY)\nPrice: %s\n50%% ATR(%d): %.1f pips (%.0f pts)\nSuggested SL: %s",
+                                      sym, EnumToString(sig_tf), mode_tag, sig_name,
+                                      DoubleToString(cur_price, digits),
+                                      g_radar_symbols[index].atr_period,
+                                      pips_val, points_val,
+                                      DoubleToString(rec_sl, digits));
+            
+            if(InpEnableSoundAlerts) Alert(msg);
+            if(InpEnablePushAlerts)  SendNotification(msg);
+            Print(msg);
+            
+            g_radar_symbols[index].last_bull_alert_bar = cur_bar_open_time;
+            break;
          }
       }
       
-      // TF close mode: alert only on bar close
-      if(g_radar_symbols[index].delay_is_tf_close && cur_bar_time != g_radar_symbols[index].last_bear_alert_bar)
+      // 2. EVALUASI BEARISH REVERSAL
+      if(g_radar_symbols[index].bear_enabled && cur_bar_open_time != g_radar_symbols[index].last_bear_alert_bar)
       {
-         g_radar_symbols[index].last_bear_alert_bar = cur_bar_time;
-         can_alert = true;
-      }
-      
-      if(bear_hit && can_alert && EvaluatePriceFilter(cur_price, g_radar_symbols[index].bear_price_filter))
-      {
-         int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
-         double point = SymbolInfoDouble(sym, SYMBOL_POINT);
-         double pips_factor = (digits == 3 || digits == 5) ? 10.0 * point : point;
-         if(pips_factor == 0) pips_factor = point;
+         bool sell_eng_valid   = false;
+         bool sell_ss_valid    = false;
+         bool sell_stoch_valid = false;
+         double eng_broken_h = 0.0, eng_broken_l = 0.0, eng_broken_r = 0.0;
+         double ss_high = 0.0;
          
-         double pips_val = atr_50_bear / pips_factor;
-         double points_val = atr_50_bear / point;
-         double spread_val = (SymbolInfoDouble(sym, SYMBOL_ASK) - SymbolInfoDouble(sym, SYMBOL_BID));
-         double rec_sl = broken_high + atr_50_bear + spread_val;
+         if(g_radar_symbols[index].sig_engulfing)
+         {
+            double atr_d = 0.0;
+            if(IsStrongBearishEngulfingBreak(sym, sig_tf, shift_to_check, atr_d, eng_broken_r, cur_price, eng_broken_h, eng_broken_l))
+               sell_eng_valid = true;
+         }
          
-         string mode_tag = g_radar_symbols[index].delay_is_tf_close ? "TF CLOSE" : 
-                           (delay_sec > 0 ? StringFormat("DELAY %ds", delay_sec) : "REALTIME TICK");
-         string msg = StringFormat("[ENGULFING ALERT] %s (%s) [%s]\nType: Strong BEARISH Break\nPrice: %s\n50%% ATR(%d): %.1f pips (%.0f pts)\nSuggested SL: %s\nBroken Range: %.1f pips",
-                                   sym, EnumToString(sig_tf_bear), mode_tag,
-                                   DoubleToString(cur_price, digits),
-                                   g_radar_symbols[index].atr_period,
-                                   pips_val,
-                                   points_val,
-                                   DoubleToString(rec_sl, digits),
-                                   br_bear / pips_factor);
+         if(g_radar_symbols[index].sig_hammer_ss)
+         {
+            if(IsStrongShootingStar(sym, sig_tf, shift_to_check, ss_high, cur_price))
+               sell_ss_valid = true;
+         }
          
-         if(InpEnableSoundAlerts) Alert(msg);
-         if(InpEnablePushAlerts)  SendNotification(msg);
-         Print(msg);
+         if(g_radar_symbols[index].sig_stoch_ha)
+         {
+            if(CheckStochHA(sym, sig_tf, shift_to_check, false))
+               sell_stoch_valid = true;
+         }
          
-         // ponytail: mark alert sent for this bar so no repeat in same bar
-         g_radar_symbols[index].last_bear_alert_bar = cur_bar_time;
-         g_radar_symbols[index].bear_cond_start_time_main = 0;
-         g_radar_symbols[index].bear_cond_start_time_fallback = 0;
-         can_alert = false;
+         bool trigger_sell = false;
+         string sig_name = "";
+         double rec_sl = 0.0;
+         
+         if(g_radar_symbols[index].signal_mode == SIGNAL_MODE_COMBO)
+         {
+            bool all_ok = true;
+            if(g_radar_symbols[index].sig_engulfing && !sell_eng_valid)   all_ok = false;
+            if(g_radar_symbols[index].sig_hammer_ss && !sell_ss_valid)    all_ok = false;
+            if(g_radar_symbols[index].sig_stoch_ha  && !sell_stoch_valid) all_ok = false;
+            
+            if(all_ok && (g_radar_symbols[index].sig_engulfing || g_radar_symbols[index].sig_hammer_ss || g_radar_symbols[index].sig_stoch_ha))
+            {
+               trigger_sell = true;
+               sig_name = "COMBO: ";
+               if(sell_eng_valid) { sig_name += "[ENG] "; rec_sl = eng_broken_h + atr_50 + spread; }
+               if(sell_ss_valid)  { sig_name += "[SHOOTING STAR] "; rec_sl = ss_high + atr_50 + spread; }
+               if(sell_stoch_valid) { sig_name += "[STOCH+HA]"; if(rec_sl == 0) rec_sl = cur_price + (atr_50 * 2.0) + spread; }
+            }
+         }
+         else
+         {
+            if(g_radar_symbols[index].sig_engulfing && sell_eng_valid)
+            {
+               trigger_sell = true;
+               sig_name = "Strong Bearish Engulfing";
+               rec_sl = eng_broken_h + atr_50 + spread;
+            }
+            else if(g_radar_symbols[index].sig_hammer_ss && sell_ss_valid)
+            {
+               trigger_sell = true;
+               sig_name = "Strong Shooting Star Reversal";
+               rec_sl = ss_high + atr_50 + spread;
+            }
+            else if(g_radar_symbols[index].sig_stoch_ha && sell_stoch_valid)
+            {
+               trigger_sell = true;
+               sig_name = "Stochastic + Heikin Ashi Sell";
+               rec_sl = cur_price + (atr_50 * 2.0) + spread;
+            }
+         }
+         
+         if(trigger_sell && EvaluatePriceFilter(cur_price, g_radar_symbols[index].bear_price_filter))
+         {
+            string mode_tag = g_radar_symbols[index].delay_is_tf_close ? "TF CLOSE" : 
+                              (g_radar_symbols[index].delay_tf_pct > 0 ? StringFormat("%d%% TF DELAY", g_radar_symbols[index].delay_tf_pct) : "REALTIME TICK");
+            
+            double pips_val = atr_50 / pips_factor;
+            double points_val = atr_50 / point;
+            
+            string msg = StringFormat("[REVERSAL ALERT] %s (%s) [%s]\nSignal: %s\nDirection: BEARISH (SELL)\nPrice: %s\n50%% ATR(%d): %.1f pips (%.0f pts)\nSuggested SL: %s",
+                                      sym, EnumToString(sig_tf), mode_tag, sig_name,
+                                      DoubleToString(cur_price, digits),
+                                      g_radar_symbols[index].atr_period,
+                                      pips_val, points_val,
+                                      DoubleToString(rec_sl, digits));
+            
+            if(InpEnableSoundAlerts) Alert(msg);
+            if(InpEnablePushAlerts)  SendNotification(msg);
+            Print(msg);
+            
+            g_radar_symbols[index].last_bear_alert_bar = cur_bar_open_time;
+            break;
+         }
       }
    }
 }
@@ -961,6 +1096,163 @@ bool IsStrongBearishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf, c
    }
    
    return false;
+}
+
+//+------------------------------------------------------------------+
+//| REALTIME STRONG HAMMER REVERSAL DETECTION (BUY ONLY)             |
+//+------------------------------------------------------------------+
+bool IsStrongHammer(const string sym, const ENUM_TIMEFRAMES tf, const int shift,
+                    double &out_low, double &out_cur_price)
+{
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   if(CopyRates(sym, tf, shift, 3, rates) < 3) return false;
+   
+   double cur_open  = rates[0].open;
+   double cur_close = rates[0].close;
+   double cur_high  = rates[0].high;
+   double cur_low   = rates[0].low;
+   double prev_high = rates[1].high;
+   double prev_low  = rates[1].low;
+   
+   out_cur_price = cur_close;
+   out_low       = cur_low;
+   
+   double body_top    = MathMax(cur_open, cur_close);
+   double body_bottom = MathMin(cur_open, cur_close);
+   double body_size   = body_top - body_bottom;
+   if(body_size <= 0) body_size = SymbolInfoDouble(sym, SYMBOL_POINT); // Prevent zero division
+   
+   double lower_shadow = body_bottom - cur_low;
+   double upper_shadow = cur_high - body_top;
+   
+   // Syarat 1: Lower shadow >= 3x body
+   if(lower_shadow < 3.0 * body_size) return false;
+   
+   // Syarat 2: Upper shadow <= 0.8x body
+   if(upper_shadow > 0.8 * body_size) return false;
+   
+   // Syarat 3: Rentang lilin > rentang lilin sebelumnya
+   double cur_range  = cur_high - cur_low;
+   double prev_range = prev_high - prev_low;
+   if(cur_range <= prev_range) return false;
+   
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| REALTIME STRONG SHOOTING STAR REVERSAL DETECTION (SELL ONLY)     |
+//+------------------------------------------------------------------+
+bool IsStrongShootingStar(const string sym, const ENUM_TIMEFRAMES tf, const int shift,
+                          double &out_high, double &out_cur_price)
+{
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   if(CopyRates(sym, tf, shift, 3, rates) < 3) return false;
+   
+   double cur_open  = rates[0].open;
+   double cur_close = rates[0].close;
+   double cur_high  = rates[0].high;
+   double cur_low   = rates[0].low;
+   double prev_high = rates[1].high;
+   double prev_low  = rates[1].low;
+   
+   out_cur_price = cur_close;
+   out_high      = cur_high;
+   
+   double body_top    = MathMax(cur_open, cur_close);
+   double body_bottom = MathMin(cur_open, cur_close);
+   double body_size   = body_top - body_bottom;
+   if(body_size <= 0) body_size = SymbolInfoDouble(sym, SYMBOL_POINT);
+   
+   double upper_shadow = cur_high - body_top;
+   double lower_shadow = body_bottom - cur_low;
+   
+   // Syarat 1: Upper shadow >= 3x body
+   if(upper_shadow < 3.0 * body_size) return false;
+   
+   // Syarat 2: Lower shadow <= 0.8x body
+   if(lower_shadow > 0.8 * body_size) return false;
+   
+   // Syarat 3: Rentang lilin > rentang lilin sebelumnya
+   double cur_range  = cur_high - cur_low;
+   double prev_range = prev_high - prev_low;
+   if(cur_range <= prev_range) return false;
+   
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| STOCHASTIC + HEIKIN ASHI MOMENTUM REVERSAL CHECK                 |
+//+------------------------------------------------------------------+
+bool CheckStochHA(const string sym, const ENUM_TIMEFRAMES tf, const int shift, bool check_buy)
+{
+   // 1. Stochastic Indicator Check
+   int stoch_handle = iStochastic(sym, tf, InpStochLength, InpStochD, InpStochK, MODE_SMA, STO_LOWHIGH);
+   if(stoch_handle == INVALID_HANDLE) return false;
+   
+   double k_val[];
+   ArraySetAsSeries(k_val, true);
+   if(CopyBuffer(stoch_handle, 0, shift, 2, k_val) < 2)
+   {
+      IndicatorRelease(stoch_handle);
+      return false;
+   }
+   IndicatorRelease(stoch_handle);
+   
+   double cur_k  = k_val[0];
+   double prev_k = k_val[1];
+   
+   // 2. Heikin Ashi Calculation
+   int bars_needed = 30 + shift;
+   MqlRates raw_rates[];
+   ArraySetAsSeries(raw_rates, false); // Oldest to newest for HA recursion
+   if(CopyRates(sym, tf, 0, bars_needed, raw_rates) < bars_needed) return false;
+   
+   int n = ArraySize(raw_rates);
+   double ha_open[];
+   double ha_close[];
+   double ha_high[];
+   double ha_low[];
+   ArrayResize(ha_open, n);
+   ArrayResize(ha_close, n);
+   ArrayResize(ha_high, n);
+   ArrayResize(ha_low, n);
+   
+   ha_close[0] = (raw_rates[0].open + raw_rates[0].high + raw_rates[0].low + raw_rates[0].close) / 4.0;
+   ha_open[0]  = (raw_rates[0].open + raw_rates[0].close) / 2.0;
+   ha_high[0]  = raw_rates[0].high;
+   ha_low[0]   = raw_rates[0].low;
+   
+   for(int b = 1; b < n; b++)
+   {
+      ha_close[b] = (raw_rates[b].open + raw_rates[b].high + raw_rates[b].low + raw_rates[b].close) / 4.0;
+      ha_open[b]  = (ha_open[b-1] + ha_close[b-1]) / 2.0;
+      ha_high[b]  = MathMax(raw_rates[b].high, MathMax(ha_open[b], ha_close[b]));
+      ha_low[b]   = MathMin(raw_rates[b].low,  MathMin(ha_open[b], ha_close[b]));
+   }
+   
+   int cur_idx = n - 1 - shift;
+   if(cur_idx < 1) return false;
+   int prev_idx = cur_idx - 1;
+   
+   double cur_ha_size  = ha_high[cur_idx] - ha_low[cur_idx];
+   double prev_ha_size = ha_high[prev_idx] - ha_low[prev_idx];
+   bool cur_ha_green   = (ha_close[cur_idx] > ha_open[cur_idx]);
+   bool cur_ha_red     = (ha_close[cur_idx] < ha_open[cur_idx]);
+   
+   if(check_buy)
+   {
+      bool stoch_buy = (cur_k < InpStochOS && cur_k > prev_k);
+      bool ha_buy    = (cur_ha_size < prev_ha_size || cur_ha_green);
+      return (stoch_buy && ha_buy);
+   }
+   else
+   {
+      bool stoch_sell = (cur_k > InpStochOB && cur_k < prev_k);
+      bool ha_sell    = (cur_ha_size < prev_ha_size || cur_ha_red);
+      return (stoch_sell && ha_sell);
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -1315,7 +1607,7 @@ void DeactivateBulkAutoBE()
 //+------------------------------------------------------------------+
 //| WATCHLIST & ORDER SELECTION HELPERS                              |
 //+------------------------------------------------------------------+
-void AddRadarSymbol(string sym, ENUM_TIMEFRAMES tf, bool bull_on, string bull_filter, bool bear_on, string bear_filter, int atr_p, bool tf_close, int delay_sec)
+void AddRadarSymbol(string sym, ENUM_TIMEFRAMES tf, bool bull_on, string bull_filter, bool bear_on, string bear_filter, int atr_p, bool tf_close, int delay_pct, bool active_on, bool sig_eng, bool sig_hmr, bool sig_stoch, ENUM_SIGNAL_MODE sig_mode)
 {
    int size = ArraySize(g_radar_symbols);
    ArrayResize(g_radar_symbols, size + 1);
@@ -1329,14 +1621,19 @@ void AddRadarSymbol(string sym, ENUM_TIMEFRAMES tf, bool bull_on, string bull_fi
    g_radar_symbols[size].last_bull_alert_bar = 0;
    g_radar_symbols[size].last_bear_alert_bar = 0;
    g_radar_symbols[size].delay_is_tf_close   = tf_close;
-   g_radar_symbols[size].delay_seconds       = delay_sec;
+   g_radar_symbols[size].delay_tf_pct        = delay_pct;
+   g_radar_symbols[size].active              = active_on;
+   g_radar_symbols[size].sig_engulfing       = sig_eng;
+   g_radar_symbols[size].sig_hammer_ss       = sig_hmr;
+   g_radar_symbols[size].sig_stoch_ha        = sig_stoch;
+   g_radar_symbols[size].signal_mode         = sig_mode;
    g_radar_symbols[size].bull_cond_start_time_main = 0;
    g_radar_symbols[size].bull_cond_start_time_fallback = 0;
    g_radar_symbols[size].bear_cond_start_time_main = 0;
    g_radar_symbols[size].bear_cond_start_time_fallback = 0;
 }
 
-void UpdateRadarSymbol(int index, string sym, ENUM_TIMEFRAMES tf, bool bull_on, string bull_filter, bool bear_on, string bear_filter, int atr_p, bool tf_close, int delay_sec)
+void UpdateRadarSymbol(int index, string sym, ENUM_TIMEFRAMES tf, bool bull_on, string bull_filter, bool bear_on, string bear_filter, int atr_p, bool tf_close, int delay_pct, bool sig_eng, bool sig_hmr, bool sig_stoch, ENUM_SIGNAL_MODE sig_mode)
 {
    if(index < 0 || index >= ArraySize(g_radar_symbols)) return;
    g_radar_symbols[index].symbol            = sym;
@@ -1347,7 +1644,11 @@ void UpdateRadarSymbol(int index, string sym, ENUM_TIMEFRAMES tf, bool bull_on, 
    g_radar_symbols[index].bear_price_filter = bear_filter;
    g_radar_symbols[index].atr_period        = atr_p;
    g_radar_symbols[index].delay_is_tf_close = tf_close;
-   g_radar_symbols[index].delay_seconds     = delay_sec;
+   g_radar_symbols[index].delay_tf_pct      = delay_pct;
+   g_radar_symbols[index].sig_engulfing     = sig_eng;
+   g_radar_symbols[index].sig_hammer_ss     = sig_hmr;
+   g_radar_symbols[index].sig_stoch_ha      = sig_stoch;
+   g_radar_symbols[index].signal_mode       = sig_mode;
 }
 
 void RemoveRadarSymbol(int index)
@@ -1496,16 +1797,16 @@ void CreateDashboardUI()
    
    int root_x = 20;
    int root_y = 20;
-   int win_w  = 840;
-   int win_h  = 600;
+   int win_w  = 880;
+   int win_h  = 640;
    
    // Outer Pitch-black window
    CreateRect("WIN_BG", root_x, root_y, win_w, win_h, CLR_PANEL_BG, CLR_BORDER_HARD);
    
    // Top header
    CreateRect("WIN_TOP", root_x, root_y, win_w, 40, CLR_CARD_BG, CLR_BORDER_HARD);
-   CreateLabel("WIN_TITLE", root_x + 16, root_y + 11, "TRADE MANAGER & ENGULFING RADAR", CLR_TEXT_PURE, 10, true);
-   CreateLabel("WIN_TAG", root_x + 360, root_y + 12, "[MQL5 MULTI-SYMBOL REALTIME]", CLR_CYAN_NEON, 8, true);
+   CreateLabel("WIN_TITLE", root_x + 16, root_y + 11, "TRADE MANAGER & REVERSAL RADAR", CLR_TEXT_PURE, 10, true);
+   CreateLabel("WIN_TAG", root_x + 360, root_y + 12, "[MQL5 MULTI-SIGNAL REALTIME]", CLR_CYAN_NEON, 8, true);
    
    // Navigation Tabs
    int tab_y = root_y + 48;
@@ -1515,7 +1816,7 @@ void CreateDashboardUI()
    color tab2_txt = (g_active_tab == 2) ? CLR_CYAN_NEON : CLR_TEXT_MED;
    
    CreateButton("TAB_ORDERS", root_x + 16, tab_y, 180, 26, "ORDER MANAGER", tab1_bg, tab1_txt, CLR_BORDER_HARD);
-   CreateButton("TAB_RADAR",  root_x + 204, tab_y, 180, 26, "ENGULFING RADAR", tab2_bg, tab2_txt, CLR_BORDER_HARD);
+   CreateButton("TAB_RADAR",  root_x + 204, tab_y, 180, 26, "REVERSAL RADAR", tab2_bg, tab2_txt, CLR_BORDER_HARD);
    
    if(g_active_tab == 1)
    {
@@ -1598,18 +1899,18 @@ void CreateDashboardUI()
    }
    else if(g_active_tab == 2)
    {
-      // ================= TAB 2: ENGULFING RADAR =================
+      // ================= TAB 2: REVERSAL RADAR =================
       int radar_y = tab_y + 36;
       CreateRect("CARD_RADAR_LIST", root_x + 16, radar_y, win_w - 32, 240, CLR_CARD_BG, CLR_BORDER_HARD);
       CreateLabel("TITLE_RADAR_LIST", root_x + 28, radar_y + 10, "ACTIVE MULTI-SYMBOL WATCHLIST", CLR_CYAN_NEON, 9, true);
-      CreateLabel("RADAR_STATUS", root_x + win_w - 200, radar_y + 10, "* REALTIME TICK BREAK ACTIVE", CLR_BULL_NEON, 8, true);
+      CreateLabel("RADAR_STATUS", root_x + win_w - 230, radar_y + 10, "* REALTIME MULTI-SIGNAL ACTIVE", CLR_BULL_NEON, 8, true);
       
-      // Add Form Deck
+      // Add Form Deck (Height expanded to 280 for signals & delay)
       int add_deck_y = radar_y + 250;
       int box_w = (win_w - 42) / 2;
       
       // Box Left: Add / Edit Watchlist Symbol Form
-      CreateRect("CARD_ADD_RADAR", root_x + 16, add_deck_y, box_w, 210, CLR_CARD_BG, CLR_BORDER_HARD);
+      CreateRect("CARD_ADD_RADAR", root_x + 16, add_deck_y, box_w, 280, CLR_CARD_BG, CLR_BORDER_HARD);
       
       bool is_edit = (g_editing_radar_idx >= 0 && g_editing_radar_idx < ArraySize(g_radar_symbols));
       string form_title = is_edit ? "EDIT SELECTED RADAR" : "ADD SYMBOL TO RADAR";
@@ -1617,70 +1918,85 @@ void CreateDashboardUI()
       
       string default_sym = g_form_sym;
       string default_tf  = g_form_tf;
-      
       string default_bull = g_form_bull;
       string default_bear = g_form_bear;
-      string default_delay = IntegerToString(g_form_delay_sec);
       
-      CreateLabel("LBL_F_SYM", root_x + 28, add_deck_y + 38, "SYMBOL:", CLR_TEXT_MED, 8, true);
-      CreateEdit("INP_NEW_SYM", root_x + 110, add_deck_y + 34, 120, 22, default_sym, CLR_CANVAS_BG, CLR_TEXT_PURE);
+      // Row 1: Symbol & TF
+      CreateLabel("LBL_F_SYM", root_x + 28, add_deck_y + 36, "SYMBOL:", CLR_TEXT_MED, 8, true);
+      CreateEdit("INP_NEW_SYM", root_x + 105, add_deck_y + 32, 130, 22, default_sym, CLR_CANVAS_BG, CLR_TEXT_PURE);
       
-      CreateLabel("LBL_F_TF", root_x + 240, add_deck_y + 38, "TF (MIN):", CLR_TEXT_MED, 8, true);
-      CreateEdit("INP_NEW_TF", root_x + 300, add_deck_y + 34, 65, 22, default_tf, CLR_CANVAS_BG, CLR_TEXT_PURE);
+      CreateLabel("LBL_F_TF", root_x + 248, add_deck_y + 36, "TF (MIN):", CLR_TEXT_MED, 8, true);
+      CreateEdit("INP_NEW_TF", root_x + 312, add_deck_y + 32, 65, 22, default_tf, CLR_CANVAS_BG, CLR_TEXT_PURE);
       
-      CreateLabel("LBL_F_MODE", root_x + 28, add_deck_y + 68, "MODE:", CLR_TEXT_MED, 8, true);
-      string mode_btn_txt = g_form_delay_close ? "TF CLOSE" : "SECONDS (0)";
+      // Row 2: Signals Checkboxes
+      CreateLabel("LBL_F_SIGS", root_x + 28, add_deck_y + 64, "SIGNALS:", CLR_TEXT_PURE, 8, true);
+      
+      color eng_bg = g_form_sig_eng ? CLR_TAB_ACTIVE_BG : CLR_PANEL_BG;
+      color eng_cl = g_form_sig_eng ? CLR_CYAN_NEON : CLR_TEXT_MED;
+      CreateButton("BTN_RADAR_SIG_ENG", root_x + 105, add_deck_y + 60, 85, 22, g_form_sig_eng ? "[X] ENGULF" : "[ ] ENGULF", eng_bg, eng_cl, eng_cl);
+      
+      color hmr_bg = g_form_sig_hmr ? CLR_TAB_ACTIVE_BG : CLR_PANEL_BG;
+      color hmr_cl = g_form_sig_hmr ? CLR_GOLD_NEON : CLR_TEXT_MED;
+      CreateButton("BTN_RADAR_SIG_HMR", root_x + 195, add_deck_y + 60, 85, 22, g_form_sig_hmr ? "[X] HMR/SS" : "[ ] HMR/SS", hmr_bg, hmr_cl, hmr_cl);
+      
+      color stoch_bg = g_form_sig_stoch ? CLR_TAB_ACTIVE_BG : CLR_PANEL_BG;
+      color stoch_cl = g_form_sig_stoch ? CLR_BULL_NEON : CLR_TEXT_MED;
+      CreateButton("BTN_RADAR_SIG_STOCH", root_x + 285, add_deck_y + 60, 92, 22, g_form_sig_stoch ? "[X] STOCH+HA" : "[ ] STOCH+HA", stoch_bg, stoch_cl, stoch_cl);
+      
+      // Row 3: Signal Mode Toggle (ANY vs COMBO)
+      CreateLabel("LBL_F_SMODE", root_x + 28, add_deck_y + 92, "SIG MODE:", CLR_TEXT_MED, 8, true);
+      string sm_txt = (g_form_sig_mode == SIGNAL_MODE_ANY) ? "MODE: ANY (OR)" : "MODE: COMBO (AND)";
+      color  sm_bg  = (g_form_sig_mode == SIGNAL_MODE_COMBO) ? CLR_TAB_ACTIVE_BG : CLR_PANEL_BG;
+      color  sm_cl  = (g_form_sig_mode == SIGNAL_MODE_COMBO) ? CLR_GOLD_NEON : CLR_CYAN_NEON;
+      CreateButton("BTN_RADAR_SIG_MODE", root_x + 105, add_deck_y + 88, 272, 22, sm_txt, sm_bg, sm_cl, sm_cl);
+      
+      // Row 4: Delay Mode (% TF Progress vs TF Close)
+      CreateLabel("LBL_F_MODE", root_x + 28, add_deck_y + 120, "DELAY:", CLR_TEXT_MED, 8, true);
+      string mode_btn_txt = g_form_delay_close ? "TF CLOSE" : "% TF PROGRESS";
       color  mode_btn_clr = g_form_delay_close ? CLR_GOLD_NEON : CLR_CYAN_NEON;
-      CreateButton("BTN_TOGGLE_RADAR_MODE", root_x + 110, add_deck_y + 64, 255, 22, mode_btn_txt, CLR_CANVAS_BG, mode_btn_clr, CLR_BORDER_HARD);
+      CreateButton("BTN_TOGGLE_RADAR_MODE", root_x + 105, add_deck_y + 116, 170, 22, mode_btn_txt, CLR_CANVAS_BG, mode_btn_clr, CLR_BORDER_HARD);
       
-      // DELAY field only visible in SECONDS mode
       if(!g_form_delay_close)
       {
-         CreateLabel("LBL_F_DELAY", root_x + 28, add_deck_y + 94, "DELAY (DETIK):", CLR_TEXT_MED, 8, true);
-         CreateEdit("INP_NEW_DELAY", root_x + 110, add_deck_y + 90, 255, 22, default_delay, CLR_CANVAS_BG, CLR_TEXT_PURE);
-         
-         CreateLabel("LBL_F_BULL", root_x + 28, add_deck_y + 120, "BULLISH :", CLR_BULL_NEON, 8, true);
-         CreateEdit("INP_NEW_BULL", root_x + 110, add_deck_y + 116, 255, 22, default_bull, CLR_CANVAS_BG, CLR_TEXT_PURE);
-         
-         CreateLabel("LBL_F_BEAR", root_x + 28, add_deck_y + 152, "BEARISH :", CLR_BEAR_NEON, 8, true);
-         CreateEdit("INP_NEW_BEAR", root_x + 110, add_deck_y + 148, 255, 22, default_bear, CLR_CANVAS_BG, CLR_TEXT_PURE);
-         
-         CreateLabel("LBL_F_HINT", root_x + 28, add_deck_y + 180, "Isi: >65724  <64164  <=  >=  64164-65814  ALL  (kosong=off)", CLR_TEXT_MED, 7, false);
-      }
-      else
-      {
-         // TF CLOSE mode: no delay field, hint for TF close
-         CreateLabel("LBL_F_BULL", root_x + 28, add_deck_y + 94, "BULLISH :", CLR_BULL_NEON, 8, true);
-         CreateEdit("INP_NEW_BULL", root_x + 110, add_deck_y + 90, 255, 22, default_bull, CLR_CANVAS_BG, CLR_TEXT_PURE);
-         
-         CreateLabel("LBL_F_BEAR", root_x + 28, add_deck_y + 126, "BEARISH :", CLR_BEAR_NEON, 8, true);
-         CreateEdit("INP_NEW_BEAR", root_x + 110, add_deck_y + 122, 255, 22, default_bear, CLR_CANVAS_BG, CLR_TEXT_PURE);
-         
-         CreateLabel("LBL_F_HINT", root_x + 28, add_deck_y + 156, "Alert di TF CLOSE: gunakan ALL atau operator (< > <= >= range). Kosong = off.", CLR_TEXT_MED, 7, false);
+         CreateEdit("INP_NEW_DELAY", root_x + 285, add_deck_y + 116, 92, 22, IntegerToString(g_form_delay_pct) + "%", CLR_CANVAS_BG, CLR_GOLD_NEON);
       }
       
+      // Row 5: Price Bounds (Bullish Buy Filter)
+      CreateLabel("LBL_F_BULL", root_x + 28, add_deck_y + 148, "BULLISH :", CLR_BULL_NEON, 8, true);
+      CreateEdit("INP_NEW_BULL", root_x + 105, add_deck_y + 144, 272, 22, default_bull, CLR_CANVAS_BG, CLR_TEXT_PURE);
+      
+      // Row 6: Price Bounds (Bearish Sell Filter)
+      CreateLabel("LBL_F_BEAR", root_x + 28, add_deck_y + 176, "BEARISH :", CLR_BEAR_NEON, 8, true);
+      CreateEdit("INP_NEW_BEAR", root_x + 105, add_deck_y + 172, 272, 22, default_bear, CLR_CANVAS_BG, CLR_TEXT_PURE);
+      
+      CreateLabel("LBL_F_HINT", root_x + 28, add_deck_y + 202, "Bound: >65724  <64164  <=  >=  64164-65814  ALL  (kosong=off)", CLR_TEXT_MED, 7, false);
+      
+      // Row 7: Buttons
       if(is_edit)
       {
-         CreateButton("BTN_ADD_RADAR", root_x + 28, add_deck_y + 198, 240, 26, "UPDATE SELECTED RADAR", CLR_TAB_ACTIVE_BG, CLR_GOLD_NEON, CLR_GOLD_NEON);
-         CreateButton("BTN_CANCEL_EDIT", root_x + 275, add_deck_y + 198, 90, 26, "CANCEL", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
+         CreateButton("BTN_ADD_RADAR", root_x + 28, add_deck_y + 230, 250, 28, "UPDATE SELECTED RADAR", CLR_TAB_ACTIVE_BG, CLR_GOLD_NEON, CLR_GOLD_NEON);
+         CreateButton("BTN_CANCEL_EDIT", root_x + 288, add_deck_y + 230, 89, 28, "CANCEL", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
       }
       else
       {
-         CreateButton("BTN_ADD_RADAR", root_x + 28, add_deck_y + 198, 240, 26, "+ SAVE TO RADAR", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
-         CreateButton("BTN_RESET_RADAR", root_x + 275, add_deck_y + 198, 90, 26, "DEFAULT", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
+         CreateButton("BTN_ADD_RADAR", root_x + 28, add_deck_y + 230, 250, 28, "+ SAVE TO RADAR", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
+         CreateButton("BTN_RESET_RADAR", root_x + 288, add_deck_y + 230, 89, 28, "DEFAULT", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
       }
       
       // Box Right: Push Notification Preview & Test Alert
       int box_r_x = root_x + 24 + box_w;
-      CreateRect("CARD_NOTIF_PREV", box_r_x, add_deck_y, box_w, 210, CLR_CANVAS_BG, CLR_BORDER_HARD);
+      CreateRect("CARD_NOTIF_PREV", box_r_x, add_deck_y, box_w, 280, CLR_CANVAS_BG, CLR_BORDER_HARD);
       CreateLabel("LBL_NOTIF_TITLE", box_r_x + 12, add_deck_y + 10, "MOBILE PUSH ALERT PREVIEW", CLR_CYAN_NEON, 9, true);
       CreateButton("BTN_TEST_ALERT", box_r_x + box_w - 110, add_deck_y + 6, 98, 22, "TEST ALERT", C'26,42,65', CLR_CYAN_NEON, CLR_CYAN_NEON);
       
-      CreateLabel("NOTIF_LINE1", box_r_x + 12, add_deck_y + 36, "[ENGULFING ALERT] EURUSD (M5)", CLR_CYAN_NEON, 8, true);
-      CreateLabel("NOTIF_LINE2", box_r_x + 12, add_deck_y + 54, "Type: Realtime Strong BULLISH Break", CLR_BULL_NEON, 8, true);
-      CreateLabel("NOTIF_LINE3", box_r_x + 12, add_deck_y + 72, "Price: 1.08250 | 50% ATR: 11.5 pips (115 pts)", CLR_TEXT_PURE, 8, false);
-      CreateLabel("NOTIF_LINE4", box_r_x + 12, add_deck_y + 90, "Suggested SL: 1.08135 (Low - 50% ATR)", CLR_GOLD_NEON, 8, true);
-      CreateLabel("NOTIF_LINE5", box_r_x + 12, add_deck_y + 108, "Broken Range: 14.5 pips (Instantly Triggered)", CLR_TEXT_MED, 8, false);
+      CreateLabel("NOTIF_LINE1", box_r_x + 12, add_deck_y + 42, "[REVERSAL ALERT] EURUSD (M5) [30% TF DELAY]", CLR_CYAN_NEON, 8, true);
+      CreateLabel("NOTIF_LINE2", box_r_x + 12, add_deck_y + 66, "Signal: Strong Bullish Engulfing", CLR_GOLD_NEON, 8, true);
+      CreateLabel("NOTIF_LINE3", box_r_x + 12, add_deck_y + 90, "Direction: BULLISH (BUY)", CLR_BULL_NEON, 8, true);
+      CreateLabel("NOTIF_LINE4", box_r_x + 12, add_deck_y + 114, "Price: 1.08250 | 50% ATR: 11.5 pips (115 pts)", CLR_TEXT_PURE, 8, false);
+      CreateLabel("NOTIF_LINE5", box_r_x + 12, add_deck_y + 138, "Suggested SL: 1.08135 (Low - 50% ATR)", CLR_GOLD_NEON, 8, true);
+      CreateLabel("NOTIF_LINE6", box_r_x + 12, add_deck_y + 162, "Sell SL automatically includes broker spread", CLR_TEXT_MED, 7, false);
+      CreateLabel("NOTIF_LINE7", box_r_x + 12, add_deck_y + 186, "Signals supported: ENG, HAMMER/SS, STOCH+HA", CLR_CYAN_NEON, 7, false);
+      CreateLabel("NOTIF_LINE8", box_r_x + 12, add_deck_y + 210, "Mode supported: ANY (OR) / COMBO (AND)", CLR_GOLD_NEON, 7, false);
    }
    
    ChartRedraw();
@@ -1838,6 +2154,7 @@ void UpdateDashboardUI()
       ObjectsDeleteAll(0, g_prefix + "W_");
       ObjectsDeleteAll(0, g_prefix + "BTN_EDIT_RADAR_");
       ObjectsDeleteAll(0, g_prefix + "BTN_DEL_RADAR_");
+      ObjectsDeleteAll(0, g_prefix + "BTN_TOGGLE_ACT_");
       
       int radar_y = tab_y + 36;
       int start_y = radar_y + 34;
@@ -1855,19 +2172,31 @@ void UpdateDashboardUI()
          string str_tf = StringSubstr(EnumToString(g_radar_symbols[i].timeframe), 7);
          CreateLabel(r_pfx + "TF", root_x + 130, cur_y + 8, "[" + str_tf + "]", CLR_CYAN_NEON, 8, true);
          
-         string mode_tag = g_radar_symbols[i].delay_is_tf_close ? "CLOSE" : "SEC " + IntegerToString(g_radar_symbols[i].delay_seconds) + "s";
+         string mode_tag = g_radar_symbols[i].delay_is_tf_close ? "CLOSE" : IntegerToString(g_radar_symbols[i].delay_tf_pct) + "%";
          CreateLabel(r_pfx + "MODE", root_x + 130, cur_y + 22, "[" + mode_tag + "]", g_radar_symbols[i].delay_is_tf_close ? CLR_GOLD_NEON : CLR_TEXT_MED, 7, false);
 
          string str_bull = g_radar_symbols[i].bull_enabled ? ("BULL: " + g_radar_symbols[i].bull_price_filter) : "BULL: OFF";
          string str_bear = g_radar_symbols[i].bear_enabled ? ("BEAR: " + g_radar_symbols[i].bear_price_filter) : "BEAR: OFF";
 
-         CreateLabel(r_pfx + "COND_BULL", root_x + 200, cur_y + 6, str_bull, g_radar_symbols[i].bull_enabled ? CLR_BULL_NEON : CLR_TEXT_MED, 8, true);
-         CreateLabel(r_pfx + "COND_BEAR", root_x + 200, cur_y + 22, str_bear, g_radar_symbols[i].bear_enabled ? CLR_BEAR_NEON : CLR_TEXT_MED, 8, true);
+         CreateLabel(r_pfx + "COND_BULL", root_x + 195, cur_y + 6, str_bull, g_radar_symbols[i].bull_enabled ? CLR_BULL_NEON : CLR_TEXT_MED, 8, true);
+         CreateLabel(r_pfx + "COND_BEAR", root_x + 195, cur_y + 22, str_bear, g_radar_symbols[i].bear_enabled ? CLR_BEAR_NEON : CLR_TEXT_MED, 8, true);
 
-         // Column reserved between bounds (x+200..x+560) and EDIT button (x+win_w-170)
-         CreateLabel(r_pfx + "ATR", root_x + 575, cur_y + 12, "ATR 50%", CLR_CYAN_NEON, 8, false);
+         // Signals Badges
+         string sigs_tag = "";
+         if(g_radar_symbols[i].sig_engulfing) sigs_tag += "[ENG] ";
+         if(g_radar_symbols[i].sig_hammer_ss) sigs_tag += "[HMR/SS] ";
+         if(g_radar_symbols[i].sig_stoch_ha)  sigs_tag += "[ST+HA] ";
+         sigs_tag += (g_radar_symbols[i].signal_mode == SIGNAL_MODE_ANY) ? "[OR]" : "[AND]";
+         CreateLabel(r_pfx + "SIGS", root_x + 440, cur_y + 12, sigs_tag, CLR_CYAN_NEON, 7, true);
+
+         // Active / Pause Toggle Button
+         string act_txt = g_radar_symbols[i].active ? "ACTIVE" : "PAUSED";
+         color  act_bg  = g_radar_symbols[i].active ? CLR_POWER_ON_BG : CLR_POWER_OFF_BG;
+         color  act_clr = g_radar_symbols[i].active ? CLR_BULL_NEON : CLR_BEAR_NEON;
+         CreateButton("BTN_TOGGLE_ACT_" + IntegerToString(i), root_x + win_w - 235, cur_y + 9, 58, 24, act_txt, act_bg, act_clr, act_clr);
+
          CreateButton("BTN_EDIT_RADAR_" + IntegerToString(i), root_x + win_w - 170, cur_y + 9, 52, 24, "EDIT", is_item_editing ? CLR_TAB_ACTIVE_BG : CLR_CARD_BG, is_item_editing ? CLR_GOLD_NEON : CLR_CYAN_NEON, is_item_editing ? CLR_GOLD_NEON : CLR_BORDER_HARD);
-         CreateButton("BTN_DEL_RADAR_" + IntegerToString(i), root_x + win_w - 110, cur_y + 9, 58, 24, "DELETE", C'18,8,34', CLR_BEAR_NEON, CLR_BEAR_NEON);
+         CreateButton("BTN_DEL_RADAR_"  + IntegerToString(i), root_x + win_w - 110, cur_y + 9, 58, 24, "DELETE", C'18,8,34', CLR_BEAR_NEON, CLR_BEAR_NEON);
       }
    }
    
@@ -1888,12 +2217,12 @@ void DestroyDashboardUI()
 //+------------------------------------------------------------------+
 void SaveStateToFile()
 {
-   string filename = "TMER_State_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".bin";
+   string filename = "TMRR_State_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".bin";
    int handle = FileOpen(filename, FILE_WRITE|FILE_BIN);
    if(handle != INVALID_HANDLE)
    {
-      // Version header (5 = v4 plus persistent Add/Edit form state)
-      FileWriteInteger(handle, 5);
+      // Version header (6 = v6 multi-signal reversal radar with active toggle)
+      FileWriteInteger(handle, 6);
 
       // 0. Save UI Active Tab & Offset Mode
       FileWriteInteger(handle, g_active_tab);
@@ -1924,7 +2253,12 @@ void SaveStateToFile()
 
          FileWriteInteger(handle, g_radar_symbols[i].atr_period);
          FileWriteInteger(handle, g_radar_symbols[i].delay_is_tf_close ? 1 : 0);
-         FileWriteInteger(handle, g_radar_symbols[i].delay_seconds);
+         FileWriteInteger(handle, g_radar_symbols[i].delay_tf_pct);
+         FileWriteInteger(handle, g_radar_symbols[i].active ? 1 : 0);
+         FileWriteInteger(handle, g_radar_symbols[i].sig_engulfing ? 1 : 0);
+         FileWriteInteger(handle, g_radar_symbols[i].sig_hammer_ss ? 1 : 0);
+         FileWriteInteger(handle, g_radar_symbols[i].sig_stoch_ha  ? 1 : 0);
+         FileWriteInteger(handle, (int)g_radar_symbols[i].signal_mode);
       }
       
       // 2. Save Auto BE List
@@ -1947,10 +2281,10 @@ void SaveStateToFile()
          FileWriteInteger(handle, g_auto_be_list[i].active ? 1 : 0);
       }
 
-      // 3. Global BE fixed price (appended last for backward compatibility)
+      // 3. Global BE fixed price
       FileWriteDouble(handle, g_be_fixed_price);
 
-      // 4. Persistent Add/Edit form state (so re-attach keeps last typed values)
+      // 4. Persistent Add/Edit form state
       int sym_len = StringLen(g_form_sym);
       FileWriteInteger(handle, sym_len);
       if(sym_len > 0) FileWriteString(handle, g_form_sym, sym_len);
@@ -1967,8 +2301,12 @@ void SaveStateToFile()
       FileWriteInteger(handle, bear_len);
       if(bear_len > 0) FileWriteString(handle, g_form_bear, bear_len);
 
-      FileWriteInteger(handle, g_form_delay_sec);
+      FileWriteInteger(handle, g_form_delay_pct);
       FileWriteInteger(handle, g_form_delay_close ? 1 : 0);
+      FileWriteInteger(handle, g_form_sig_eng ? 1 : 0);
+      FileWriteInteger(handle, g_form_sig_hmr ? 1 : 0);
+      FileWriteInteger(handle, g_form_sig_stoch ? 1 : 0);
+      FileWriteInteger(handle, (int)g_form_sig_mode);
 
       FileClose(handle);
    }
@@ -1976,7 +2314,10 @@ void SaveStateToFile()
 
 void LoadStateFromFile()
 {
-   string filename = "TMER_State_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".bin";
+   string filename = "TMRR_State_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".bin";
+   // Fallback to legacy filename if exists
+   if(!FileIsExist(filename))
+      filename = "TMER_State_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ".bin";
    if(!FileIsExist(filename)) return;
    
    int handle = FileOpen(filename, FILE_READ|FILE_BIN);
@@ -1984,24 +2325,9 @@ void LoadStateFromFile()
    {
       int first = FileReadInteger(handle);
       int version;
-      if(first == 4)
+      if(first >= 2 && first <= 6)
       {
-         version = 4;
-         g_active_tab = FileReadInteger(handle);
-      }
-      else if(first == 3)
-      {
-         version = 3;
-         g_active_tab = FileReadInteger(handle);
-      }
-      else if(first == 2)
-      {
-         version = 2;
-         g_active_tab = FileReadInteger(handle);
-      }
-      else if(first == 5)
-      {
-         version = 5;
+         version = first;
          g_active_tab = FileReadInteger(handle);
       }
       else
@@ -2040,10 +2366,34 @@ void LoadStateFromFile()
 
             g_radar_symbols[i].atr_period = FileReadInteger(handle);
             g_radar_symbols[i].delay_is_tf_close = (FileReadInteger(handle) == 1);
-            if(version >= 4)
-               g_radar_symbols[i].delay_seconds = FileReadInteger(handle);
+            if(version >= 6)
+            {
+               g_radar_symbols[i].delay_tf_pct  = FileReadInteger(handle);
+               g_radar_symbols[i].active        = (FileReadInteger(handle) == 1);
+               g_radar_symbols[i].sig_engulfing = (FileReadInteger(handle) == 1);
+               g_radar_symbols[i].sig_hammer_ss = (FileReadInteger(handle) == 1);
+               g_radar_symbols[i].sig_stoch_ha  = (FileReadInteger(handle) == 1);
+               g_radar_symbols[i].signal_mode   = (ENUM_SIGNAL_MODE)FileReadInteger(handle);
+            }
+            else if(version >= 4)
+            {
+               int old_delay = FileReadInteger(handle);
+               g_radar_symbols[i].delay_tf_pct  = (old_delay > 0) ? 30 : 0;
+               g_radar_symbols[i].active        = true;
+               g_radar_symbols[i].sig_engulfing = true;
+               g_radar_symbols[i].sig_hammer_ss = true;
+               g_radar_symbols[i].sig_stoch_ha  = true;
+               g_radar_symbols[i].signal_mode   = SIGNAL_MODE_ANY;
+            }
             else
-               g_radar_symbols[i].delay_seconds = 0;
+            {
+               g_radar_symbols[i].delay_tf_pct  = 0;
+               g_radar_symbols[i].active        = true;
+               g_radar_symbols[i].sig_engulfing = true;
+               g_radar_symbols[i].sig_hammer_ss = true;
+               g_radar_symbols[i].sig_stoch_ha  = true;
+               g_radar_symbols[i].signal_mode   = SIGNAL_MODE_ANY;
+            }
          }
          else
          {
@@ -2054,7 +2404,12 @@ void LoadStateFromFile()
             g_radar_symbols[i].bear_price_filter = (s_min > 0) ? DoubleToString(s_min, 5) : "ALL";
             g_radar_symbols[i].atr_period = FileReadInteger(handle);
             g_radar_symbols[i].delay_is_tf_close = false;
-            g_radar_symbols[i].delay_seconds = 0;
+            g_radar_symbols[i].delay_tf_pct = 0;
+            g_radar_symbols[i].active        = true;
+            g_radar_symbols[i].sig_engulfing = true;
+            g_radar_symbols[i].sig_hammer_ss = true;
+            g_radar_symbols[i].sig_stoch_ha  = true;
+            g_radar_symbols[i].signal_mode   = SIGNAL_MODE_ANY;
          }
          
          g_radar_symbols[i].last_bull_alert_bar = 0;
@@ -2113,8 +2468,21 @@ void LoadStateFromFile()
          if(form_bear_len > 0) form_bear = FileReadString(handle, form_bear_len);
          g_form_bear = (form_bear != "") ? form_bear : "ALL";
 
-         g_form_delay_sec   = FileReadInteger(handle);
-         g_form_delay_close = (FileReadInteger(handle) == 1);
+         if(version >= 6)
+         {
+            g_form_delay_pct   = FileReadInteger(handle);
+            g_form_delay_close = (FileReadInteger(handle) == 1);
+            g_form_sig_eng     = (FileReadInteger(handle) == 1);
+            g_form_sig_hmr     = (FileReadInteger(handle) == 1);
+            g_form_sig_stoch   = (FileReadInteger(handle) == 1);
+            g_form_sig_mode    = (ENUM_SIGNAL_MODE)FileReadInteger(handle);
+         }
+         else
+         {
+            int old_d = FileReadInteger(handle);
+            g_form_delay_pct   = (old_d > 0) ? 30 : 0;
+            g_form_delay_close = (FileReadInteger(handle) == 1);
+         }
       }
 
       FileClose(handle);
