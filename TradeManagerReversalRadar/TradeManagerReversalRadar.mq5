@@ -1247,13 +1247,59 @@ bool CheckStochHA(const string sym, const ENUM_TIMEFRAMES tf, const int shift, b
    {
       bool stoch_buy = (cur_k < InpStochOS && cur_k > prev_k);
       bool ha_buy    = (cur_ha_size < prev_ha_size || cur_ha_green);
-      return (stoch_buy && ha_buy);
+      if(!stoch_buy || !ha_buy) return false;
+      
+      // Syarat tambahan MTF: jika sinyal di M5 ke atas, M1 juga wajib oversold
+      if(tf >= PERIOD_M5)
+      {
+         int m1_handle = iStochastic(sym, PERIOD_M1, InpStochLength, InpStochD, InpStochK, MODE_SMA, STO_LOWHIGH);
+         if(m1_handle != INVALID_HANDLE)
+         {
+            double m1_k[];
+            ArraySetAsSeries(m1_k, true);
+            if(CopyBuffer(m1_handle, 0, shift, 1, m1_k) >= 1)
+            {
+               double k_m1 = m1_k[0];
+               IndicatorRelease(m1_handle);
+               if(k_m1 >= InpStochOS) return false; // M1 wajib oversold (< InpStochOS)
+            }
+            else
+            {
+               IndicatorRelease(m1_handle);
+               return false;
+            }
+         }
+      }
+      return true;
    }
    else
    {
       bool stoch_sell = (cur_k > InpStochOB && cur_k < prev_k);
       bool ha_sell    = (cur_ha_size < prev_ha_size || cur_ha_red);
-      return (stoch_sell && ha_sell);
+      if(!stoch_sell || !ha_sell) return false;
+      
+      // Syarat tambahan MTF: jika sinyal di M5 ke atas, M1 juga wajib overbought
+      if(tf >= PERIOD_M5)
+      {
+         int m1_handle = iStochastic(sym, PERIOD_M1, InpStochLength, InpStochD, InpStochK, MODE_SMA, STO_LOWHIGH);
+         if(m1_handle != INVALID_HANDLE)
+         {
+            double m1_k[];
+            ArraySetAsSeries(m1_k, true);
+            if(CopyBuffer(m1_handle, 0, shift, 1, m1_k) >= 1)
+            {
+               double k_m1 = m1_k[0];
+               IndicatorRelease(m1_handle);
+               if(k_m1 <= InpStochOB) return false; // M1 wajib overbought (> InpStochOB)
+            }
+            else
+            {
+               IndicatorRelease(m1_handle);
+               return false;
+            }
+         }
+      }
+      return true;
    }
 }
 

@@ -76,7 +76,9 @@ struct SRadarSymbol
 ### 3.3 Stochastic (14,1,3) + Heikin Ashi Reversal
 - **Indikator:** Stochastic %K=14, %D=1, Slowing=3, Level OB=80, Level OS=20.
 - **Kondisi BUY:** Sinyal Stochastic $\%K < 20$ dan $\%K > \%K[1]$ (berbelok naik dari area oversold) didukung lilin Heikin Ashi yang menciut ukurannya atau berubah warna menjadi hijau.
+  - *Syarat Tambahan Multi-Timeframe (Khusus Sinyal TF M5 ke Atas):* Stochastic pada TF M1 **juga wajib oversold** ($\%K_{\text{M1}} < 20$). Pada M1 tidak perlu syarat perubahan arah $\%K$ atau Heikin Ashi; cukup level ekstrem oversold. Jika sinyal dari M1 sendiri, berlaku seluruh syarat lengkap.
 - **Kondisi SELL:** Sinyal Stochastic $\%K > 80$ dan $\%K < \%K[1]$ (berbelok turun dari area overbought) didukung lilin Heikin Ashi yang menciut ukurannya atau berubah warna menjadi merah.
+  - *Syarat Tambahan Multi-Timeframe (Khusus Sinyal TF M5 ke Atas):* Stochastic pada TF M1 **juga wajib overbought** ($\%K_{\text{M1}} > 80$). Pada M1 tidak perlu syarat perubahan arah $\%K$ atau Heikin Ashi; cukup level ekstrem overbought. Jika sinyal dari M1 sendiri, berlaku seluruh syarat lengkap.
 - Rekomendasi SL:
   - BUY: $\text{Ask} - 2.0 \times \text{ATR}$.
   - SELL: $\text{Bid} + 2.0 \times \text{ATR} + \text{Spread}$.

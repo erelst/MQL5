@@ -83,10 +83,12 @@ Diadaptasi dari logika indikator pembalikan tren dengan penyempurnaan pembacaan 
   1. Nilai $\%K < 20$ (zona oversold).
   2. $\%K > \%K[1]$ (momentum Stochastic mulai memantul ke atas).
   3. Konfirmasi lilin Heikin Ashi: Ukuran lilin mengecil ($\text{haSize} < \text{haSize}[1]$) **ATAU** warna Heikin Ashi berubah menjadi hijau ($\text{haClose} > \text{haOpen}$).
+  4. **Syarat Tambahan Multi-Timeframe (Khusus Sinyal TF M5 ke Atas):** Nilai Stochastic pada TF M1 **juga wajib berada di zona oversold** ($\%K_{\text{M1}} < 20$). Pada M1 tidak perlu syarat perubahan arah $\%K$ atau ukuran lilin Heikin Ashi; cukup konfirmasi level ekstrem oversold. Jika sinyal datang dari M1 itu sendiri, maka berlaku seluruh syarat 1-3 lengkap.
 - **Kondisi SELL:**
   1. Nilai $\%K > 80$ (zona overbought).
   2. $\%K < \%K[1]$ (momentum Stochastic mulai memantul ke bawah).
   3. Konfirmasi lilin Heikin Ashi: Ukuran lilin mengecil ($\text{haSize} < \text{haSize}[1]$) **ATAU** warna Heikin Ashi berubah menjadi merah ($\text{haClose} < \text{haOpen}$).
+  4. **Syarat Tambahan Multi-Timeframe (Khusus Sinyal TF M5 ke Atas):** Nilai Stochastic pada TF M1 **juga wajib berada di zona overbought** ($\%K_{\text{M1}} > 80$). Pada M1 tidak perlu syarat perubahan arah $\%K$ atau ukuran lilin Heikin Ashi; cukup konfirmasi level ekstrem overbought. Jika sinyal datang dari M1 itu sendiri, maka berlaku seluruh syarat 1-3 lengkap.
 
 ---
 
