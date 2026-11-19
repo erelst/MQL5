@@ -7,7 +7,15 @@ Tool Expert Advisor (EA) multi-simbol untuk MetaTrader 5 dengan dashboard intera
 ## Fitur Utama
 
 ### 1. Multi-Symbol Order Manager (Tab 1)
-- **Tabel Posisi & Pending Order**: Menampilkan semua transaksi aktif di akun Anda lengkap dengan informasi Simbol, Tipe Order, Volume (Lots), Open Price, SL, TP, dan status Auto-BE.
+- **Tabel Posisi & Pending Order**: Menampilkan semua transaksi aktif di akun Anda lengkap dengan informasi Simbol, Tipe Order, Volume (Lots), Open Price, SL, TP, status Auto-BE, dan status Auto Trail.
+- **Deteksi Posisi AutoTrader (`[AT TRAIL]`)**:
+  - Posisi yang dibuka oleh `MultiRuleAutoTrader` (Magic `882201`) otomatis terdeteksi dengan badge neon cyan **`[AT TRAIL]`**.
+  - Tombol aktivasi di OrderManager otomatis melewati (*skip*) posisi tersebut untuk melindungi posisi dari konflik modifikasi ganda antara kedua EA.
+- **Auto Trail Engine (EWMA True Range)**:
+  - **Trail BE**: Mengunci Stop Loss ke Break-Even (`Open + Spread` untuk Buy, `Open - Spread` untuk Sell) saat sisa jarak ke target TP awal $\le 30\%$ (`BE DIST %`).
+  - **Trail TP Extension**: Memperpanjang TP secara dinamis jika harga mendekati target ($\le 1.10\text{TR}$) bersamaan dengan lonjakan volatilitas pasar ($\text{RelVol} \ge 1.60\times$).
+  - **Trail SL Lock (Cycle 2+)**: Mengunci SL ke level TP sebelumnya saat harga mendekati target baru.
+  - Form kontrol khusus di Action Deck bawah lengkap dengan input `BASE TF`, `MAX DIST TR`, `RELVOL THRESH`, dan `BE DIST %`.
 - **Checkbox Seleksi Fleksibel**: Anda bebas memilih order mana saja yang ingin diubah menggunakan tombol `[X]` per baris atau tombol cepat `SELECT ALL` / `CLEAR`.
 - **Bulk SL & TP Price**: Masukkan nominal harga Stop Loss atau Take Profit yang Anda inginkan, lalu klik `SET SL` atau `SET TP` untuk menerapkan ke semua order yang ditandai sekaligus.
 - **Break-Even (BE) Engine**:
@@ -52,8 +60,8 @@ Klik tombol `BE OFFSET MODE` untuk berpindah mode secara berurutan (siklus 4 mod
 
 ### 3. State Persistence (Pengaturan Tidak Hilang)
 Sistem penyimpanan persisten otomatis (`.bin`) menjaga data Anda tetap utuh:
-- Disimpan dalam file binary format v6: `TMRR_State_<login>.bin` (dengan fallback otomatis ke `TMER_State_<login>.bin`).
-- Seluruh daftar simbol pantauan, status `active` / `paused`, checkbox sinyal aktif, mode sinyal ANY/COMBO, dan mode delay tersimpan permanen.
+- Disimpan dalam file binary format v7: `TMRR_State_<login>.bin` (dengan fallback otomatis ke `TMER_State_<login>.bin` dan dukungan migrasi mundur dari file format v6).
+- Seluruh daftar simbol pantauan, status `active` / `paused`, checkbox sinyal aktif, mode sinyal ANY/COMBO, mode delay, form input Auto Trail, serta daftar posisi yang sedang di-trail tersimpan permanen.
 
 ---
 
@@ -63,12 +71,12 @@ Sistem penyimpanan persisten otomatis (`.bin`) menjaga data Anda tetap utuh:
    - Buka MetaTrader 5 di PC Anda.
    - Klik menu **File -> Open Data Folder**.
    - Masuk ke folder **MQL5 -> Experts**.
-   - Salin file `TradeManagerEngulfingRadar.mq5` ke dalam folder tersebut.
+   - Salin file `TradeManagerReversalRadar.mq5` ke dalam folder tersebut.
 2. **Kompilasi**:
    - Buka **MetaEditor** (tekan `F4` di MT5).
-   - Buka file `TradeManagerEngulfingRadar.mq5`, lalu tekan **Compile** (`F7`).
+   - Buka file `TradeManagerReversalRadar.mq5`, lalu tekan **Compile** (`F7`).
 3. **Pasang ke Chart**:
-   - Di jendela Navigator MT5, cari **Expert Advisors -> TradeManagerEngulfingRadar**.
+   - Di jendela Navigator MT5, cari **Expert Advisors -> TradeManagerReversalRadar**.
    - Drag & drop EA ke chart simbol apa saja (EA ini bersifat global akun).
    - Pastikan opsi **Allow Algo Trading** (Auto Trading) sudah dicentang.
 
