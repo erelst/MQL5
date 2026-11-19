@@ -109,3 +109,4 @@ struct SRadarSymbol
   - Tombol pilihan mode: `MODE: ANY (OR)` / `MODE: COMBO (AND)`.
   - Mode Delay: `% TF PROGRESS` (dengan input nilai persentase 0-99%) atau `TF CLOSE`.
   - Filter Price Bounds: Tetap mendukung operator `<, >, <=, >=`, rentang `Min-Max`, atau `ALL`.
+  - **Persistensi Form Input (`CaptureRadarFormInputs`):** Menangkap seluruh input teks simbol, TF, batas harga, dan delay sebelum tombol toggle diklik, sehingga teks yang sedang diketik tidak terhapus saat berpindah mode sinyal atau delay.

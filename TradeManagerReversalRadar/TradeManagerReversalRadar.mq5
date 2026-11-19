@@ -332,6 +332,42 @@ void OnTimer()
 }
 
 //+------------------------------------------------------------------+
+//| CAPTURE RADAR FORM INPUTS TO PERSIST VALUES ACROSS DASHBOARD UI  |
+//+------------------------------------------------------------------+
+void CaptureRadarFormInputs()
+{
+   if(ObjectFind(0, g_prefix + "INP_NEW_SYM") >= 0)
+   {
+      string cur_sym = ObjectGetString(0, g_prefix + "INP_NEW_SYM", OBJPROP_TEXT);
+      if(cur_sym != "") g_form_sym = cur_sym;
+   }
+   if(ObjectFind(0, g_prefix + "INP_NEW_TF") >= 0)
+   {
+      string cur_tf = ObjectGetString(0, g_prefix + "INP_NEW_TF", OBJPROP_TEXT);
+      if(cur_tf != "") g_form_tf = cur_tf;
+   }
+   if(ObjectFind(0, g_prefix + "INP_NEW_BULL") >= 0)
+   {
+      string b_val = ObjectGetString(0, g_prefix + "INP_NEW_BULL", OBJPROP_TEXT);
+      if(b_val != "") g_form_bull = b_val;
+   }
+   if(ObjectFind(0, g_prefix + "INP_NEW_BEAR") >= 0)
+   {
+      string s_val = ObjectGetString(0, g_prefix + "INP_NEW_BEAR", OBJPROP_TEXT);
+      if(s_val != "") g_form_bear = s_val;
+   }
+   if(!g_form_delay_close && ObjectFind(0, g_prefix + "INP_NEW_DELAY") >= 0)
+   {
+      string d_val = ObjectGetString(0, g_prefix + "INP_NEW_DELAY", OBJPROP_TEXT);
+      if(d_val != "")
+      {
+         int cur_pct = (int)StringToInteger(d_val);
+         if(cur_pct >= 0 && cur_pct <= 99) g_form_delay_pct = cur_pct;
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
 //| ChartEvent function                                              |
 //+------------------------------------------------------------------+
 void OnChartEvent(const int id,
@@ -509,6 +545,7 @@ void OnChartEvent(const int id,
       // Toggle Radar Signals in Form
       else if(sparam == g_prefix + "BTN_RADAR_SIG_ENG")
       {
+         CaptureRadarFormInputs();
          g_form_sig_eng = !g_form_sig_eng;
          // Mutual exclusion in COMBO mode
          if(g_form_sig_mode == SIGNAL_MODE_COMBO && g_form_sig_eng)
@@ -519,6 +556,7 @@ void OnChartEvent(const int id,
       }
       else if(sparam == g_prefix + "BTN_RADAR_SIG_HMR")
       {
+         CaptureRadarFormInputs();
          g_form_sig_hmr = !g_form_sig_hmr;
          // Mutual exclusion in COMBO mode
          if(g_form_sig_mode == SIGNAL_MODE_COMBO && g_form_sig_hmr)
@@ -529,6 +567,7 @@ void OnChartEvent(const int id,
       }
       else if(sparam == g_prefix + "BTN_RADAR_SIG_STOCH")
       {
+         CaptureRadarFormInputs();
          g_form_sig_stoch = !g_form_sig_stoch;
          CreateDashboardUI();
          UpdateDashboardUI();
@@ -536,6 +575,7 @@ void OnChartEvent(const int id,
       }
       else if(sparam == g_prefix + "BTN_RADAR_SIG_MODE")
       {
+         CaptureRadarFormInputs();
          g_form_sig_mode = (g_form_sig_mode == SIGNAL_MODE_ANY) ? SIGNAL_MODE_COMBO : SIGNAL_MODE_ANY;
          if(g_form_sig_mode == SIGNAL_MODE_COMBO)
          {
@@ -548,11 +588,7 @@ void OnChartEvent(const int id,
       // Toggle Radar Delay Mode (% TF Progress vs TF Close)
       else if(sparam == g_prefix + "BTN_TOGGLE_RADAR_MODE")
       {
-         if(!g_form_delay_close)
-         {
-            int cur_pct = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_NEW_DELAY", OBJPROP_TEXT));
-            if(cur_pct >= 0) g_form_delay_pct = cur_pct;
-         }
+         CaptureRadarFormInputs();
          g_form_delay_close = !g_form_delay_close;
          CreateDashboardUI();
          UpdateDashboardUI();

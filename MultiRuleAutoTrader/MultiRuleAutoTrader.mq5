@@ -36,8 +36,8 @@ enum ENUM_SIGNAL_MODE
 
 enum ENUM_TRAIL_BE_MODE
 {
-   TRAIL_BE_PROFIT,   // Opsi 1: Berbasis Profit Berjalan (1.5x EWMA TR dari Open)
-   TRAIL_BE_PROXIMITY // Opsi 2: Berbasis Kedekatan TP (sisa jarak <= 1.1x EWMA TR)
+   TRAIL_BE_PROXIMITY, // Opsi 1 (Rekomendasi): Berbasis Sisa Jarak ke TP (<= 30% dari Target Awal)
+   TRAIL_BE_PROFIT     // Opsi 2: Berbasis Profit Berjalan (>= 1.5x EWMA TR dari Open)
 };
 
 struct AutoTraderRule
@@ -114,6 +114,7 @@ input ENUM_SIGNAL_MODE     InpDefaultSigMode   = SIGNAL_MODE_ANY;// Default Sign
 input group "=== AUTO TRAIL SL & TP (EWMA TR ENGINE) ==="
 input bool                 InpEnableTrail      = true;           // Default Enable Trail SL & TP
 input ENUM_TRAIL_BE_MODE   InpTrailBEMode      = TRAIL_BE_PROXIMITY; // Default Trail BE Mode
+input double               InpTrailBERemDistPct= 0.30;           // Default Trail BE Remaining TP Distance Ratio (0.30 = 30%)
 input double               InpMaxDistATR       = 1.10;           // Default Max Proximity to TP (in EWMA TR units)
 input double               InpRelVolThreshold  = 1.60;           // Default RelVol Threshold (>= 1.60x)
 input double               InpEWMALambda       = 0.90;           // EWMA TR Lambda Decay (0.88 - 0.92)
@@ -782,33 +783,38 @@ void ProcessAutoTrailSLTP()
       if(atr_ref <= 0) atr_ref = ewma_tr;
       
       // ===================================================================
-      // 1. TRAIL BE (BREAK-EVEN): MURNI BERBASIS JARAK TANPA VOLATILITAS
+      // 1. TRAIL BE (BREAK-EVEN): MURNI BERBASIS SISA JARAK TARGET TP
       // ===================================================================
       bool trigger_be = false;
       if(!g_tracking_list[i].be_applied && g_tracking_list[i].trail_cycle == 0)
       {
          if(InpTrailBEMode == TRAIL_BE_PROFIT)
          {
-            // Opsi 1: Running profit >= 1.5x EWMA TR dari open
+            // Opsi 2: Running profit >= 1.5x EWMA TR dari open
             if(ptype == POSITION_TYPE_BUY  && (bid - open_p) >= (1.5 * ewma_tr)) trigger_be = true;
             if(ptype == POSITION_TYPE_SELL && (open_p - ask) >= (1.5 * ewma_tr)) trigger_be = true;
          }
          else
          {
-            // Opsi 2 (Default): Kedekatan ke TP (sisa jarak <= trail_max_dist * EWMA TR)
-            double max_dist_allowed = (g_tracking_list[i].trail_max_dist > 0) ? g_tracking_list[i].trail_max_dist : InpMaxDistATR;
+            // Opsi 1 (Default): Sisa jarak ke TP <= persentase target awal (default 30%) & posisi sudah profit
+            double base_target_dist = g_tracking_list[i].initial_tp_dist;
+            if(base_target_dist <= 0) base_target_dist = MathAbs(cur_tp - open_p);
             
-            if(ptype == POSITION_TYPE_BUY)
+            if(base_target_dist > 0)
             {
-               double rem_dist = cur_tp - bid;
-               if(rem_dist <= max_dist_allowed * ewma_tr && bid > open_p)
-                  trigger_be = true;
-            }
-            else if(ptype == POSITION_TYPE_SELL)
-            {
-               double rem_dist = ask - cur_tp;
-               if(rem_dist <= max_dist_allowed * ewma_tr && ask < open_p)
-                  trigger_be = true;
+               double max_rem_allowed = base_target_dist * InpTrailBERemDistPct;
+               if(ptype == POSITION_TYPE_BUY)
+               {
+                  double rem_dist = cur_tp - bid;
+                  if(rem_dist <= max_rem_allowed && bid > (open_p + spread))
+                     trigger_be = true;
+               }
+               else if(ptype == POSITION_TYPE_SELL)
+               {
+                  double rem_dist = ask - cur_tp;
+                  if(rem_dist <= max_rem_allowed && ask < (open_p - spread))
+                     trigger_be = true;
+               }
             }
          }
          
@@ -1778,6 +1784,70 @@ void OnDeinit(const int reason)
 }
 
 //+------------------------------------------------------------------+
+//| CAPTURE FORM INPUTS TO PERSIST VALUES ACROSS DASHBOARD REBUILDS  |
+//+------------------------------------------------------------------+
+void CaptureFormInputs()
+{
+   string cur_sym = ObjectGetString(0, g_prefix + "INP_SYM", OBJPROP_TEXT);
+   if(cur_sym != "") g_form_sym = cur_sym;
+   
+   double cur_rr = StringToDouble(ObjectGetString(0, g_prefix + "INP_RR", OBJPROP_TEXT));
+   if(cur_rr > 0) g_form_rr = cur_rr;
+   
+   int cur_tf = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_TF", OBJPROP_TEXT));
+   if(cur_tf == 1)      g_form_tf = PERIOD_M1;
+   else if(cur_tf == 5) g_form_tf = PERIOD_M5;
+   else if(cur_tf == 15) g_form_tf = PERIOD_M15;
+   else if(cur_tf == 30) g_form_tf = PERIOD_M30;
+   else if(cur_tf == 60) g_form_tf = PERIOD_H1;
+   else if(cur_tf == 240) g_form_tf = PERIOD_H4;
+   else if(cur_tf == 1440) g_form_tf = PERIOD_D1;
+   
+   double cur_lot = StringToDouble(ObjectGetString(0, g_prefix + "INP_LOT", OBJPROP_TEXT));
+   if(cur_lot > 0) g_form_lot_val = cur_lot;
+   
+   double cur_tdist = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_DIST", OBJPROP_TEXT));
+   if(cur_tdist > 0) g_form_trail_dist = cur_tdist;
+   
+   double cur_amult = StringToDouble(ObjectGetString(0, g_prefix + "INP_ATR_MULT", OBJPROP_TEXT));
+   if(cur_amult > 0) g_form_atr_mult = cur_amult;
+   
+   string mord_str = ObjectGetString(0, g_prefix + "INP_MAX_ORD", OBJPROP_TEXT);
+   if(mord_str != "")
+   {
+      int cur_mord = (int)StringToInteger(mord_str);
+      if(cur_mord >= 0) g_form_max_orders = cur_mord;
+   }
+   
+   int cur_entri_mult = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_ENTRI_MULT", OBJPROP_TEXT));
+   if(cur_entri_mult > 0) g_form_entry_mult = cur_entri_mult;
+   
+   int cur_multi_tp = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MULTI_TP", OBJPROP_TEXT));
+   if(cur_multi_tp > 0) g_form_multi_tp = cur_multi_tp;
+   
+   if(!g_form_delay_close)
+   {
+      string delay_str = ObjectGetString(0, g_prefix + "INP_DELAY_SEC", OBJPROP_TEXT);
+      if(delay_str != "")
+      {
+         int cur_pct = (int)StringToInteger(delay_str);
+         if(cur_pct >= 0 && cur_pct <= 99) g_form_delay_pct = cur_pct;
+      }
+   }
+   
+   if(ObjectFind(0, g_prefix + "INP_BULL_MAX") >= 0)
+   {
+      string b_val = ObjectGetString(0, g_prefix + "INP_BULL_MAX", OBJPROP_TEXT);
+      if(b_val != "") g_form_bmax = b_val;
+   }
+   if(ObjectFind(0, g_prefix + "INP_BEAR_MIN") >= 0)
+   {
+      string s_val = ObjectGetString(0, g_prefix + "INP_BEAR_MIN", OBJPROP_TEXT);
+      if(s_val != "") g_form_smin = s_val;
+   }
+}
+
+//+------------------------------------------------------------------+
 //| ChartEvent function                                              |
 //+------------------------------------------------------------------+
 void OnChartEvent(const int id,
@@ -1795,56 +1865,7 @@ void OnChartEvent(const int id,
       }
       else if(sparam == g_prefix + "BTN_DIR_BOTH" || sparam == g_prefix + "BTN_DIR_BUY" || sparam == g_prefix + "BTN_DIR_SELL")
       {
-         // Capture current form edits before switching direction
-         string cur_sym = ObjectGetString(0, g_prefix + "INP_SYM", OBJPROP_TEXT);
-         if(cur_sym != "") g_form_sym = cur_sym;
-         
-         double cur_rr = StringToDouble(ObjectGetString(0, g_prefix + "INP_RR", OBJPROP_TEXT));
-         if(cur_rr > 0) g_form_rr = cur_rr;
-         
-         double cur_lot = StringToDouble(ObjectGetString(0, g_prefix + "INP_LOT", OBJPROP_TEXT));
-         if(cur_lot > 0) g_form_lot_val = cur_lot;
-         
-         double cur_tdist = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_DIST", OBJPROP_TEXT));
-         if(cur_tdist > 0) g_form_trail_dist = cur_tdist;
-         
-         double cur_amult = StringToDouble(ObjectGetString(0, g_prefix + "INP_ATR_MULT", OBJPROP_TEXT));
-         if(cur_amult > 0) g_form_atr_mult = cur_amult;
-         
-         int cur_mord = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MAX_ORD", OBJPROP_TEXT));
-         if(cur_mord >= 0) g_form_max_orders = cur_mord;
-         
-         int cur_entri_mult = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_ENTRI_MULT", OBJPROP_TEXT));
-         if(cur_entri_mult > 0) g_form_entry_mult = cur_entri_mult;
-         
-         int cur_multi_tp = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MULTI_TP", OBJPROP_TEXT));
-         if(cur_multi_tp > 0) g_form_multi_tp = cur_multi_tp;
-         
-         // Object is absent in TF CLOSE mode; keep the stored value instead of
-         // reading "" as 0.
-         if(!g_form_delay_close)
-         {
-            int cur_pct = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_DELAY_SEC", OBJPROP_TEXT));
-            if(cur_pct >= 0) g_form_delay_pct = cur_pct;
-         }
-         
-         if(g_form_direction == TRADE_DIR_BOTH)
-         {
-            string b_val = ObjectGetString(0, g_prefix + "INP_BULL_MAX", OBJPROP_TEXT);
-            if(b_val != "") g_form_bmax = b_val;
-            string s_val = ObjectGetString(0, g_prefix + "INP_BEAR_MIN", OBJPROP_TEXT);
-            if(s_val != "") g_form_smin = s_val;
-         }
-         else if(g_form_direction == TRADE_DIR_BUY)
-         {
-            string b_val = ObjectGetString(0, g_prefix + "INP_BULL_MAX", OBJPROP_TEXT);
-            if(b_val != "") g_form_bmax = b_val;
-         }
-         else if(g_form_direction == TRADE_DIR_SELL)
-         {
-            string s_val = ObjectGetString(0, g_prefix + "INP_BEAR_MIN", OBJPROP_TEXT);
-            if(s_val != "") g_form_smin = s_val;
-         }
+         CaptureFormInputs();
          
          if(sparam == g_prefix + "BTN_DIR_BOTH") g_form_direction = TRADE_DIR_BOTH;
          else if(sparam == g_prefix + "BTN_DIR_BUY") g_form_direction = TRADE_DIR_BUY;
@@ -1855,6 +1876,7 @@ void OnChartEvent(const int id,
       }
       else if(sparam == g_prefix + "BTN_SIG_ENG")
       {
+         CaptureFormInputs();
          g_form_sig_eng = !g_form_sig_eng;
          if(g_form_sig_mode == SIGNAL_MODE_COMBO && g_form_sig_eng && g_form_sig_hmr)
             g_form_sig_hmr = false; // Mutual exclusion
@@ -1863,6 +1885,7 @@ void OnChartEvent(const int id,
       }
       else if(sparam == g_prefix + "BTN_SIG_HMR")
       {
+         CaptureFormInputs();
          g_form_sig_hmr = !g_form_sig_hmr;
          if(g_form_sig_mode == SIGNAL_MODE_COMBO && g_form_sig_hmr && g_form_sig_eng)
             g_form_sig_eng = false;
@@ -1871,12 +1894,14 @@ void OnChartEvent(const int id,
       }
       else if(sparam == g_prefix + "BTN_SIG_STOCH")
       {
+         CaptureFormInputs();
          g_form_sig_stoch = !g_form_sig_stoch;
          CreateDashboardUI();
          return;
       }
       else if(sparam == g_prefix + "BTN_TOGGLE_SIG_MODE")
       {
+         CaptureFormInputs();
          if(g_form_sig_mode == SIGNAL_MODE_ANY)
          {
             g_form_sig_mode = SIGNAL_MODE_COMBO;
@@ -1896,10 +1921,7 @@ void OnChartEvent(const int id,
       }
       else if(sparam == g_prefix + "BTN_TOGGLE_LOT_MODE")
       {
-         // Read current input value before switching
-         double cur_lot = StringToDouble(ObjectGetString(0, g_prefix + "INP_LOT", OBJPROP_TEXT));
-         if(cur_lot > 0) g_form_lot_val = cur_lot;
-         
+         CaptureFormInputs();
          if(g_form_lot_mode == LOT_FIXED)
          {
             g_form_lot_mode = LOT_RISK_PCT;
@@ -1915,19 +1937,14 @@ void OnChartEvent(const int id,
       }
       else if(sparam == g_prefix + "BTN_TOGGLE_DELAY_MODE")
       {
-         // Object is absent in TF CLOSE mode, so only read it when present.
-         if(!g_form_delay_close)
-         {
-            int cur_pct = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_DELAY_SEC", OBJPROP_TEXT));
-            if(cur_pct >= 0) g_form_delay_pct = cur_pct;
-         }
-         
+         CaptureFormInputs();
          g_form_delay_close = !g_form_delay_close;
          CreateDashboardUI();
          return;
       }
       else if(sparam == g_prefix + "BTN_TOGGLE_MAX_ORD")
       {
+         CaptureFormInputs();
          if(g_form_max_orders <= 0) g_form_max_orders = 1;
          else g_form_max_orders = 0; // Unlimited
          CreateDashboardUI();
@@ -1935,6 +1952,7 @@ void OnChartEvent(const int id,
       }
       else if(sparam == g_prefix + "BTN_TOGGLE_TRAIL")
       {
+         CaptureFormInputs();
          g_form_trail_on = !g_form_trail_on;
          CreateDashboardUI();
          return;
@@ -1973,12 +1991,14 @@ void OnChartEvent(const int id,
       }
       else if(sparam == g_prefix + "BTN_RULES_PREV")
       {
+         CaptureFormInputs();
          if(g_rules_page > 0) g_rules_page--;
          CreateDashboardUI();
          return;
       }
       else if(sparam == g_prefix + "BTN_RULES_NEXT")
       {
+         CaptureFormInputs();
          int total_rules = ArraySize(g_rules);
          int max_pages = (total_rules + RULES_PER_PAGE - 1) / RULES_PER_PAGE;
          if(g_rules_page < max_pages - 1) g_rules_page++;

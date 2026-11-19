@@ -176,11 +176,11 @@ Menggantikan indikator ATR klasik yang lambat dengan model *Relative Volatility*
 ```
 
 1. **Trail BE (Pengamanan Modal Mandiri):**
-   - **Murni berbasis jarak.** Tidak membutuhkan lonjakan volatilitas.
+   - **Murni berbasis jarak target TP.** Tidak membutuhkan lonjakan volatilitas.
    - Pilihan pendekatan:
-     - *Opsi 1 (Profit Berjalan):* Aktif saat running profit mencapai $1.5\times$ atau $2.0\times$ EWMA TR dari harga Open.
-     - *Opsi 2 (Kedekatan ke TP - Default):* Aktif saat sisa jarak menuju TP $\le 1.10\times$ EWMA TR.
-   - Menggeser SL ke Break-Even (`Open ± Spread`) untuk mengunci posisi bebas risiko meski pasar bergerak lambat.
+     - *Opsi 1 (Kedekatan ke TP - Default & Rekomendasi):* Aktif saat sisa jarak menuju TP $\le 30\%$ dari target TP awal (`rem_dist <= initial_tp_dist * 0.30`) dan posisi dalam keadaan floating profit (`Bid > Open + Spread` untuk Buy / `Ask < Open - Spread` untuk Sell).
+     - *Opsi 2 (Profit Berjalan):* Aktif saat running profit mencapai $1.5\times$ EWMA TR dari harga Open.
+   - Menggeser SL ke Break-Even (`Open ± Spread`) untuk mengunci posisi bebas risiko tanpa risiko terpicu prematur di awal pergerakan posisi.
 2. **Trail TP Extension (Perpanjangan Target Selektif):**
    - Wajib memenuhi **dua syarat sekaligus**:
      1. Jarak ke TP sudah dekat ($\text{distToTP} \le 1.10\times \text{EWMA TR}$).
@@ -197,3 +197,15 @@ Menggantikan indikator ATR klasik yang lambat dengan model *Relative Volatility*
 - **Fokus Prioritas:** Pemantauan aktif dimulai dari tiket dengan TP terdekat (TP1).
 - Jika TP1 terkena ekstensi hingga posisinya mendekati TP2, sistem secara otomatis memantau kedua tiket tersebut secara simultan.
 - Begitu TP1 tereksekusi (*Hit TP*), fokus pemantauan beralih penuh mengawal tiket berikutnya (TP2, TP3, dst.).
+
+---
+
+## 4. Persistensi Form Input Saat Interaksi Dashboard
+
+### Masalah Form Reset Saat Toggle
+Saat pengguna sedang mengisi atau mengubah kolom di form deck (misalnya simbol, lot, RR, TF, batas harga, trailing distance, multiplier, atau limit order), lalu mengklik tombol toggle (seperti tombol sinyal **ENG / HMR / STOCH**, tombol mode **ANY / COMBO**, tombol **DELAY % / TF CLOSE**, tombol **MAX ORD**, atau navigasi **PREV / NEXT** tabel rules), fungsi UI memanggil `CreateDashboardUI()`. Karena objek-objek input teks di MT5 dihancurkan dan dibuat ulang saat rebuild UI, isi kolom yang sudah diketik pengguna terhapus dan kembali ke nilai default.
+
+### Solusi Sinkronisasi Terpusat (`CaptureFormInputs`)
+- Membuat helper sinkronisasi `CaptureFormInputs()` yang dipanggil sebelum rebuild UI pada setiap event klik tombol form.
+- Menyimpan teks simbol, nilai RR, lot, TF, Max Orders, Multiplier, Multi TP, % TF Delay, Trailing Distance, RelVol, dan Price Bounds ke variabel status memori (`g_form_*`).
+- Menerapkan mekanisme yang sama pada `TradeManagerReversalRadar` (`CaptureRadarFormInputs()`) sehingga form input radar tidak pernah hilang saat beralih mode sinyal atau toggle % delay.
