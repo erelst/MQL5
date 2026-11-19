@@ -1,6 +1,6 @@
 # MultiRule Auto Trader (EA 2) - Multi-Rule Realtime Tick Engine
 
-Expert Advisor MetaTrader 5 (MQL5) untuk eksekusi otomatis pola **Strong Engulfing Breakout** pada level tick realtime, dilengkapi **Sistem Multi-Rule Auto Trader**, manajemen resiko dinamis (Risk-to-Reward), serta mesin **Auto Trail SL (BE)** dan **Volatility Trail TP**.
+Expert Advisor MetaTrader 5 (MQL5) untuk eksekusi otomatis pola breakout pada level tick realtime, dilengkapi **Sistem Multi-Rule Auto Trader**, manajemen resiko dinamis (Risk-to-Reward), serta mesin **Auto Trail SL (BE)** dan **Volatility Trail TP**.
 
 ---
 
@@ -25,7 +25,7 @@ Berbeda dengan EA konvensional yang hanya memiliki satu pasang pengaturan, Multi
   - **Dynamic Form**: Kolom Price Bounds menyesuaikan otomatis (jika `BUY ONLY` hanya tampil Buy Bound, jika `SELL ONLY` hanya tampil Sell Bound).
 - **Max Orders / Batas Open Order**:
   - `1` (Default): Rule membuka 1x order, lalu otomatis berstatus **`PAUSED`** setelah tereksekusi.
-  - `UNL` / `0`: Tanpa batas (*unlimited*), terus aktif membuka order setiap kali pola Engulfing valid muncul.
+  - `UNL` / `0`: Tanpa batas (*unlimited*), terus aktif membuka order setiap kali pola breakout valid muncul.
 
 #### MAX ORDER vs ENTRY MULTIPLIER (Sering Tertukar)
 
@@ -184,7 +184,7 @@ Alur eksekusi pada EA:
 | `InpLotMode` | `LOT_FIXED` | Mode lot: `LOT_FIXED` atau `LOT_RISK_PCT` |
 | `InpFixedLot` | `0.01` | Ukuran lot jika mode Fixed Lot |
 | `InpRiskPercent` | `1.0` | Risiko % saldo jika mode Risk Percentage |
-| `InpTimeframe` | `PERIOD_M5` | Default timeframe deteksi pola Engulfing |
+| `InpTimeframe` | `PERIOD_M5` | Default timeframe deteksi pola breakout |
 | `InpATRPeriod` | `14` | Periode ATR untuk kalkulasi buffer SL |
 | `InpEnablePushAlerts` | `true` | Kirim notifikasi push ke aplikasi MT5 mobile di HP |
 | `InpEnableSoundAlerts` | `true` | Bunyikan suara / pop-up alert di terminal MT5 |

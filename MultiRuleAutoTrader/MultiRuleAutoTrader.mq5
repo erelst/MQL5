@@ -6,7 +6,7 @@
 #property copyright "Copyright 2026, Multi-Symbol Manager"
 #property link      "https://github.com/1jehuang/jcode"
 #property version   "2.20"
-#property description "Multi-Rule Auto Execution EA on Realtime Strong Engulfing Break with Flexible Price Bounds & Max Orders Control"
+#property description "Multi-Rule Auto Execution EA on Realtime Breakout with Flexible Price Bounds & Max Orders Control"
 
 #include <Trade\Trade.mqh>
 #include <Trade\PositionInfo.mqh>

@@ -1,12 +1,12 @@
 # MQL5 Cyberpunk Neon Expert Advisors & Trade Manager
 
-Kumpulan Expert Advisor (EA) MQL5 kustom dengan desain antarmuka cyberpunk neon hitam pekat, deteksi *Strong Engulfing* tingkat tick secara real-time, manajemen multi-symbol/multi-rule, Auto Trail SL/TP, Entry Multiplier, Entry Delay, dan persistensi state biner yang tangguh.
+Kumpulan Expert Advisor (EA) MQL5 kustom dengan desain antarmuka cyberpunk neon hitam pekat, deteksi pola breakout tingkat tick secara real-time, manajemen multi-symbol/multi-rule, Auto Trail SL/TP, Entry Multiplier, Entry Delay, dan persistensi state biner yang tangguh.
 
 ---
 
-## 1. Engulfing Auto Trader (`MultiRuleAutoTrader.mq5`)
+## 1. MultiRule Auto Trader (`MultiRuleAutoTrader.mq5`)
 
-EA otomatis multi-aturan (*Multi-Rule List*) untuk eksekusi posisi berdasarkan pola Strong Engulfing dan filter tingkat lanjut.
+EA otomatis multi-aturan (*Multi-Rule List*) untuk eksekusi posisi berdasarkan pola breakout dan filter tingkat lanjut.
 
 ### Fitur Utama:
 - **Multi-Rule Management**: Menambah, mengedit, menghapus, dan mengaktifkan/mempaus (*active/paused*) banyak rule sekaligus.

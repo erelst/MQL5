@@ -1,6 +1,6 @@
 # Logika Dual-Timeframe & Basis ATR
 
-Dokumen ini menjelaskan dua aturan yang dipakai bersama oleh **EngulfingAutoTrader** dan **TradeManagerEngulfingRadar**, karena keduanya harus berperilaku identik agar sinyal radar cocok dengan eksekusi EA.
+Dokumen ini menjelaskan dua aturan yang dipakai bersama oleh **MultiRuleAutoTrader** dan **TradeManagerEngulfingRadar**, karena keduanya harus berperilaku identik agar sinyal radar cocok dengan eksekusi EA.
 
 ---
 
@@ -219,7 +219,7 @@ Sebelumnya, syarat `atr_exploding` diletakkan *di dalam* gerbang jarak dekat TP 
 
 ## 8. Sinkronisasi Radar & Fitur Terbaru
 
-- **Shared Shift Detector:** Baik AutoTrader maupun TradeManagerEngulfingRadar menggunakan fungsi detektor engulfing parameter `shift` (`0` untuk live tick / seconds, `1` untuk TF close).
+- **Shared Shift Detector:** Baik MultiRuleAutoTrader maupun TradeManagerEngulfingRadar menggunakan fungsi detektor engulfing parameter `shift` (`0` untuk live tick / seconds, `1` untuk TF close).
 - **Koreksi Multiplier SELL:** Sisi SELL pada radar menggunakan perkalian pengali `* InpBodyRatioMultiplier` agar simetris dan adil dengan sisi BUY.
 - **Filter Harga Fleksibel (`EvaluatePriceFilter`):** Radar mewarisi dukungan operator lengkap (`<`, `>`, `<=`, `>=`), rentang harga bolak-balik (`3051-3040`), serta keyword bebas (`ALL`, `BEBAS`).
 - **Persistensi Form Radar:** Kolom input form Watchlist mempertahankan nilai terakhirnya saat tombol tambah/edit diklik.
