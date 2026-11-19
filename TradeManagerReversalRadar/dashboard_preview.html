@@ -360,6 +360,12 @@
       color: var(--text-dim);
       border: 1px solid var(--border-soft);
     }
+    .badge-at-trail {
+      background: var(--tab-active-bg);
+      color: var(--cyan-bright);
+      border: 1px solid var(--cyan-bright);
+      box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
+    }
 
     /* ================= ACTION DECK & INPUTS ================= */
     .action-deck {
@@ -657,7 +663,8 @@
                   <th width="95">Open</th>
                   <th width="95">SL</th>
                   <th width="95">TP</th>
-                  <th>Auto-BE</th>
+                  <th width="115">Auto-BE</th>
+                  <th>Auto Trail</th>
                 </tr>
               </thead>
               <tbody>
@@ -671,6 +678,7 @@
                   <td><span style="color:var(--bear-bright);">1.08100</span></td>
                   <td><span style="color:var(--bull-bright);">1.09200</span></td>
                   <td><span class="badge badge-be-on">ON @ 1.08800</span></td>
+                  <td><span class="badge badge-at-trail">AT TRAIL</span></td>
                 </tr>
                 <tr class="selected">
                   <td><input type="checkbox" class="order-cb custom-cb" checked></td>
@@ -682,6 +690,7 @@
                   <td><span style="color:var(--bear-bright);">2755.00</span></td>
                   <td><span style="color:var(--bull-bright);">2710.00</span></td>
                   <td><span class="badge badge-be-off">OFF</span></td>
+                  <td><span class="badge badge-be-on">ON (C1)</span></td>
                 </tr>
                 <tr>
                   <td><input type="checkbox" class="order-cb custom-cb"></td>
@@ -692,6 +701,7 @@
                   <td>153.100</td>
                   <td><span style="color:var(--bear-bright);">-</span></td>
                   <td><span style="color:var(--bull-bright);">-</span></td>
+                  <td><span class="badge badge-be-off">-</span></td>
                   <td><span class="badge badge-be-off">-</span></td>
                 </tr>
               </tbody>
@@ -705,13 +715,14 @@
         <!-- Step 2: Clear Action Decks -->
         <div class="action-deck">
           
-          <!-- Box A: Bulk SL / TP -->
+          <!-- Box A: Bulk SL / TP & Break-Even -->
           <div class="tool-box">
             <div class="tool-header">
               <div style="display:flex; align-items:center; gap:8px;">
                 <div class="ico ico-crosshair"></div>
-                <span>BULK PRICE MODIFIER</span>
+                <span>PRICE MODIFIER &amp; BREAK-EVEN</span>
               </div>
+              <button class="btn btn-gold btn-sm" onclick="applyInstantBE()">SET BE SPREAD</button>
             </div>
             
             <div class="form-row">
@@ -725,27 +736,58 @@
               <input type="text" placeholder="Harga TP (misal 1.09500)" id="input-tp">
               <button class="btn btn-green" style="width:110px;" onclick="applyTP()">SET TP</button>
             </div>
-          </div>
-
-          <!-- Box B: Break-Even Engine -->
-          <div class="tool-box">
-            <div class="tool-header">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <div class="ico ico-shield"></div>
-                <span>BREAK-EVEN (BE) ENGINE</span>
-              </div>
-              <!-- Instant BE Spread Button -->
-              <button class="btn btn-gold btn-sm" onclick="applyInstantBE()">SET BE SPREAD</button>
-            </div>
             
             <div class="form-row">
-              <span class="form-label">TRIGGER PRICE:</span>
+              <span class="form-label">BE TRIGGER:</span>
               <input type="text" placeholder="Harga trigger eksekusi BE..." id="input-be">
             </div>
             
             <div style="display:flex; gap:10px; margin-top:12px;">
               <button class="btn btn-blue" style="flex:1;" onclick="applyAutoBE()">ACTIVATE BE TRIGGER</button>
               <button class="btn btn-neutral" onclick="disableAutoBE()">DEACTIVATE</button>
+            </div>
+          </div>
+
+          <!-- Box B: Auto Trail Engine (EWMA TR) -->
+          <div class="tool-box">
+            <div class="tool-header">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <div class="ico ico-shield"></div>
+                <span>AUTO TRAIL ENGINE (EWMA TR)</span>
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <span class="form-label">BASE TF (MIN):</span>
+              <input type="text" value="5" id="input-trail-tf" style="width:70px;">
+              <span style="font-size:11px; color:var(--text-med); margin-left:8px;">(1, 5, 15, 60m...)</span>
+            </div>
+            
+            <div class="form-row">
+              <span class="form-label">MAX DIST TR:</span>
+              <input type="text" value="1.10" id="input-trail-dist" style="width:70px;">
+              <span style="font-size:11px; color:var(--text-med); margin-left:8px;">Proximity ke TP (1.10x)</span>
+            </div>
+            
+            <div class="form-row">
+              <span class="form-label">RELVOL THRESH:</span>
+              <input type="text" value="1.60" id="input-trail-mult" style="width:70px;">
+              <span style="font-size:11px; color:var(--text-med); margin-left:8px;">Lonjakan vol (&ge; 1.60x)</span>
+            </div>
+
+            <div class="form-row">
+              <span class="form-label">BE DIST %:</span>
+              <input type="text" value="30" id="input-trail-be" style="width:70px; color:var(--gold-bright);">
+              <span style="font-size:11px; color:var(--text-med); margin-left:8px;">Sisa target lock BE (30%)</span>
+            </div>
+            
+            <div style="font-size:10px; color:var(--cyan-bright); margin-top:4px;">
+              *Posisi AutoTrader ([AT TRAIL]) dilindungi otomatis agar tidak konflik.
+            </div>
+            
+            <div style="display:flex; gap:10px; margin-top:10px;">
+              <button class="btn btn-blue" style="flex:1;" onclick="applyAutoTrail()">ACTIVATE AUTO TRAIL</button>
+              <button class="btn btn-red" onclick="disableAutoTrail()">STOP TRAIL</button>
             </div>
           </div>
 
@@ -965,6 +1007,20 @@
     function disableAutoBE() {
       const selected = document.querySelectorAll('.order-cb:checked').length;
       alert(`Auto-BE dinonaktifkan untuk ${selected} order terpilih.`);
+    }
+
+    function applyAutoTrail() {
+      const tf = document.getElementById('input-trail-tf').value;
+      const dist = document.getElementById('input-trail-dist').value;
+      const mult = document.getElementById('input-trail-mult').value;
+      const be = document.getElementById('input-trail-be').value;
+      const selected = document.querySelectorAll('.order-cb:checked').length;
+      alert(`Mengaktifkan Auto Trail EWMA TR (TF: M${tf}, Dist: ${dist}TR, Vol: ${mult}x, BE: ${be}%) pada ${selected} posisi terpilih.\n(Posisi bertanda [AT TRAIL] dilindungi otomatis)`);
+    }
+
+    function disableAutoTrail() {
+      const selected = document.querySelectorAll('.order-cb:checked').length;
+      alert(`Menghentikan Auto Trail pada ${selected} posisi terpilih.`);
     }
 
     let rSigEng = true;

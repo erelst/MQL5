@@ -30,6 +30,28 @@ enum ENUM_SIGNAL_MODE
    SIGNAL_MODE_COMBO  // COMBO (AND): Alert jika semua sinyal aktif terpenuhi
 };
 
+enum ENUM_TRAIL_BE_MODE
+{
+   TRAIL_BE_PROXIMITY, // Berbasis Sisa Jarak ke TP (<= 30% dari Target Awal)
+   TRAIL_BE_PROFIT     // Berbasis Profit Berjalan (>= 1.5x EWMA TR dari Open)
+};
+
+struct SPositionTracking
+{
+   ulong    ticket;
+   string   symbol;
+   ENUM_TIMEFRAMES timeframe;
+   double   initial_atr100;
+   double   initial_tp_dist;
+   double   prev_tp_level;
+   int      trail_cycle;
+   double   trail_max_dist;
+   double   atr_multiplier;
+   double   trail_be_rem_dist_pct; // Sisa target ratio untuk BE (default 0.30)
+   bool     be_applied;            // Track if BE has already been locked
+   bool     active;
+};
+
 struct SAutoBEItem
 {
    ulong                ticket;
@@ -80,8 +102,20 @@ input group "=== GENERAL SETTINGS ==="
 input int      InpTimerSeconds         = 1;          // Refresh Timer (Seconds)
 input int      InpSlippage             = 10;         // Slippage Points
 input ulong    InpMagicNumber          = 0;          // Filter Magic (0 = All Trades)
+input ulong    InpAutoTraderMagic      = 882201;     // MultiRuleAutoTrader Magic (for auto-detection)
 input bool     InpEnablePushAlerts     = true;       // Send Mobile Push Alerts
 input bool     InpEnableSoundAlerts    = true;       // Enable Sound/Pop-up Alerts
+
+input group "=== AUTO TRAIL SL & TP (EWMA TR ENGINE) ==="
+input bool                 InpEnableTrail      = true;               // Default Enable Trail SL & TP
+input ENUM_TRAIL_BE_MODE   InpTrailBEMode      = TRAIL_BE_PROXIMITY; // Default Trail BE Mode
+input double               InpTrailBERemDistPct= 0.30;               // Default Trail BE Remaining TP Distance (0.30 = 30%)
+input double               InpMaxDistATR       = 1.10;               // Default Max Proximity to TP (in EWMA TR units)
+input double               InpRelVolThreshold  = 1.60;               // Default RelVol Threshold (>= 1.60x)
+input double               InpEWMALambda       = 0.90;               // EWMA TR Lambda Decay (0.88 - 0.92)
+input int                  InpEWMABars         = 30;                 // EWMA TR Baseline Bars
+input double               InpExtendFactor     = 0.70;               // TP Extension Factor (excess * ATR * factor)
+input double               InpMaxExtendATR     = 1.80;               // Max TP Extension (in ATR units)
 
 input group "=== REVERSAL SIGNALS SETTINGS ==="
 input double   InpBodyRatioMultiplier  = 1.0;        // Min Body Ratio vs Previous Candle
@@ -108,6 +142,7 @@ CSymbolInfo       m_symbol_info;
 
 SRadarSymbol      g_radar_symbols[];
 SAutoBEItem       g_auto_be_list[];
+SPositionTracking g_tracking_list[];
 SSelectedOrder    g_selected_orders[];
 
 int               g_active_tab = 1; // 1 = Orders Tab, 2 = Radar Tab
@@ -126,6 +161,13 @@ int               g_orders_page = 0;
 int               g_editing_radar_idx = -1; // -1 = Add mode, >= 0 = Edit mode index
 ENUM_BE_OFFSET_MODE g_be_offset_mode = BE_OFFSET_AUTO_SPREAD; // Selected Offset Mode for Trigger
 double            g_be_fixed_price = 0.0; // Fixed SL price for BE_OFFSET_CUSTOM_PRICE (0 = off)
+
+// Persistent Auto Trail Form Inputs (Order Manager)
+double            g_form_trail_max_dist   = 1.10; // Max Dist TR
+double            g_form_trail_atr_mult   = 1.60; // RelVol Thresh
+double            g_form_trail_be_rem_pct = 30.0; // BE Dist %
+string            g_form_trail_tf         = "5";  // TF acuan (default M5)
+
 const int         MAX_ROWS_PER_PAGE = 8;
 string            g_prefix = "TMRR_";
 
@@ -314,6 +356,9 @@ void OnTick()
    // Real-time Auto-BE check on every tick
    CheckAutoBETriggers();
    
+   // Real-time Auto Trail SL/TP check on every tick
+   ProcessAutoTrailSLTP();
+   
    // Real-time Reversal radar scan across symbols
    CheckReversalRadar();
 }
@@ -325,6 +370,7 @@ void OnTimer()
 {
    // Background check for non-current chart symbol ticks
    CheckAutoBETriggers();
+   ProcessAutoTrailSLTP();
    CheckReversalRadar();
    
    // Periodically refresh order list in UI
@@ -367,6 +413,30 @@ void CaptureRadarFormInputs()
    }
 }
 
+void CaptureOrdersFormInputs()
+{
+   if(ObjectFind(0, g_prefix + "INP_TRAIL_DIST") >= 0)
+   {
+      double d = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_DIST", OBJPROP_TEXT));
+      if(d > 0) g_form_trail_max_dist = d;
+   }
+   if(ObjectFind(0, g_prefix + "INP_TRAIL_MULT") >= 0)
+   {
+      double m = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_MULT", OBJPROP_TEXT));
+      if(m > 0) g_form_trail_atr_mult = m;
+   }
+   if(ObjectFind(0, g_prefix + "INP_TRAIL_BE") >= 0)
+   {
+      double b = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_BE", OBJPROP_TEXT));
+      if(b >= 0 && b <= 100) g_form_trail_be_rem_pct = b;
+   }
+   if(ObjectFind(0, g_prefix + "INP_TRAIL_TF") >= 0)
+   {
+      string tf_s = ObjectGetString(0, g_prefix + "INP_TRAIL_TF", OBJPROP_TEXT);
+      if(tf_s != "") g_form_trail_tf = tf_s;
+   }
+}
+
 //+------------------------------------------------------------------+
 //| ChartEvent function                                              |
 //+------------------------------------------------------------------+
@@ -380,6 +450,7 @@ void OnChartEvent(const int id,
       // Tab navigation
       if(sparam == g_prefix + "TAB_ORDERS")
       {
+         CaptureRadarFormInputs();
          g_active_tab = 1;
          CreateDashboardUI();
          UpdateDashboardUI();
@@ -387,6 +458,7 @@ void OnChartEvent(const int id,
       }
       else if(sparam == g_prefix + "TAB_RADAR")
       {
+         CaptureOrdersFormInputs();
          g_active_tab = 2;
          CreateDashboardUI();
          UpdateDashboardUI();
@@ -471,6 +543,30 @@ void OnChartEvent(const int id,
       else if(sparam == g_prefix + "BTN_CANCEL_BE")
       {
          DeactivateBulkAutoBE();
+         UpdateDashboardUI();
+         return;
+      }
+      // Auto Trail Bulk Actions
+      else if(sparam == g_prefix + "BTN_APPLY_TRAIL")
+      {
+         CaptureOrdersFormInputs();
+         int tf_val = (int)StringToInteger(g_form_trail_tf);
+         ENUM_TIMEFRAMES trail_tf = PERIOD_M5;
+         if(tf_val == 1) trail_tf = PERIOD_M1;
+         else if(tf_val == 5) trail_tf = PERIOD_M5;
+         else if(tf_val == 15) trail_tf = PERIOD_M15;
+         else if(tf_val == 30) trail_tf = PERIOD_M30;
+         else if(tf_val == 60) trail_tf = PERIOD_H1;
+         else if(tf_val == 240) trail_tf = PERIOD_H4;
+         else if(tf_val == 1440) trail_tf = PERIOD_D1;
+         
+         ActivateBulkAutoTrail(g_form_trail_max_dist, g_form_trail_atr_mult, g_form_trail_be_rem_pct, trail_tf);
+         UpdateDashboardUI();
+         return;
+      }
+      else if(sparam == g_prefix + "BTN_CANCEL_TRAIL")
+      {
+         DeactivateBulkAutoTrail();
          UpdateDashboardUI();
          return;
       }
@@ -1021,7 +1117,7 @@ ENUM_TIMEFRAMES AtrBaseTF(const ENUM_TIMEFRAMES tf)
    return (tf == PERIOD_M1) ? PERIOD_M5 : tf;
 }
 
-double CalculateATR50(const string sym, const ENUM_TIMEFRAMES tf, int period)
+double CalculateATR100(const string sym, const ENUM_TIMEFRAMES tf, int period)
 {
    MqlRates rates[];
    ArraySetAsSeries(rates, true);
@@ -1037,8 +1133,383 @@ double CalculateATR50(const string sym, const ENUM_TIMEFRAMES tf, int period)
       double tr = MathMax(h_l, MathMax(h_pc, l_pc));
       tr_sum += tr;
    }
-   double atr = tr_sum / (double)period;
-   return (atr * 0.5); // 50% ATR
+   return (tr_sum / (double)period); // 100% ATR
+}
+
+double CalculateATR50(const string sym, const ENUM_TIMEFRAMES tf, int period)
+{
+   return CalculateATR100(sym, tf, period) * 0.5; // 50% ATR
+}
+
+//+------------------------------------------------------------------+
+//| TRUE RANGE & EWMA TR REALTIME VOLATILITY ENGINE                  |
+//+------------------------------------------------------------------+
+double GetTrueRange(const string sym, const ENUM_TIMEFRAMES tf, int shift = 0)
+{
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+   if(CopyRates(sym, tf, shift, 2, rates) < 2)
+   {
+      double h = iHigh(sym, tf, shift);
+      double l = iLow(sym, tf, shift);
+      return MathMax(0.0, h - l);
+   }
+   double cur_h  = rates[0].high;
+   double cur_l  = rates[0].low;
+   double prev_c = rates[1].close;
+   
+   double r1 = cur_h - cur_l;
+   double r2 = MathAbs(cur_h - prev_c);
+   double r3 = MathAbs(cur_l - prev_c);
+   return MathMax(r1, MathMax(r2, r3));
+}
+
+double GetEWMA_TR(const string sym, const ENUM_TIMEFRAMES tf, int barsToUse = 30, double lambda = 0.90)
+{
+   if(barsToUse < 5) barsToUse = 5;
+   if(lambda <= 0.0 || lambda >= 1.0) lambda = 0.90;
+   
+   double ewma = GetTrueRange(sym, tf, barsToUse);
+   for(int i = barsToUse - 1; i >= 1; i--)
+   {
+      double tr = GetTrueRange(sym, tf, i);
+      ewma = lambda * ewma + (1.0 - lambda) * tr;
+   }
+   return ewma;
+}
+
+//+------------------------------------------------------------------+
+//| POSITION TRACKING MANAGEMENT (AUTO TRAIL SL & TRAIL TP)          |
+//+------------------------------------------------------------------+
+void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, double atr100, double open_p, double tp_p, double trail_dist, double atr_mult, double be_rem_dist_pct)
+{
+   double rem_pct = (be_rem_dist_pct > 0) ? (be_rem_dist_pct > 1.0 ? be_rem_dist_pct / 100.0 : be_rem_dist_pct) : InpTrailBERemDistPct;
+   int size = ArraySize(g_tracking_list);
+   for(int i = 0; i < size; i++)
+   {
+      if(g_tracking_list[i].ticket == ticket)
+      {
+         g_tracking_list[i].symbol            = sym;
+         g_tracking_list[i].timeframe         = tf;
+         g_tracking_list[i].initial_atr100    = atr100;
+         g_tracking_list[i].initial_tp_dist   = MathAbs(tp_p - open_p);
+         g_tracking_list[i].prev_tp_level     = 0.0;
+         g_tracking_list[i].trail_cycle       = 0;
+         g_tracking_list[i].trail_max_dist    = (trail_dist > 0) ? trail_dist : InpMaxDistATR;
+         g_tracking_list[i].atr_multiplier    = (atr_mult > 0)   ? atr_mult   : InpRelVolThreshold;
+         g_tracking_list[i].trail_be_rem_dist_pct = rem_pct;
+         g_tracking_list[i].be_applied        = false;
+         g_tracking_list[i].active            = true;
+         return;
+      }
+   }
+   
+   ArrayResize(g_tracking_list, size + 1);
+   g_tracking_list[size].ticket            = ticket;
+   g_tracking_list[size].symbol            = sym;
+   g_tracking_list[size].timeframe         = tf;
+   g_tracking_list[size].initial_atr100    = atr100;
+   g_tracking_list[size].initial_tp_dist   = MathAbs(tp_p - open_p);
+   g_tracking_list[size].prev_tp_level     = 0.0;
+   g_tracking_list[size].trail_cycle       = 0;
+   g_tracking_list[size].trail_max_dist    = (trail_dist > 0) ? trail_dist : InpMaxDistATR;
+   g_tracking_list[size].atr_multiplier    = (atr_mult > 0)   ? atr_mult   : InpRelVolThreshold;
+   g_tracking_list[size].trail_be_rem_dist_pct = rem_pct;
+   g_tracking_list[size].be_applied        = false;
+   g_tracking_list[size].active            = true;
+}
+
+void ProcessAutoTrailSLTP()
+{
+   int size = ArraySize(g_tracking_list);
+   if(size == 0) return;
+   
+   for(int i = size - 1; i >= 0; i--)
+   {
+      if(!g_tracking_list[i].active) continue;
+      
+      ulong tkt = g_tracking_list[i].ticket;
+      if(!m_position.SelectByTicket(tkt))
+      {
+         g_tracking_list[i].active = false;
+         continue;
+      }
+      
+      string sym = m_position.Symbol();
+      if(!m_symbol_info.Name(sym)) continue;
+      m_symbol_info.RefreshRates();
+      
+      ENUM_POSITION_TYPE ptype = m_position.PositionType();
+      double open_p  = m_position.PriceOpen();
+      double cur_sl  = m_position.StopLoss();
+      double cur_tp  = m_position.TakeProfit();
+      double bid     = m_symbol_info.Bid();
+      double ask     = m_symbol_info.Ask();
+      double spread  = ask - bid;
+      int digits     = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+      
+      if(cur_tp <= 0) continue;
+      
+      m_trade.SetExpertMagicNumber(m_position.Magic());
+      
+      ENUM_TIMEFRAMES tf = AtrBaseTF(g_tracking_list[i].timeframe);
+      double curr_tr  = GetTrueRange(sym, tf, 0);
+      double ewma_tr  = GetEWMA_TR(sym, tf, InpEWMABars, InpEWMALambda);
+      if(ewma_tr <= 0) ewma_tr = SymbolInfoDouble(sym, SYMBOL_POINT) * 10;
+      double rel_vol  = curr_tr / ewma_tr;
+      
+      double atr_ref = CalculateATR100(sym, tf, InpDefaultATRPeriod);
+      if(atr_ref <= 0) atr_ref = ewma_tr;
+      
+      // 1. TRAIL BE (BREAK-EVEN): MURNI BERBASIS SISA JARAK TARGET TP
+      bool trigger_be = false;
+      if(!g_tracking_list[i].be_applied && g_tracking_list[i].trail_cycle == 0)
+      {
+         if(InpTrailBEMode == TRAIL_BE_PROFIT)
+         {
+            if(ptype == POSITION_TYPE_BUY  && (bid - open_p) >= (1.5 * ewma_tr)) trigger_be = true;
+            if(ptype == POSITION_TYPE_SELL && (open_p - ask) >= (1.5 * ewma_tr)) trigger_be = true;
+         }
+         else
+         {
+            double base_target_dist = g_tracking_list[i].initial_tp_dist;
+            if(base_target_dist <= 0) base_target_dist = MathAbs(cur_tp - open_p);
+            
+            if(base_target_dist > 0)
+            {
+               double be_pct = (g_tracking_list[i].trail_be_rem_dist_pct > 0) ? g_tracking_list[i].trail_be_rem_dist_pct : InpTrailBERemDistPct;
+               double max_rem_allowed = base_target_dist * be_pct;
+               if(ptype == POSITION_TYPE_BUY)
+               {
+                  double rem_dist = cur_tp - bid;
+                  if(rem_dist <= max_rem_allowed && bid > (open_p + spread))
+                     trigger_be = true;
+               }
+               else if(ptype == POSITION_TYPE_SELL)
+               {
+                  double rem_dist = ask - cur_tp;
+                  if(rem_dist <= max_rem_allowed && ask < (open_p - spread))
+                     trigger_be = true;
+               }
+            }
+         }
+         
+         if(trigger_be)
+         {
+            double be_sl = 0.0;
+            if(ptype == POSITION_TYPE_BUY)
+            {
+               be_sl = NormalizeDouble(open_p + spread, digits);
+               if(be_sl > cur_sl)
+               {
+                  if(m_trade.PositionModify(tkt, be_sl, cur_tp))
+                  {
+                     g_tracking_list[i].be_applied = true;
+                     string msg = StringFormat("[TRAIL BE] %s #%d (BUY)\nAction: Move SL to Break-Even\nNew SL: %.5f | Locked: +Spread", sym, tkt, be_sl);
+                     if(InpEnableSoundAlerts) Alert(msg);
+                     if(InpEnablePushAlerts)  SendNotification(msg);
+                  }
+               }
+               else g_tracking_list[i].be_applied = true;
+            }
+            else if(ptype == POSITION_TYPE_SELL)
+            {
+               be_sl = NormalizeDouble(open_p - spread, digits);
+               if(cur_sl == 0 || be_sl < cur_sl)
+               {
+                  if(m_trade.PositionModify(tkt, be_sl, cur_tp))
+                  {
+                     g_tracking_list[i].be_applied = true;
+                     string msg = StringFormat("[TRAIL BE] %s #%d (SELL)\nAction: Move SL to Break-Even\nNew SL: %.5f | Locked: -Spread", sym, tkt, be_sl);
+                     if(InpEnableSoundAlerts) Alert(msg);
+                     if(InpEnablePushAlerts)  SendNotification(msg);
+                  }
+               }
+               else g_tracking_list[i].be_applied = true;
+            }
+         }
+      }
+      
+      // 2. TRAIL TP EXTENSION: JARAK DEKAT TP + LONJAKAN VOLATILITAS NYATA
+      double dist_to_tp = 0.0;
+      if(ptype == POSITION_TYPE_BUY)  dist_to_tp = MathAbs(cur_tp - bid) / ewma_tr;
+      if(ptype == POSITION_TYPE_SELL) dist_to_tp = MathAbs(cur_tp - ask) / ewma_tr;
+      
+      double max_dist_allowed = (g_tracking_list[i].trail_max_dist > 0) ? g_tracking_list[i].trail_max_dist : InpMaxDistATR;
+      double relvol_threshold = (g_tracking_list[i].atr_multiplier > 0)  ? g_tracking_list[i].atr_multiplier : InpRelVolThreshold;
+      
+      bool proximity_ok  = (dist_to_tp <= max_dist_allowed);
+      bool volatility_ok = (rel_vol >= relvol_threshold);
+      
+      if(proximity_ok && volatility_ok)
+      {
+         double excess = rel_vol - relvol_threshold;
+         double extend_amount = excess * atr_ref * InpExtendFactor;
+         extend_amount = MathMin(extend_amount, InpMaxExtendATR * atr_ref);
+         if(extend_amount < g_tracking_list[i].initial_tp_dist * 0.5)
+            extend_amount = g_tracking_list[i].initial_tp_dist * 0.5;
+         
+         double new_tp = 0.0;
+         double new_sl = cur_sl;
+         
+         if(ptype == POSITION_TYPE_BUY)
+         {
+            new_tp = NormalizeDouble(cur_tp + extend_amount, digits);
+            if(new_tp > cur_tp)
+            {
+               if(g_tracking_list[i].trail_cycle == 0)
+               {
+                  double be_sl = NormalizeDouble(open_p + spread, digits);
+                  if(be_sl > cur_sl) new_sl = be_sl;
+               }
+               else if(g_tracking_list[i].trail_cycle >= 1)
+               {
+                  double prev_tp = g_tracking_list[i].prev_tp_level;
+                  if(prev_tp > cur_sl) new_sl = NormalizeDouble(prev_tp, digits);
+               }
+               
+               if(m_trade.PositionModify(tkt, new_sl, new_tp))
+               {
+                  g_tracking_list[i].prev_tp_level = cur_tp;
+                  g_tracking_list[i].trail_cycle++;
+                  g_tracking_list[i].be_applied = true;
+                  string msg = StringFormat("[TRAIL TP EXTEND] %s #%d (BUY)\nAction: Extend TP (Cycle %d)\nNew TP: %.5f (+%.5f) | RelVol: %.2f",
+                                            sym, tkt, g_tracking_list[i].trail_cycle, new_tp, extend_amount, rel_vol);
+                  if(InpEnableSoundAlerts) Alert(msg);
+                  if(InpEnablePushAlerts)  SendNotification(msg);
+               }
+            }
+         }
+         else if(ptype == POSITION_TYPE_SELL)
+         {
+            new_tp = NormalizeDouble(cur_tp - extend_amount, digits);
+            if(new_tp < cur_tp)
+            {
+               if(g_tracking_list[i].trail_cycle == 0)
+               {
+                  double be_sl = NormalizeDouble(open_p - spread, digits);
+                  if(cur_sl == 0 || be_sl < cur_sl) new_sl = be_sl;
+               }
+               else if(g_tracking_list[i].trail_cycle >= 1)
+               {
+                  double prev_tp = g_tracking_list[i].prev_tp_level;
+                  if(cur_sl == 0 || prev_tp < cur_sl) new_sl = NormalizeDouble(prev_tp, digits);
+               }
+               
+               if(m_trade.PositionModify(tkt, new_sl, new_tp))
+               {
+                  g_tracking_list[i].prev_tp_level = cur_tp;
+                  g_tracking_list[i].trail_cycle++;
+                  g_tracking_list[i].be_applied = true;
+                  string msg = StringFormat("[TRAIL TP EXTEND] %s #%d (SELL)\nAction: Extend TP (Cycle %d)\nNew TP: %.5f (-%.5f) | RelVol: %.2f",
+                                            sym, tkt, g_tracking_list[i].trail_cycle, new_tp, extend_amount, rel_vol);
+                  if(InpEnableSoundAlerts) Alert(msg);
+                  if(InpEnablePushAlerts)  SendNotification(msg);
+               }
+            }
+         }
+      }
+      
+      // 3. TRAIL SL LOCK TO PREV TP: KETIKA MENDEKATI TP BARU (CYCLE >= 1)
+      if(g_tracking_list[i].trail_cycle >= 1)
+      {
+         double prev_tp = g_tracking_list[i].prev_tp_level;
+         if(prev_tp > 0)
+         {
+            if(ptype == POSITION_TYPE_BUY)
+            {
+               double dist_to_new_tp = MathAbs(cur_tp - bid) / ewma_tr;
+               if(dist_to_new_tp <= max_dist_allowed)
+               {
+                  double norm_prev_tp = NormalizeDouble(prev_tp, digits);
+                  if(norm_prev_tp > cur_sl)
+                  {
+                     if(m_trade.PositionModify(tkt, norm_prev_tp, cur_tp))
+                     {
+                        string msg = StringFormat("[TRAIL SL LOCK] %s #%d (BUY)\nAction: Lock SL to Previous TP Level\nNew SL: %.5f | Cycle: %d",
+                                                  sym, tkt, norm_prev_tp, g_tracking_list[i].trail_cycle);
+                        if(InpEnableSoundAlerts) Alert(msg);
+                        if(InpEnablePushAlerts)  SendNotification(msg);
+                     }
+                  }
+               }
+            }
+            else if(ptype == POSITION_TYPE_SELL)
+            {
+               double dist_to_new_tp = MathAbs(cur_tp - ask) / ewma_tr;
+               if(dist_to_new_tp <= max_dist_allowed)
+               {
+                  double norm_prev_tp = NormalizeDouble(prev_tp, digits);
+                  if(cur_sl == 0 || norm_prev_tp < cur_sl)
+                  {
+                     if(m_trade.PositionModify(tkt, norm_prev_tp, cur_tp))
+                     {
+                        string msg = StringFormat("[TRAIL SL LOCK] %s #%d (SELL)\nAction: Lock SL to Previous TP Level\nNew SL: %.5f | Cycle: %d",
+                                                  sym, tkt, norm_prev_tp, g_tracking_list[i].trail_cycle);
+                        if(InpEnableSoundAlerts) Alert(msg);
+                        if(InpEnablePushAlerts)  SendNotification(msg);
+                     }
+                  }
+               }
+            }
+         }
+      }
+   }
+}
+
+void ActivateBulkAutoTrail(double max_dist, double relvol_th, double be_rem_pct, ENUM_TIMEFRAMES tf)
+{
+   int activated = 0;
+   int skipped_autotrader = 0;
+   
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong tkt = PositionGetTicket(i);
+      if(tkt > 0 && IsOrderSelected(tkt))
+      {
+         if(m_position.SelectByTicket(tkt))
+         {
+            ulong p_magic = m_position.Magic();
+            if(p_magic == InpAutoTraderMagic)
+            {
+               skipped_autotrader++;
+               continue; // Lindungi order milik AutoTrader
+            }
+            
+            string sym    = m_position.Symbol();
+            double open_p = m_position.PriceOpen();
+            double tp_p   = m_position.TakeProfit();
+            
+            if(tp_p <= 0) continue; // Butuh target TP awal
+            
+            double atr100 = CalculateATR100(sym, AtrBaseTF(tf), InpDefaultATRPeriod);
+            RegisterPositionTracking(tkt, sym, tf, atr100, open_p, tp_p, max_dist, relvol_th, be_rem_pct);
+            activated++;
+         }
+      }
+   }
+   
+   string note = StringFormat("Auto Trail diaktifkan untuk %d posisi terpilih.", activated);
+   if(skipped_autotrader > 0)
+      note += StringFormat("\n(%d posisi dilewati karena sudah dikawal oleh AutoTrader)", skipped_autotrader);
+   Alert(note);
+   Print(note);
+}
+
+void DeactivateBulkAutoTrail()
+{
+   int count = 0;
+   for(int i = 0; i < ArraySize(g_tracking_list); i++)
+   {
+      if(IsOrderSelected(g_tracking_list[i].ticket) && g_tracking_list[i].active)
+      {
+         g_tracking_list[i].active = false;
+         count++;
+      }
+   }
+   string note = StringFormat("Auto Trail dinonaktifkan untuk %d posisi terpilih.", count);
+   Alert(note);
+   Print(note);
 }
 //+------------------------------------------------------------------+
 bool IsStrongBullishEngulfingBreak(const string sym, const ENUM_TIMEFRAMES tf, const int shift,
@@ -1885,8 +2356,8 @@ void CreateDashboardUI()
    
    int root_x = 20;
    int root_y = 20;
-   int win_w  = 880;
-   int win_h  = 640;
+   int win_w  = 960;
+   int win_h  = 660;
    
    // Outer Pitch-black window
    CreateRect("WIN_BG", root_x, root_y, win_w, win_h, CLR_PANEL_BG, CLR_BORDER_HARD);
@@ -1927,36 +2398,33 @@ void CreateDashboardUI()
       CreateLabel("TH_OPN", root_x + 430, th_y + 4, "OPEN", CLR_TEXT_MED, 8, true);
       CreateLabel("TH_SL",  root_x + 515, th_y + 4, "SL", CLR_TEXT_MED, 8, true);
       CreateLabel("TH_TP",  root_x + 600, th_y + 4, "TP", CLR_TEXT_MED, 8, true);
-      CreateLabel("TH_BE",  root_x + 700, th_y + 4, "AUTO-BE", CLR_TEXT_MED, 8, true);
+      CreateLabel("TH_BE",  root_x + 695, th_y + 4, "AUTO-BE", CLR_TEXT_MED, 8, true);
+      CreateLabel("TH_TR",  root_x + 810, th_y + 4, "AUTO TRAIL", CLR_TEXT_MED, 8, true);
       
-      // Action Deck (SL/TP & Auto-BE)
+      // Action Deck (Left: SL/TP & BE, Right: Auto Trail Engine)
       int deck_y = table_y + 270;
-      int box_w  = (win_w - 42) / 2;
+      int gap    = 16;
+      int box_w  = (win_w - 32 - gap) / 2; // (960 - 32 - 16)/2 = 456
       
-      // Box A: Bulk SL/TP
-      CreateRect("CARD_SLTP", root_x + 16, deck_y, box_w, 140, CLR_CARD_BG, CLR_BORDER_HARD);
-      CreateLabel("LBL_SLTP", root_x + 28, deck_y + 10, "BULK PRICE MODIFIER", CLR_CYAN_NEON, 9, true);
+      // Box A: Bulk SL/TP & Break-Even
+      CreateRect("CARD_SLTP_BE", root_x + 16, deck_y, box_w, 230, CLR_CARD_BG, CLR_BORDER_HARD);
+      CreateLabel("LBL_SLTP", root_x + 28, deck_y + 10, "PRICE MODIFIER & BREAK-EVEN", CLR_CYAN_NEON, 9, true);
       
-      CreateLabel("LBL_INP_SL", root_x + 28, deck_y + 42, "STOP LOSS:", CLR_TEXT_PURE, 8, true);
-      CreateEdit("INP_SL", root_x + 115, deck_y + 38, 140, 24, "", CLR_CANVAS_BG, CLR_TEXT_PURE);
-      CreateButton("BTN_APPLY_SL", root_x + 265, deck_y + 38, 100, 24, "SET SL", C'18,8,34', CLR_BEAR_NEON, CLR_BEAR_NEON);
+      // SL / TP Rows
+      CreateLabel("LBL_INP_SL", root_x + 28, deck_y + 36, "STOP LOSS:", CLR_TEXT_PURE, 8, true);
+      CreateEdit("INP_SL", root_x + 120, deck_y + 32, 170, 22, "", CLR_CANVAS_BG, CLR_TEXT_PURE);
+      CreateButton("BTN_APPLY_SL", root_x + 300, deck_y + 32, 130, 22, "SET SL", C'18,8,34', CLR_BEAR_NEON, CLR_BEAR_NEON);
       
-      CreateLabel("LBL_INP_TP", root_x + 28, deck_y + 82, "TAKE PROFIT:", CLR_TEXT_PURE, 8, true);
-      CreateEdit("INP_TP", root_x + 115, deck_y + 78, 140, 24, "", CLR_CANVAS_BG, CLR_TEXT_PURE);
-      CreateButton("BTN_APPLY_TP", root_x + 265, deck_y + 78, 100, 24, "SET TP", C'8,34,18', CLR_BULL_NEON, CLR_BULL_NEON);
+      CreateLabel("LBL_INP_TP", root_x + 28, deck_y + 64, "TAKE PROFIT:", CLR_TEXT_PURE, 8, true);
+      CreateEdit("INP_TP", root_x + 120, deck_y + 60, 170, 22, "", CLR_CANVAS_BG, CLR_TEXT_PURE);
+      CreateButton("BTN_APPLY_TP", root_x + 300, deck_y + 60, 130, 22, "SET TP", C'8,34,18', CLR_BULL_NEON, CLR_BULL_NEON);
       
-      // Box B: Auto Break-Even
-      int box_b_x = root_x + 24 + box_w;
-      CreateRect("CARD_BE", box_b_x, deck_y, box_w, 168, CLR_CARD_BG, CLR_BORDER_HARD);
-      CreateLabel("LBL_BE", box_b_x + 12, deck_y + 10, "BREAK-EVEN (BE) ENGINE", CLR_CYAN_NEON, 9, true);
+      // BE Trigger
+      CreateLabel("LBL_INP_BE", root_x + 28, deck_y + 94, "BE TRIGGER:", CLR_TEXT_PURE, 8, true);
+      CreateEdit("INP_BE_TRIG", root_x + 120, deck_y + 90, 170, 22, "", CLR_CANVAS_BG, CLR_TEXT_PURE);
+      CreateButton("BTN_INSTANT_BE", root_x + 300, deck_y + 90, 130, 22, "SET BE SPREAD", C'26,42,65', CLR_GOLD_NEON, CLR_GOLD_NEON);
       
-      // Instant BE button (Direct Move to Open +/- Spread)
-      CreateButton("BTN_INSTANT_BE", box_b_x + 210, deck_y + 8, 155, 22, "SET BE SPREAD", C'26,42,65', CLR_GOLD_NEON, CLR_GOLD_NEON);
-      
-      CreateLabel("LBL_INP_BE", box_b_x + 12, deck_y + 40, "TRIGGER PRICE:", CLR_TEXT_PURE, 8, true);
-      CreateEdit("INP_BE_TRIG", box_b_x + 125, deck_y + 36, 240, 22, "", CLR_CANVAS_BG, CLR_TEXT_PURE);
-      
-      CreateLabel("LBL_BE_MODE", box_b_x + 12, deck_y + 68, "BE OFFSET MODE:", CLR_TEXT_MED, 8, true);
+      CreateLabel("LBL_BE_MODE", root_x + 28, deck_y + 122, "OFFSET MODE:", CLR_TEXT_MED, 8, true);
       string mode_str = "AUTO SPREAD (+/- Spread)";
       color mode_clr = CLR_CYAN_NEON;
       if(g_be_offset_mode == BE_OFFSET_ZERO)
@@ -1974,16 +2442,41 @@ void CreateDashboardUI()
          mode_str = "FIXED SL PRICE (> 0)";
          mode_clr = CLR_BULL_NEON;
       }
-      CreateButton("BTN_BE_MODE", box_b_x + 125, deck_y + 64, 240, 22, mode_str, CLR_CANVAS_BG, mode_clr, CLR_BORDER_HARD);
+      CreateButton("BTN_BE_MODE", root_x + 120, deck_y + 118, 310, 22, mode_str, CLR_CANVAS_BG, mode_clr, CLR_BORDER_HARD);
 
-      // Fixed SL price input (blank = off). Only active in FIXED SL PRICE mode.
-      CreateLabel("LBL_BE_PRICE", box_b_x + 12, deck_y + 96, "SL TARGET PRICE:", CLR_TEXT_PURE, 8, true);
+      CreateLabel("LBL_BE_PRICE", root_x + 28, deck_y + 150, "SL TARGET PX:", CLR_TEXT_PURE, 8, true);
       string px_default = (g_be_fixed_price > 0) ? DoubleToString(g_be_fixed_price, _Digits) : "";
-      CreateEdit("INP_BE_PRICE", box_b_x + 125, deck_y + 92, 240, 22, px_default,
+      CreateEdit("INP_BE_PRICE", root_x + 120, deck_y + 146, 310, 22, px_default,
                  CLR_CANVAS_BG, g_be_offset_mode == BE_OFFSET_CUSTOM_PRICE ? CLR_BULL_NEON : CLR_TEXT_MED);
 
-      CreateButton("BTN_APPLY_BE", box_b_x + 12, deck_y + 126, 190, 26, "ACTIVATE BE TRIGGER", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
-      CreateButton("BTN_CANCEL_BE", box_b_x + 210, deck_y + 126, 155, 26, "DEACTIVATE", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
+      CreateButton("BTN_APPLY_BE", root_x + 28, deck_y + 184, 250, 26, "ACTIVATE BE TRIGGER", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
+      CreateButton("BTN_CANCEL_BE", root_x + 288, deck_y + 184, 142, 26, "DEACTIVATE", CLR_PANEL_BG, CLR_TEXT_MED, CLR_BORDER_HARD);
+      
+      // Box B: Auto Trail Engine (EWMA TR)
+      int box_b_x = root_x + 16 + box_w + gap;
+      CreateRect("CARD_TRAIL", box_b_x, deck_y, box_w, 230, CLR_CARD_BG, CLR_BORDER_HARD);
+      CreateLabel("LBL_TRAIL_TITLE", box_b_x + 12, deck_y + 10, "AUTO TRAIL ENGINE (EWMA TR)", CLR_CYAN_NEON, 9, true);
+      
+      CreateLabel("LBL_TR_TF", box_b_x + 12, deck_y + 36, "BASE TF (MIN):", CLR_TEXT_MED, 8, true);
+      CreateEdit("INP_TRAIL_TF", box_b_x + 140, deck_y + 32, 100, 22, g_form_trail_tf, CLR_CANVAS_BG, CLR_TEXT_PURE);
+      CreateLabel("LBL_TR_TF_HINT", box_b_x + 250, deck_y + 36, "(1, 5, 15, 60m...)", CLR_TEXT_MED, 7, false);
+      
+      CreateLabel("LBL_TR_DIST", box_b_x + 12, deck_y + 64, "MAX DIST TR:", CLR_TEXT_MED, 8, true);
+      CreateEdit("INP_TRAIL_DIST", box_b_x + 140, deck_y + 60, 100, 22, DoubleToString(g_form_trail_max_dist, 2), CLR_CANVAS_BG, CLR_TEXT_PURE);
+      CreateLabel("LBL_TR_DIST_HINT", box_b_x + 250, deck_y + 64, "Proximity ke TP (1.10x)", CLR_TEXT_MED, 7, false);
+      
+      CreateLabel("LBL_TR_MULT", box_b_x + 12, deck_y + 94, "RELVOL THRESH:", CLR_TEXT_MED, 8, true);
+      CreateEdit("INP_TRAIL_MULT", box_b_x + 140, deck_y + 90, 100, 22, DoubleToString(g_form_trail_atr_mult, 2), CLR_CANVAS_BG, CLR_TEXT_PURE);
+      CreateLabel("LBL_TR_MULT_HINT", box_b_x + 250, deck_y + 94, "Lonjakan vol (>=1.60x)", CLR_TEXT_MED, 7, false);
+      
+      CreateLabel("LBL_TR_BE", box_b_x + 12, deck_y + 122, "BE DIST %:", CLR_TEXT_MED, 8, true);
+      CreateEdit("INP_TRAIL_BE", box_b_x + 140, deck_y + 118, 100, 22, DoubleToString(g_form_trail_be_rem_pct, 0), CLR_CANVAS_BG, CLR_GOLD_NEON);
+      CreateLabel("LBL_TR_BE_HINT", box_b_x + 250, deck_y + 122, "Sisa target lock BE (30%)", CLR_TEXT_MED, 7, false);
+      
+      CreateLabel("LBL_TR_INFO", box_b_x + 12, deck_y + 152, "*Posisi AutoTrader ([AT TRAIL]) dilindungi otomatis agar tidak konflik.", CLR_CYAN_NEON, 7, false);
+      
+      CreateButton("BTN_APPLY_TRAIL", box_b_x + 12, deck_y + 184, 250, 26, "ACTIVATE AUTO TRAIL", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
+      CreateButton("BTN_CANCEL_TRAIL", box_b_x + 270, deck_y + 184, 160, 26, "STOP TRAIL", CLR_PANEL_BG, CLR_BEAR_NEON, CLR_BORDER_HARD);
    }
    else if(g_active_tab == 2)
    {
@@ -2097,7 +2590,7 @@ void UpdateDashboardUI()
 {
    int root_x = 20;
    int root_y = 20;
-   int win_w  = 840;
+   int win_w  = 960;
    int tab_y  = root_y + 48;
    
    if(g_active_tab == 1)
@@ -2123,6 +2616,7 @@ void UpdateDashboardUI()
          double open_p    = PositionGetDouble(POSITION_PRICE_OPEN);
          double sl        = PositionGetDouble(POSITION_SL);
          double tp        = PositionGetDouble(POSITION_TP);
+         ulong  pos_magic = (ulong)PositionGetInteger(POSITION_MAGIC);
          int digits       = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
          
          bool is_sel = IsOrderSelected(ticket);
@@ -2137,6 +2631,27 @@ void UpdateDashboardUI()
                be_status = "ON " + DoubleToString(g_auto_be_list[b].trigger_price, digits);
                be_color  = CLR_GOLD_NEON;
                break;
+            }
+         }
+         
+         // Auto Trail status for this ticket
+         string tr_status = "OFF";
+         color  tr_color  = CLR_TEXT_MED;
+         if(pos_magic == InpAutoTraderMagic)
+         {
+            tr_status = "AT TRAIL";
+            tr_color  = CLR_CYAN_NEON;
+         }
+         else
+         {
+            for(int t = 0; t < ArraySize(g_tracking_list); t++)
+            {
+               if(g_tracking_list[t].ticket == ticket && g_tracking_list[t].active)
+               {
+                  tr_status = (g_tracking_list[t].trail_cycle > 0) ? StringFormat("ON (C%d)", g_tracking_list[t].trail_cycle) : "ON";
+                  tr_color  = CLR_GOLD_NEON;
+                  break;
+               }
             }
          }
          
@@ -2161,7 +2676,8 @@ void UpdateDashboardUI()
          CreateLabel(r_pfx + "OPN", root_x + 430, cur_y + 3, DoubleToString(open_p, digits), CLR_TEXT_PURE, 8, false);
          CreateLabel(r_pfx + "SL",  root_x + 515, cur_y + 3, sl > 0 ? DoubleToString(sl, digits) : "-", CLR_BEAR_NEON, 8, false);
          CreateLabel(r_pfx + "TP",  root_x + 600, cur_y + 3, tp > 0 ? DoubleToString(tp, digits) : "-", CLR_BULL_NEON, 8, false);
-         CreateLabel(r_pfx + "BE",  root_x + 700, cur_y + 3, be_status, be_color, 8, true);
+         CreateLabel(r_pfx + "BE",  root_x + 695, cur_y + 3, be_status, be_color, 8, true);
+         CreateLabel(r_pfx + "TR",  root_x + 810, cur_y + 3, tr_status, tr_color, 8, true);
          
          row_idx++;
       }
@@ -2207,7 +2723,8 @@ void UpdateDashboardUI()
          CreateLabel(r_pfx + "OPN", root_x + 430, cur_y + 3, DoubleToString(open_p, digits), CLR_TEXT_PURE, 8, false);
          CreateLabel(r_pfx + "SL",  root_x + 515, cur_y + 3, sl > 0 ? DoubleToString(sl, digits) : "-", CLR_BEAR_NEON, 8, false);
          CreateLabel(r_pfx + "TP",  root_x + 600, cur_y + 3, tp > 0 ? DoubleToString(tp, digits) : "-", CLR_BULL_NEON, 8, false);
-         CreateLabel(r_pfx + "BE",  root_x + 700, cur_y + 3, "-", CLR_TEXT_MED, 8, false);
+         CreateLabel(r_pfx + "BE",  root_x + 695, cur_y + 3, "-", CLR_TEXT_MED, 8, false);
+         CreateLabel(r_pfx + "TR",  root_x + 810, cur_y + 3, "-", CLR_TEXT_MED, 8, false);
          
          row_idx++;
       }
@@ -2309,8 +2826,8 @@ void SaveStateToFile()
    int handle = FileOpen(filename, FILE_WRITE|FILE_BIN);
    if(handle != INVALID_HANDLE)
    {
-      // Version header (6 = v6 multi-signal reversal radar with active toggle)
-      FileWriteInteger(handle, 6);
+      // Version header (7 = v7 with Auto Trail engine and tracking)
+      FileWriteInteger(handle, 7);
 
       // 0. Save UI Active Tab & Offset Mode
       FileWriteInteger(handle, g_active_tab);
@@ -2396,6 +2913,35 @@ void SaveStateToFile()
       FileWriteInteger(handle, g_form_sig_stoch ? 1 : 0);
       FileWriteInteger(handle, (int)g_form_sig_mode);
 
+      // 5. Save Auto Trail Tracking List
+      int total_trail = ArraySize(g_tracking_list);
+      FileWriteInteger(handle, total_trail);
+      for(int i = 0; i < total_trail; i++)
+      {
+         FileWriteLong(handle, (long)g_tracking_list[i].ticket);
+         int sym_len2 = StringLen(g_tracking_list[i].symbol);
+         FileWriteInteger(handle, sym_len2);
+         if(sym_len2 > 0) FileWriteString(handle, g_tracking_list[i].symbol, sym_len2);
+         FileWriteInteger(handle, (int)g_tracking_list[i].timeframe);
+         FileWriteDouble(handle, g_tracking_list[i].initial_atr100);
+         FileWriteDouble(handle, g_tracking_list[i].initial_tp_dist);
+         FileWriteDouble(handle, g_tracking_list[i].prev_tp_level);
+         FileWriteInteger(handle, g_tracking_list[i].trail_cycle);
+         FileWriteDouble(handle, g_tracking_list[i].trail_max_dist);
+         FileWriteDouble(handle, g_tracking_list[i].atr_multiplier);
+         FileWriteDouble(handle, g_tracking_list[i].trail_be_rem_dist_pct);
+         FileWriteInteger(handle, g_tracking_list[i].be_applied ? 1 : 0);
+         FileWriteInteger(handle, g_tracking_list[i].active ? 1 : 0);
+      }
+
+      // 6. Persistent Auto Trail Form Inputs
+      FileWriteDouble(handle, g_form_trail_max_dist);
+      FileWriteDouble(handle, g_form_trail_atr_mult);
+      FileWriteDouble(handle, g_form_trail_be_rem_pct);
+      int trail_tf_len = StringLen(g_form_trail_tf);
+      FileWriteInteger(handle, trail_tf_len);
+      if(trail_tf_len > 0) FileWriteString(handle, g_form_trail_tf, trail_tf_len);
+
       FileClose(handle);
    }
 }
@@ -2413,7 +2959,7 @@ void LoadStateFromFile()
    {
       int first = FileReadInteger(handle);
       int version;
-      if(first >= 2 && first <= 6)
+      if(first >= 2 && first <= 7)
       {
          version = first;
          g_active_tab = FileReadInteger(handle);
@@ -2570,6 +3116,38 @@ void LoadStateFromFile()
             int old_d = FileReadInteger(handle);
             g_form_delay_pct   = (old_d > 0) ? 30 : 0;
             g_form_delay_close = (FileReadInteger(handle) == 1);
+         }
+      }
+
+      if(version >= 7 && FileIsEnding(handle) == false)
+      {
+         int total_trail = FileReadInteger(handle);
+         ArrayResize(g_tracking_list, total_trail);
+         for(int i = 0; i < total_trail; i++)
+         {
+            g_tracking_list[i].ticket = (ulong)FileReadLong(handle);
+            int sym_len2 = FileReadInteger(handle);
+            if(sym_len2 > 0) g_tracking_list[i].symbol = FileReadString(handle, sym_len2);
+            else g_tracking_list[i].symbol = "";
+            g_tracking_list[i].timeframe = (ENUM_TIMEFRAMES)FileReadInteger(handle);
+            g_tracking_list[i].initial_atr100 = FileReadDouble(handle);
+            g_tracking_list[i].initial_tp_dist = FileReadDouble(handle);
+            g_tracking_list[i].prev_tp_level = FileReadDouble(handle);
+            g_tracking_list[i].trail_cycle = FileReadInteger(handle);
+            g_tracking_list[i].trail_max_dist = FileReadDouble(handle);
+            g_tracking_list[i].atr_multiplier = FileReadDouble(handle);
+            g_tracking_list[i].trail_be_rem_dist_pct = FileReadDouble(handle);
+            g_tracking_list[i].be_applied = (FileReadInteger(handle) == 1);
+            g_tracking_list[i].active = (FileReadInteger(handle) == 1);
+         }
+
+         if(FileIsEnding(handle) == false)
+         {
+            g_form_trail_max_dist = FileReadDouble(handle);
+            g_form_trail_atr_mult = FileReadDouble(handle);
+            g_form_trail_be_rem_pct = FileReadDouble(handle);
+            int trail_tf_len = FileReadInteger(handle);
+            if(trail_tf_len > 0) g_form_trail_tf = FileReadString(handle, trail_tf_len);
          }
       }
 
