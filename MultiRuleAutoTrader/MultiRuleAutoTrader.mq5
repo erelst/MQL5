@@ -1350,6 +1350,9 @@ void UpdatePreviewTerminalBox()
    int    prev_mult  = g_form_entry_mult;
    int    prev_mtp   = g_form_multi_tp;
    string prev_sm    = (g_form_sig_mode == SIGNAL_MODE_ANY) ? "ANY (OR)" : "COMBO (AND)";
+   bool   prev_eng   = g_form_sig_eng;
+   bool   prev_hmr   = g_form_sig_hmr;
+   bool   prev_stoch = g_form_sig_stoch;
    double prev_be_pct = g_form_be_dist_pct;
    string prev_rule_tag = (g_editing_rule_idx >= 0) ? StringFormat("[RULE #%d EDIT]", g_editing_rule_idx + 1) : "[FORM INPUT]";
    
@@ -1370,37 +1373,48 @@ void UpdatePreviewTerminalBox()
       prev_mult  = g_rules[idx].entry_multiplier;
       prev_mtp   = g_rules[idx].multi_tp;
       prev_sm    = (g_rules[idx].signal_mode == SIGNAL_MODE_ANY) ? "ANY (OR)" : "COMBO (AND)";
+      prev_eng   = g_rules[idx].sig_engulfing;
+      prev_hmr   = g_rules[idx].sig_hammer_ss;
+      prev_stoch = g_rules[idx].sig_stoch_ha;
       if(g_rules[idx].direction == TRADE_DIR_BUY)  prev_dir = "BUY ONLY";
       else if(g_rules[idx].direction == TRADE_DIR_SELL) prev_dir = "SELL ONLY";
       prev_rule_tag = StringFormat("[RULE #%d PREVIEW]", idx + 1);
    }
    
+   string sig_list = "";
+   if(prev_eng)   sig_list += (sig_list == "" ? "" : " + ") + "ENGULF";
+   if(prev_hmr)   sig_list += (sig_list == "" ? "" : " + ") + "HAMMER/SS";
+   if(prev_stoch) sig_list += (sig_list == "" ? "" : " + ") + "STOCH+HA";
+   if(sig_list == "") sig_list = "NONE";
+   
    string l1 = StringFormat("Target: %s (%s) | %s | %s", prev_sym, prev_tf, prev_dir, prev_rule_tag);
    string l2 = StringFormat("Rasio RR: 1:%.2f | Mode Lot: %s", prev_rr, prev_lot);
-   string l3 = StringFormat("Entry Mult: %dx | Multi TP: %dx tingkat | Sinyal: %s", prev_mult, prev_mtp, prev_sm);
-   string l4 = "-------------------------------------------------------------";
+   string l3 = StringFormat("Entry Mult: %dx | Multi TP: %dx | Mode: %s", prev_mult, prev_mtp, prev_sm);
+   string l4 = StringFormat("Sinyal Aktif: %s", sig_list);
+   string l5 = "-------------------------------------------------------------";
    
-   CreateLabel("SIM_L1", prev_x + 10, line_y, l1, CLR_TEXT_PURE, 8, true);
-   CreateLabel("SIM_L2", prev_x + 10, line_y + 18, l2, CLR_CYAN_NEON, 8, false);
-   CreateLabel("SIM_L3", prev_x + 10, line_y + 36, l3, CLR_GOLD_NEON, 8, true);
-   CreateLabel("SIM_L4", prev_x + 10, line_y + 52, l4, CLR_BORDER_HARD, 7, false);
+   CreateLabel("SIM_L1", prev_x + 10, line_y,       l1, CLR_TEXT_PURE, 8, true);
+   CreateLabel("SIM_L2", prev_x + 10, line_y + 18,  l2, CLR_CYAN_NEON, 8, false);
+   CreateLabel("SIM_L3", prev_x + 10, line_y + 36,  l3, CLR_GOLD_NEON, 8, true);
+   CreateLabel("SIM_L4", prev_x + 10, line_y + 54,  l4, CLR_CYAN_NEON, 8, true);
+   CreateLabel("SIM_L5", prev_x + 10, line_y + 70,  l5, CLR_BORDER_HARD, 7, false);
    
    if(prev_trail)
    {
-      string l5 = StringFormat("Auto Trail BE: Sisa Target <= %.0f%% -> Kunci BE", prev_be_pct);
-      string l6 = StringFormat("Trail TP Extend: Sisa <= %.1fTR & RelVol >= %.2fx -> TP Extend", prev_dist, prev_atr_m);
-      string l7 = StringFormat("Trail SL Lock: Sisa <= %.1fTR ke TP baru -> Kunci ke Prev TP", prev_dist);
+      string l6 = StringFormat("Auto Trail BE: Sisa Target <= %.0f%% -> Kunci BE", prev_be_pct);
+      string l7 = StringFormat("Trail TP Extend: Sisa <= %.1fTR & RelVol >= %.2fx -> TP Extend", prev_dist, prev_atr_m);
+      string l8 = StringFormat("Trail SL Lock: Sisa <= %.1fTR ke TP baru -> Kunci ke Prev TP", prev_dist);
       
-      CreateLabel("SIM_L5", prev_x + 10, line_y + 68, l5, CLR_GOLD_NEON, 8, true);
-      CreateLabel("SIM_L6", prev_x + 10, line_y + 90, l6, CLR_CYAN_NEON, 8, true);
-      CreateLabel("SIM_L7", prev_x + 10, line_y + 112, l7, CLR_BULL_NEON, 8, true);
-      CreateLabel("SIM_L8", prev_x + 10, line_y + 140, "*Multi TP dipantau independen dari TP terdekat", CLR_TEXT_MED, 7, false);
+      CreateLabel("SIM_L6", prev_x + 10, line_y + 86,  l6, CLR_GOLD_NEON, 8, true);
+      CreateLabel("SIM_L7", prev_x + 10, line_y + 106, l7, CLR_CYAN_NEON, 8, true);
+      CreateLabel("SIM_L8", prev_x + 10, line_y + 126, l8, CLR_BULL_NEON, 8, true);
+      CreateLabel("SIM_L9", prev_x + 10, line_y + 152, "*Multi TP dipantau independen dari TP terdekat", CLR_TEXT_MED, 7, false);
    }
    else
    {
-      CreateLabel("SIM_L5", prev_x + 10, line_y + 70, "Auto Trail Engine: OFF", CLR_BEAR_NEON, 8, true);
-      CreateLabel("SIM_L6", prev_x + 10, line_y + 92, "Take Profit & Stop Loss tetap di level awal tanpa trailing.", CLR_TEXT_MED, 8, false);
-      CreateLabel("SIM_L8", prev_x + 10, line_y + 140, "Klik baris rule di tabel bawah untuk mengganti preview", CLR_TEXT_MED, 7, false);
+      CreateLabel("SIM_L6", prev_x + 10, line_y + 88,  "Auto Trail Engine: OFF", CLR_BEAR_NEON, 8, true);
+      CreateLabel("SIM_L7", prev_x + 10, line_y + 108, "Take Profit & Stop Loss tetap di level awal tanpa trailing.", CLR_TEXT_MED, 8, false);
+      CreateLabel("SIM_L9", prev_x + 10, line_y + 152, "Klik baris rule di tabel bawah untuk mengganti preview", CLR_TEXT_MED, 7, false);
    }
 }
 

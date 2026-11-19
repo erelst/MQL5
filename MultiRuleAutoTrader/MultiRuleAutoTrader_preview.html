@@ -627,6 +627,12 @@
 
       let lotStr = r.lotMode === 'FIXED' ? `${r.lotVal} Lot` : `${r.lotVal}% Risk`;
       let smStr  = r.sigMode === 'ANY' ? 'ANY (OR)' : 'COMBO (AND)';
+      let sigs = [];
+      if (r.sigEng) sigs.push('ENGULF');
+      if (r.sigHmr) sigs.push('HAMMER/SS');
+      if (r.sigStoch) sigs.push('STOCH+HA');
+      let sigStr = sigs.length > 0 ? sigs.join(' + ') : 'NONE';
+      let bePctStr = (r.bePct !== undefined) ? r.bePct : 30;
 
       const simTerminal = document.getElementById('sim-terminal');
       if (r.trailOn) {
@@ -634,12 +640,13 @@
           <div>
             Target: <span class="hl-cyan">${r.symbol}</span> (<span class="hl-gold">${r.tf}</span>) | Mode: <span class="hl-cyan">${dirStr}</span><br>
             Target Ratio: <span class="hl-cyan">1:${r.rr} RR</span> | Lot: <span class="hl-cyan">${lotStr}</span><br>
-            Entry Mult: <span class="hl-gold">${r.mult}x</span> | Multi TP: <span class="hl-gold">${r.multiTp}x tingkat</span> | Sinyal: <span class="hl-cyan">${smStr}</span>
+            Entry Mult: <span class="hl-gold">${r.mult}x</span> | Multi TP: <span class="hl-gold">${r.multiTp}x</span> | Mode: <span class="hl-cyan">${smStr}</span><br>
+            Sinyal Aktif: <span class="hl-cyan">${sigStr}</span>
           </div>
           <div style="border-top: 1px dashed var(--border-soft); padding-top: 4px; margin-top: 4px;">
-            🛡️ <strong class="hl-gold">Auto Trail BE (Jarak Mandiri)</strong>: Sisa &le; 1.1x EWMA TR &rarr; Kunci <span class="hl-cyan">BE (Open &plusmn; Spread)</span><br>
-            🚀 <strong class="hl-cyan">Trail TP Extension</strong>: RelVol &ge; <span class="hl-gold">${r.atrMult}x EWMA</span> &rarr; TP <span class="hl-cyan">Extend Proporsional</span><br>
-            🔒 <strong class="hl-bull">Trail SL Lock (Cycle 2+)</strong>: Sisa &le; 1.1x ke TP baru &rarr; Kunci ke <span class="hl-bull">TP Sebelumnya</span>
+            🛡️ <strong class="hl-gold">Auto Trail BE</strong>: Sisa Target &le; <span class="hl-cyan">${bePctStr}%</span> &rarr; Kunci <span class="hl-cyan">BE</span><br>
+            🚀 <strong class="hl-cyan">Trail TP Extension</strong>: Sisa &le; ${r.trailDist}TR &amp; RelVol &ge; <span class="hl-gold">${r.atrMult}x</span> &rarr; <span class="hl-cyan">TP Extend</span><br>
+            🔒 <strong class="hl-bull">Trail SL Lock (Cycle 2+)</strong>: Sisa &le; ${r.trailDist}TR ke TP baru &rarr; Kunci ke <span class="hl-bull">TP Sebelumnya</span>
           </div>
           <div style="color:var(--text-med); font-size:8px; margin-top: 4px;">
             *Multi TP dipantau independen dari TP terdekat | Klik baris rule untuk mengganti preview
@@ -650,7 +657,8 @@
           <div>
             Target: <span class="hl-cyan">${r.symbol}</span> (<span class="hl-gold">${r.tf}</span>) | Mode: <span class="hl-cyan">${dirStr}</span><br>
             Target Ratio: <span class="hl-cyan">1:${r.rr} RR</span> | Lot: <span class="hl-cyan">${lotStr}</span><br>
-            Entry Mult: <span class="hl-gold">${r.mult}x</span> | Multi TP: <span class="hl-gold">${r.multiTp}x tingkat</span> | Sinyal: <span class="hl-cyan">${smStr}</span>
+            Entry Mult: <span class="hl-gold">${r.mult}x</span> | Multi TP: <span class="hl-gold">${r.multiTp}x</span> | Mode: <span class="hl-cyan">${smStr}</span><br>
+            Sinyal Aktif: <span class="hl-cyan">${sigStr}</span>
           </div>
           <div style="border-top: 1px dashed var(--border-soft); padding-top: 4px; margin-top: 4px;">
             🛑 <strong class="hl-bear">Auto Trail Engine: OFF</strong><br>
