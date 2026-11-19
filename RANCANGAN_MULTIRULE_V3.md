@@ -209,3 +209,23 @@ Saat pengguna sedang mengisi atau mengubah kolom di form deck (misalnya simbol, 
 - Membuat helper sinkronisasi `CaptureFormInputs()` yang dipanggil sebelum rebuild UI pada setiap event klik tombol form.
 - Menyimpan teks simbol, nilai RR, lot, TF, Max Orders, Multiplier, Multi TP, % TF Delay, Trailing Distance, RelVol, dan Price Bounds ke variabel status memori (`g_form_*`).
 - Menerapkan mekanisme yang sama pada `TradeManagerReversalRadar` (`CaptureRadarFormInputs()`) sehingga form input radar tidak pernah hilang saat beralih mode sinyal atau toggle % delay.
+
+---
+
+## 5. Instant Auto-Pause pada Max Orders, Toggle M1 (M5), dan Kontrol UI Sisa Jarak BE
+
+### A. Instant Auto-Pause Seketika Saat Batas Max Order Tercapai
+- **Penyebab Masalah Sebelumnya:** Penonaktifan rule (`active = false`) sebelumnya hanya diperiksa di awal loop tick, sehingga jika rule membuka order ke-$N$ (misalnya 2 dari limit 2), status rule tertunda menjadi `PAUSED` sampai seluruh posisi tersebut tertutup.
+- **Penyempurnaan:** Begitu order ke-$N$ dieksekusi di blok BUY maupun SELL dan `orders_opened_count >= max_orders`, rule **seketika langsung dinonaktifkan (`active = false`)**, status disimpan ke file bin, dan tombol pada tabel bawah seketika berubah menjadi **`[PAUSED]` (merah)**.
+- **Transparansi Tampilan Counter:** Kolom `MAX` di tabel bawah menampilkan progres riil `orders_opened_count / max_orders` (contoh: `2/2x` dengan teks merah saat limit tercapai, atau `UNL` untuk unlimited).
+
+### B. Toggle M1 Khusus Timeframe M5
+- **Tampilan Dinamis:** Tombol toggle **`[M1: ON]` / `[M1: OFF]`** tampil di Row C Form Deck bersanding dengan input Timeframe **hanya jika Timeframe yang dipilih adalah M5**. Jika Timeframe selain M5 (M1, M15, M30, H1), tombol ini otomatis disembunyikan.
+- **Logika:** Default adalah **ON**. Jika `ON`, rule M5 akan mendeteksi sinyal utama lilin M5 dan menerima early signal lilin M1. Jika `OFF`, rule M5 murni hanya mengecek lilin M5. Pilihan ini tersimpan persisten per rule (`allow_m1_fallback`) pada format binary v5.
+- **Tabel Bawah:** Rule yang aktif fallback M1 menampilkan indikator `[M5+M1]`.
+
+### C. Kontrol UI Parameter Sisa Jarak Trail BE (`BE DIST%`)
+- **Form Deck (Row E):** Ditambahkan input **`BE DIST%:`** (default `30%`, rentang 1-100%) bersanding dengan `MAX DIST TR` (1.1) dan `RELVOL THR` (1.6).
+- **Preview Terminal Box:** Menampilkan kalkulasi: `Auto Trail BE: Sisa Target <= 30% -> Kunci BE`.
+- **Tabel Bawah (Kolom `AUTO TRAIL`):** Menampilkan ringkasan konfigurasi rule: `BE:30%|D:1.1|RV:1.6`.
+- **Format State Persistence (v5):** Format file binary `EAT_MultiRules_<login>.bin` ditingkatkan ke versi 5 untuk menyimpan `trail_be_rem_dist_pct` dan `allow_m1_fallback` dengan backward compatibility penuh terhadap file versi 4.

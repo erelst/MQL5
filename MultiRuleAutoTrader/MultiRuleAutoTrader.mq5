@@ -65,6 +65,7 @@ struct AutoTraderRule
    bool                 sig_hammer_ss;     // Strong Hammer (Buy) / Strong Shooting Star (Sell)
    bool                 sig_stoch_ha;      // Stochastic + Heikin Ashi Reversal
    ENUM_SIGNAL_MODE     signal_mode;       // ANY (OR) vs COMBO (AND)
+   bool                 allow_m1_fallback; // M1 signal fallback for M5 rules (default true)
    // Runtime State (RAM only - not in .bin)
    datetime             bull_bound_entered_time; // When price was inside bull bound
    datetime             bear_bound_entered_time; // When price was inside bear bound
@@ -87,6 +88,7 @@ struct SPositionTracking
    int      trail_cycle;
    double   trail_max_dist;
    double   atr_multiplier;
+   double   trail_be_rem_dist_pct; // Remaining target ratio for BE lock (default 0.30)
    bool     be_applied;       // Track if BE has already been locked
    bool     active;
 };
@@ -181,6 +183,8 @@ double               g_form_lot_val     = 1.0;
 bool                 g_form_trail_on    = true;
 double               g_form_trail_dist  = 1.10; // Max Proximity in EWMA TR units
 double               g_form_atr_mult    = 1.6;  // RelVol Threshold
+double               g_form_be_dist_pct = 30.0; // Sisa Jarak TP % untuk BE (default 30%)
+bool                 g_form_m1_fallback = true; // M1 fallback for M5 timeframe rules
 int                  g_form_max_orders  = 1;
 int                  g_form_entry_mult  = 1;
 int                  g_form_multi_tp   = 1;
@@ -209,7 +213,7 @@ void DestroyDashboardUI();
 void SaveStateToFile();
 void LoadStateFromFile();
 void ProcessAutoTrailSLTP();
-void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, double atr100, double open_p, double tp_p, double trail_dist, double atr_mult);
+void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, double atr100, double open_p, double tp_p, double trail_dist, double atr_mult, double be_rem_dist_pct);
 string FindExactOrMarketWatchSymbol(string input_sym);
 bool EvaluatePriceFilter(double price, string filter_str);
 double GetTrueRange(const string sym, const ENUM_TIMEFRAMES tf, int shift = 0);
@@ -316,9 +320,9 @@ ENUM_TIMEFRAMES AtrBaseTF(const ENUM_TIMEFRAMES rule_tf)
 }
 
 // ponytail: M5 rule also accepts M1 engulfing signals; every other TF stays exclusive
-int CandidateTFs(const ENUM_TIMEFRAMES rule_tf, ENUM_TIMEFRAMES &out[])
+int CandidateTFs(const ENUM_TIMEFRAMES rule_tf, const bool allow_m1, ENUM_TIMEFRAMES &out[])
 {
-   if(rule_tf == PERIOD_M5)
+   if(rule_tf == PERIOD_M5 && allow_m1)
    {
       ArrayResize(out, 2);
       out[0] = PERIOD_M5;   // priority: the rule's own TF first
@@ -705,8 +709,9 @@ double GetEWMA_TR(const string sym, const ENUM_TIMEFRAMES tf, int barsToUse = 30
 //+------------------------------------------------------------------+
 //| POSITION TRACKING MANAGEMENT (AUTO TRAIL SL & TRAIL TP)          |
 //+------------------------------------------------------------------+
-void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, double atr100, double open_p, double tp_p, double trail_dist, double atr_mult)
+void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, double atr100, double open_p, double tp_p, double trail_dist, double atr_mult, double be_rem_dist_pct)
 {
+   double rem_pct = (be_rem_dist_pct > 0) ? (be_rem_dist_pct > 1.0 ? be_rem_dist_pct / 100.0 : be_rem_dist_pct) : InpTrailBERemDistPct;
    int size = ArraySize(g_tracking_list);
    for(int i = 0; i < size; i++)
    {
@@ -720,6 +725,7 @@ void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, doub
          g_tracking_list[i].trail_cycle       = 0;
          g_tracking_list[i].trail_max_dist    = (trail_dist > 0) ? trail_dist : InpMaxDistATR;
          g_tracking_list[i].atr_multiplier    = (atr_mult > 0)   ? atr_mult   : InpRelVolThreshold;
+         g_tracking_list[i].trail_be_rem_dist_pct = rem_pct;
          g_tracking_list[i].be_applied        = false;
          g_tracking_list[i].active            = true;
          return;
@@ -736,6 +742,7 @@ void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, doub
    g_tracking_list[size].trail_cycle       = 0;
    g_tracking_list[size].trail_max_dist    = (trail_dist > 0) ? trail_dist : InpMaxDistATR;
    g_tracking_list[size].atr_multiplier    = (atr_mult > 0)   ? atr_mult   : InpRelVolThreshold;
+   g_tracking_list[size].trail_be_rem_dist_pct = rem_pct;
    g_tracking_list[size].be_applied        = false;
    g_tracking_list[size].active            = true;
 }
@@ -796,13 +803,14 @@ void ProcessAutoTrailSLTP()
          }
          else
          {
-            // Opsi 1 (Default): Sisa jarak ke TP <= persentase target awal (default 30%) & posisi sudah profit
+            // Opsi 1 (Default): Sisa jarak ke TP <= persentase target awal & posisi sudah profit
             double base_target_dist = g_tracking_list[i].initial_tp_dist;
             if(base_target_dist <= 0) base_target_dist = MathAbs(cur_tp - open_p);
             
             if(base_target_dist > 0)
             {
-               double max_rem_allowed = base_target_dist * InpTrailBERemDistPct;
+               double be_pct = (g_tracking_list[i].trail_be_rem_dist_pct > 0) ? g_tracking_list[i].trail_be_rem_dist_pct : InpTrailBERemDistPct;
+               double max_rem_allowed = base_target_dist * be_pct;
                if(ptype == POSITION_TYPE_BUY)
                {
                   double rem_dist = cur_tp - bid;
@@ -1187,13 +1195,21 @@ void CreateDashboardUI()
    else if(g_form_tf == PERIOD_H1) tf_min = 60;
    else if(g_form_tf == PERIOD_H4) tf_min = 240;
    else if(g_form_tf == PERIOD_D1) tf_min = 1440;
-   CreateEdit("INP_TF", root_x + 295, row_c_y, 60, 20, IntegerToString(tf_min), CLR_CANVAS_BG, CLR_CYAN_NEON);
+   CreateEdit("INP_TF", root_x + 295, row_c_y, 40, 20, IntegerToString(tf_min), CLR_CANVAS_BG, CLR_CYAN_NEON);
    
-   CreateLabel("LBL_MAX_ORD", root_x + 365, row_c_y + 3, "MAX ORDER:", CLR_TEXT_PURE, 8, true);
+   if(g_form_tf == PERIOD_M5)
+   {
+      string m1_lbl = g_form_m1_fallback ? "M1: ON" : "M1: OFF";
+      color m1_bg   = g_form_m1_fallback ? CLR_TAB_ACTIVE_BG : CLR_PANEL_BG;
+      color m1_clr  = g_form_m1_fallback ? CLR_BULL_NEON : CLR_TEXT_MED;
+      CreateButton("BTN_TOGGLE_M1", root_x + 340, row_c_y, 55, 20, m1_lbl, m1_bg, m1_clr, m1_clr);
+   }
+   
+   CreateLabel("LBL_MAX_ORD", root_x + 400, row_c_y + 3, "MAX ORD:", CLR_TEXT_PURE, 8, true);
    string max_ord_str = (g_form_max_orders <= 0) ? "UNL" : IntegerToString(g_form_max_orders);
-   CreateEdit("INP_MAX_ORD", root_x + 440, row_c_y, 45, 20, max_ord_str, CLR_CANVAS_BG, CLR_GOLD_NEON);
+   CreateEdit("INP_MAX_ORD", root_x + 458, row_c_y, 35, 20, max_ord_str, CLR_CANVAS_BG, CLR_GOLD_NEON);
    string max_btn_lbl = (g_form_max_orders <= 0) ? "UNL" : IntegerToString(g_form_max_orders) + "x";
-   CreateButton("BTN_TOGGLE_MAX_ORD", root_x + 490, row_c_y, 32, 20, max_btn_lbl, CLR_PANEL_BG, CLR_CYAN_NEON, CLR_BORDER_HARD);
+   CreateButton("BTN_TOGGLE_MAX_ORD", root_x + 495, row_c_y, 30, 20, max_btn_lbl, CLR_PANEL_BG, CLR_CYAN_NEON, CLR_BORDER_HARD);
    
    // Row D: Lot Mode & Value & Multiplier (y = upper_y + 96)
    int row_d_y = upper_y + 96;
@@ -1214,13 +1230,16 @@ void CreateDashboardUI()
    CreateLabel("LBL_TRAIL", root_x + 22, row_e_y + 3, "TRAIL EWMA:", CLR_TEXT_PURE, 8, true);
    string trail_mode_str = g_form_trail_on ? "ON" : "OFF";
    color trail_mode_clr = g_form_trail_on ? CLR_GOLD_NEON : CLR_TEXT_MED;
-   CreateButton("BTN_TOGGLE_TRAIL", root_x + 105, row_e_y, 55, 20, trail_mode_str, CLR_CANVAS_BG, trail_mode_clr, CLR_BORDER_HARD);
+   CreateButton("BTN_TOGGLE_TRAIL", root_x + 95, row_e_y, 40, 20, trail_mode_str, CLR_CANVAS_BG, trail_mode_clr, CLR_BORDER_HARD);
    
-   CreateLabel("LBL_TRAIL_DIST", root_x + 170, row_e_y + 3, "MAX DIST TR:", CLR_TEXT_MED, 7, true);
-   CreateEdit("INP_TRAIL_DIST", root_x + 245, row_e_y, 45, 20, DoubleToString(g_form_trail_dist, 1), CLR_CANVAS_BG, CLR_GOLD_NEON);
+   CreateLabel("LBL_BE_DIST", root_x + 142, row_e_y + 3, "BE DIST%:", CLR_TEXT_MED, 7, true);
+   CreateEdit("INP_TRAIL_BE_DIST", root_x + 195, row_e_y, 35, 20, IntegerToString((int)MathRound(g_form_be_dist_pct)), CLR_CANVAS_BG, CLR_GOLD_NEON);
    
-   CreateLabel("LBL_ATR_MULT_LBL", root_x + 300, row_e_y + 3, "RELVOL THR:", CLR_TEXT_MED, 7, true);
-   CreateEdit("INP_ATR_MULT", root_x + 375, row_e_y, 45, 20, DoubleToString(g_form_atr_mult, 1), CLR_CANVAS_BG, CLR_CYAN_NEON);
+   CreateLabel("LBL_TRAIL_DIST", root_x + 238, row_e_y + 3, "MAX DIST TR:", CLR_TEXT_MED, 7, true);
+   CreateEdit("INP_TRAIL_DIST", root_x + 310, row_e_y, 40, 20, DoubleToString(g_form_trail_dist, 1), CLR_CANVAS_BG, CLR_GOLD_NEON);
+   
+   CreateLabel("LBL_ATR_MULT_LBL", root_x + 358, row_e_y + 3, "RELVOL THR:", CLR_TEXT_MED, 7, true);
+   CreateEdit("INP_ATR_MULT", root_x + 430, row_e_y, 40, 20, DoubleToString(g_form_atr_mult, 1), CLR_CANVAS_BG, CLR_CYAN_NEON);
    
    // Row F: % TF Progress Delay vs TF Close (y = upper_y + 144)
    int row_f_y = upper_y + 144;
@@ -1330,6 +1349,7 @@ void UpdatePreviewTerminalBox()
    int    prev_mult  = g_form_entry_mult;
    int    prev_mtp   = g_form_multi_tp;
    string prev_sm    = (g_form_sig_mode == SIGNAL_MODE_ANY) ? "ANY (OR)" : "COMBO (AND)";
+   double prev_be_pct = g_form_be_dist_pct;
    string prev_rule_tag = (g_editing_rule_idx >= 0) ? StringFormat("[RULE #%d EDIT]", g_editing_rule_idx + 1) : "[FORM INPUT]";
    
    int total_rules = ArraySize(g_rules);
@@ -1338,11 +1358,14 @@ void UpdatePreviewTerminalBox()
       int idx = g_selected_rule_idx;
       prev_sym   = g_rules[idx].symbol;
       prev_tf    = StringSubstr(EnumToString(g_rules[idx].timeframe), 7);
+      if(g_rules[idx].timeframe == PERIOD_M5)
+         prev_tf += g_rules[idx].allow_m1_fallback ? "+M1" : " ONLY";
       prev_rr    = g_rules[idx].risk_reward_ratio;
       prev_lot   = (g_rules[idx].lot_mode == LOT_FIXED) ? DoubleToString(g_rules[idx].lot_value, 2) + " Lot" : DoubleToString(g_rules[idx].lot_value, 1) + "% Risk";
       prev_trail = g_rules[idx].enable_trail;
       prev_dist  = g_rules[idx].trail_max_dist;
       prev_atr_m = g_rules[idx].atr_multiplier;
+      prev_be_pct= g_rules[idx].trail_be_rem_dist_pct * 100.0;
       prev_mult  = g_rules[idx].entry_multiplier;
       prev_mtp   = g_rules[idx].multi_tp;
       prev_sm    = (g_rules[idx].signal_mode == SIGNAL_MODE_ANY) ? "ANY (OR)" : "COMBO (AND)";
@@ -1363,9 +1386,9 @@ void UpdatePreviewTerminalBox()
    
    if(prev_trail)
    {
-      string l5 = StringFormat("Auto Trail BE (Jarak Mandiri): Sisa <= %.2fx EWMA TR -> Kunci BE", prev_dist);
-      string l6 = StringFormat("Trail TP Extend: RelVol >= %.2fx EWMA -> TP Extend Proporsional", prev_atr_m);
-      string l7 = StringFormat("Trail SL Lock: Sisa <= %.2fx ke TP baru -> Kunci ke Prev TP", prev_dist);
+      string l5 = StringFormat("Auto Trail BE: Sisa Target <= %.0f%% -> Kunci BE", prev_be_pct);
+      string l6 = StringFormat("Trail TP Extend: Sisa <= %.1fTR & RelVol >= %.2fx -> TP Extend", prev_dist, prev_atr_m);
+      string l7 = StringFormat("Trail SL Lock: Sisa <= %.1fTR ke TP baru -> Kunci ke Prev TP", prev_dist);
       
       CreateLabel("SIM_L5", prev_x + 10, line_y + 68, l5, CLR_GOLD_NEON, 8, true);
       CreateLabel("SIM_L6", prev_x + 10, line_y + 90, l6, CLR_CYAN_NEON, 8, true);
@@ -1438,10 +1461,13 @@ void UpdateDashboardUI()
       CreateLabel(r_pfx + "RR", root_x + 295, cur_y + 9, StringFormat("1:%.1f", g_rules[i].risk_reward_ratio), CLR_CYAN_NEON, 8, true);
       
       string str_tf = StringSubstr(EnumToString(g_rules[i].timeframe), 7);
+      if(g_rules[i].timeframe == PERIOD_M5)
+         str_tf += g_rules[i].allow_m1_fallback ? "+M1" : "";
       CreateLabel(r_pfx + "TF", root_x + 345, cur_y + 9, "[" + str_tf + "]", CLR_GOLD_NEON, 8, true);
       
-      string max_ord_disp = (g_rules[i].max_orders <= 0) ? "UNL" : IntegerToString(g_rules[i].max_orders);
-      CreateLabel(r_pfx + "MAX", root_x + 395, cur_y + 9, max_ord_disp, CLR_TEXT_PURE, 8, true);
+      string max_ord_disp = (g_rules[i].max_orders <= 0) ? "UNL" : StringFormat("%d/%dx", g_rules[i].orders_opened_count, g_rules[i].max_orders);
+      color max_ord_clr = (g_rules[i].max_orders > 0 && g_rules[i].orders_opened_count >= g_rules[i].max_orders) ? CLR_BEAR_NEON : CLR_TEXT_PURE;
+      CreateLabel(r_pfx + "MAX", root_x + 395, cur_y + 9, max_ord_disp, max_ord_clr, 8, true);
       
       int mult_disp = (g_rules[i].entry_multiplier <= 0) ? 1 : g_rules[i].entry_multiplier;
       CreateLabel(r_pfx + "MULT", root_x + 445, cur_y + 9, IntegerToString(mult_disp) + "x", CLR_GOLD_NEON, 8, true);
@@ -1464,7 +1490,7 @@ void UpdateDashboardUI()
       }
       CreateLabel(r_pfx + "FLT", root_x + 565, cur_y + 9, f_str, CLR_TEXT_MED, 7, false);
       
-      string trail_str = g_rules[i].enable_trail ? StringFormat("ON (<=%.1fTR, >%.1fx)", g_rules[i].trail_max_dist, g_rules[i].atr_multiplier) : "OFF";
+      string trail_str = g_rules[i].enable_trail ? StringFormat("BE:%.0f%%|D:%.1f|RV:%.1f", g_rules[i].trail_be_rem_dist_pct * 100.0, g_rules[i].trail_max_dist, g_rules[i].atr_multiplier) : "OFF";
       CreateLabel(r_pfx + "TRL", root_x + 685, cur_y + 9, trail_str, g_rules[i].enable_trail ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, false);
       
       string r_status_txt = g_rules[i].active ? "ACTIVE" : "PAUSED";
@@ -1504,7 +1530,7 @@ void SaveStateToFile()
    if(handle != INVALID_HANDLE)
    {
       FileWriteInteger(handle, g_master_power_enabled ? 1 : 0);
-      FileWriteInteger(handle, 4); // v4 = v3 plus signal selection flags, combo mode, and % TF delay
+      FileWriteInteger(handle, 5); // v5 = v4 plus trail_be_rem_dist_pct and allow_m1_fallback
       
       int total_rules = ArraySize(g_rules);
       FileWriteInteger(handle, total_rules);
@@ -1540,11 +1566,13 @@ void SaveStateToFile()
          FileWriteInteger(handle, g_rules[i].orders_opened_count);
          FileWriteInteger(handle, g_rules[i].active ? 1 : 0);
          
-         // V4 additions per rule
+         // V5 additions per rule
          FileWriteInteger(handle, g_rules[i].sig_engulfing ? 1 : 0);
          FileWriteInteger(handle, g_rules[i].sig_hammer_ss ? 1 : 0);
          FileWriteInteger(handle, g_rules[i].sig_stoch_ha  ? 1 : 0);
          FileWriteInteger(handle, (int)g_rules[i].signal_mode);
+         FileWriteDouble(handle, g_rules[i].trail_be_rem_dist_pct);
+         FileWriteInteger(handle, g_rules[i].allow_m1_fallback ? 1 : 0);
       }
 
       // 3. Persistent Add/Edit form state (so re-attach keeps last typed values)
@@ -1577,11 +1605,13 @@ void SaveStateToFile()
       FileWriteDouble(handle, g_form_trail_dist);
       FileWriteDouble(handle, g_form_atr_mult);
 
-      // V4 additions for form state
+      // V5 additions for form state
       FileWriteInteger(handle, g_form_sig_eng ? 1 : 0);
       FileWriteInteger(handle, g_form_sig_hmr ? 1 : 0);
       FileWriteInteger(handle, g_form_sig_stoch ? 1 : 0);
       FileWriteInteger(handle, (int)g_form_sig_mode);
+      FileWriteDouble(handle, g_form_be_dist_pct);
+      FileWriteInteger(handle, g_form_m1_fallback ? 1 : 0);
 
       FileClose(handle);
    }
@@ -1615,6 +1645,8 @@ void LoadStateFromFile()
       g_rules[0].sig_hammer_ss     = InpDefaultSigHmrSS;
       g_rules[0].sig_stoch_ha      = InpDefaultSigStochHA;
       g_rules[0].signal_mode       = InpDefaultSigMode;
+      g_rules[0].trail_be_rem_dist_pct = InpTrailBERemDistPct;
+      g_rules[0].allow_m1_fallback = true;
       g_rules[0].bull_bound_entered_time = 0;
       g_rules[0].bear_bound_entered_time = 0;
       g_rules[0].bull_bound_exit_time    = 0;
@@ -1675,12 +1707,23 @@ void LoadStateFromFile()
          g_rules[i].orders_opened_count = FileReadInteger(handle);
          g_rules[i].active            = (FileReadInteger(handle) == 1);
          
-         if(state_ver >= 4)
+         if(state_ver >= 5)
          {
             g_rules[i].sig_engulfing = (FileReadInteger(handle) == 1);
             g_rules[i].sig_hammer_ss = (FileReadInteger(handle) == 1);
             g_rules[i].sig_stoch_ha  = (FileReadInteger(handle) == 1);
             g_rules[i].signal_mode   = (ENUM_SIGNAL_MODE)FileReadInteger(handle);
+            g_rules[i].trail_be_rem_dist_pct = FileReadDouble(handle);
+            g_rules[i].allow_m1_fallback = (FileReadInteger(handle) == 1);
+         }
+         else if(state_ver >= 4)
+         {
+            g_rules[i].sig_engulfing = (FileReadInteger(handle) == 1);
+            g_rules[i].sig_hammer_ss = (FileReadInteger(handle) == 1);
+            g_rules[i].sig_stoch_ha  = (FileReadInteger(handle) == 1);
+            g_rules[i].signal_mode   = (ENUM_SIGNAL_MODE)FileReadInteger(handle);
+            g_rules[i].trail_be_rem_dist_pct = InpTrailBERemDistPct;
+            g_rules[i].allow_m1_fallback = true;
          }
          else
          {
@@ -1688,6 +1731,8 @@ void LoadStateFromFile()
             g_rules[i].sig_hammer_ss = true;
             g_rules[i].sig_stoch_ha  = true;
             g_rules[i].signal_mode   = SIGNAL_MODE_ANY;
+            g_rules[i].trail_be_rem_dist_pct = InpTrailBERemDistPct;
+            g_rules[i].allow_m1_fallback = true;
          }
          
          g_rules[i].bull_bound_entered_time = 0;
@@ -1741,7 +1786,16 @@ void LoadStateFromFile()
          g_form_trail_dist  = FileReadDouble(handle);
          g_form_atr_mult    = FileReadDouble(handle);
          
-         if(state_ver >= 4 && FileIsEnding(handle) == false)
+         if(state_ver >= 5 && FileIsEnding(handle) == false)
+         {
+            g_form_sig_eng   = (FileReadInteger(handle) == 1);
+            g_form_sig_hmr   = (FileReadInteger(handle) == 1);
+            g_form_sig_stoch = (FileReadInteger(handle) == 1);
+            g_form_sig_mode  = (ENUM_SIGNAL_MODE)FileReadInteger(handle);
+            g_form_be_dist_pct = FileReadDouble(handle);
+            g_form_m1_fallback = (FileReadInteger(handle) == 1);
+         }
+         else if(state_ver >= 4 && FileIsEnding(handle) == false)
          {
             g_form_sig_eng   = (FileReadInteger(handle) == 1);
             g_form_sig_hmr   = (FileReadInteger(handle) == 1);
@@ -1811,6 +1865,12 @@ void CaptureFormInputs()
    
    double cur_amult = StringToDouble(ObjectGetString(0, g_prefix + "INP_ATR_MULT", OBJPROP_TEXT));
    if(cur_amult > 0) g_form_atr_mult = cur_amult;
+   
+   if(ObjectFind(0, g_prefix + "INP_TRAIL_BE_DIST") >= 0)
+   {
+      double cur_be_dist = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_BE_DIST", OBJPROP_TEXT));
+      if(cur_be_dist > 0 && cur_be_dist <= 100) g_form_be_dist_pct = cur_be_dist;
+   }
    
    string mord_str = ObjectGetString(0, g_prefix + "INP_MAX_ORD", OBJPROP_TEXT);
    if(mord_str != "")
@@ -1950,6 +2010,13 @@ void OnChartEvent(const int id,
          CreateDashboardUI();
          return;
       }
+      else if(sparam == g_prefix + "BTN_TOGGLE_M1")
+      {
+         CaptureFormInputs();
+         g_form_m1_fallback = !g_form_m1_fallback;
+         CreateDashboardUI();
+         return;
+      }
       else if(sparam == g_prefix + "BTN_TOGGLE_TRAIL")
       {
          CaptureFormInputs();
@@ -1974,6 +2041,8 @@ void OnChartEvent(const int id,
          g_form_trail_on   = InpEnableTrail;
          g_form_trail_dist = InpMaxDistATR;
          g_form_atr_mult   = InpRelVolThreshold;
+         g_form_be_dist_pct= 30.0;
+         g_form_m1_fallback= true;
          g_form_max_orders = InpMaxOrders;
          g_form_entry_mult = InpEntryMultiplier;
          g_form_multi_tp  = InpMultiTP;
@@ -2037,6 +2106,11 @@ void OnChartEvent(const int id,
          double atr_mult = StringToDouble(ObjectGetString(0, g_prefix + "INP_ATR_MULT", OBJPROP_TEXT));
          if(atr_mult <= 0) atr_mult = InpRelVolThreshold;
          
+         double be_dist_val = 30.0;
+         if(ObjectFind(0, g_prefix + "INP_TRAIL_BE_DIST") >= 0)
+            be_dist_val = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_BE_DIST", OBJPROP_TEXT));
+         if(be_dist_val <= 0 || be_dist_val > 100) be_dist_val = 30.0;
+         
          int max_ord_val = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MAX_ORD", OBJPROP_TEXT));
          
          int mult_val = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_ENTRI_MULT", OBJPROP_TEXT));
@@ -2096,6 +2170,7 @@ void OnChartEvent(const int id,
          g_form_lot_val   = lot_val;
          g_form_trail_dist = trail_dist;
          g_form_atr_mult  = atr_mult;
+         g_form_be_dist_pct = be_dist_val;
          g_form_entry_mult= mult_val;
          g_form_multi_tp = multi_tp_val;
          g_form_delay_pct = delay_pct_val;
@@ -2111,6 +2186,12 @@ void OnChartEvent(const int id,
             g_rules[target_idx].active = true;
             g_rules[target_idx].orders_opened_count = 0;
          }
+         else
+         {
+            // Edit existing: jika max orders diubah dan lebih besar dari opened, aktifkan kembali
+            if(max_ord_val > 0 && g_rules[target_idx].orders_opened_count < max_ord_val)
+               g_rules[target_idx].active = true;
+         }
          
          g_rules[target_idx].symbol              = valid_sym;
          g_rules[target_idx].direction           = g_form_direction;
@@ -2121,6 +2202,8 @@ void OnChartEvent(const int id,
          g_rules[target_idx].enable_trail        = g_form_trail_on;
          g_rules[target_idx].trail_max_dist      = trail_dist;
          g_rules[target_idx].atr_multiplier      = atr_mult;
+         g_rules[target_idx].trail_be_rem_dist_pct = be_dist_val / 100.0;
+         g_rules[target_idx].allow_m1_fallback   = g_form_m1_fallback;
          g_rules[target_idx].bull_price_filter   = b_filter;
          g_rules[target_idx].bear_price_filter   = s_filter;
          g_rules[target_idx].max_orders          = max_ord_val;
@@ -2182,6 +2265,8 @@ void OnChartEvent(const int id,
             g_form_trail_on     = g_rules[i].enable_trail;
             g_form_trail_dist   = g_rules[i].trail_max_dist;
             g_form_atr_mult     = g_rules[i].atr_multiplier;
+            g_form_be_dist_pct  = (g_rules[i].trail_be_rem_dist_pct > 0) ? g_rules[i].trail_be_rem_dist_pct * 100.0 : 30.0;
+            g_form_m1_fallback  = g_rules[i].allow_m1_fallback;
             g_form_entry_mult   = g_rules[i].entry_multiplier;
             g_form_multi_tp    = g_rules[i].multi_tp;
             g_form_delay_pct    = g_rules[i].delay_tf_pct;
@@ -2284,7 +2369,7 @@ void OnTick()
       if(atr_50 <= 0) continue;
       
       ENUM_TIMEFRAMES cand_tf[];
-      int cand_total = CandidateTFs(tf, cand_tf);
+      int cand_total = CandidateTFs(tf, g_rules[r].allow_m1_fallback, cand_tf);
       
       // ===================================================================
       // PRICE BOUND GRACE PERIOD (1.5x TF) TRACKING
@@ -2561,7 +2646,7 @@ void OnTick()
                      
                      double atr100 = atr_50 * 2.0;
                      if(g_rules[r].enable_trail)
-                        RegisterPositionTracking(deal_tkt, sym, tf, atr100, ask, cur_tp, g_rules[r].trail_max_dist, g_rules[r].atr_multiplier);
+                        RegisterPositionTracking(deal_tkt, sym, tf, atr100, ask, cur_tp, g_rules[r].trail_max_dist, g_rules[r].atr_multiplier, g_rules[r].trail_be_rem_dist_pct);
                      
                      string msg = StringFormat("[BUY] %s %s (%s)\nSignal: %s\nEntry: %.5f | SL: %.5f | TP: %.5f\nOrder: #%d (%d/%d) | Lot: %.2f | RR: 1:%.2f",
                                                sym, EnumToString(sig_tf), sig_name,
@@ -2578,6 +2663,11 @@ void OnTick()
             if(opened > 0)
             {
                g_rules[r].orders_opened_count++;
+               if(g_rules[r].max_orders > 0 && g_rules[r].orders_opened_count >= g_rules[r].max_orders)
+               {
+                  g_rules[r].active = false;
+                  PrintFormat("Auto Trader Rule #%d (%s) auto-paused immediately: reached max orders limit (%d)", r + 1, g_rules[r].symbol, g_rules[r].max_orders);
+               }
                SaveStateToFile();
                UpdateDashboardUI();
             }
@@ -2785,7 +2875,7 @@ void OnTick()
                      
                      double atr100 = atr_50 * 2.0;
                      if(g_rules[r].enable_trail)
-                        RegisterPositionTracking(deal_tkt, sym, tf, atr100, bid, cur_tp, g_rules[r].trail_max_dist, g_rules[r].atr_multiplier);
+                        RegisterPositionTracking(deal_tkt, sym, tf, atr100, bid, cur_tp, g_rules[r].trail_max_dist, g_rules[r].atr_multiplier, g_rules[r].trail_be_rem_dist_pct);
                      
                      string msg = StringFormat("[SELL] %s %s (%s)\nSignal: %s\nEntry: %.5f | SL: %.5f | TP: %.5f\nOrder: #%d (%d/%d) | Lot: %.2f | RR: 1:%.2f",
                                                sym, EnumToString(sig_tf), sig_name,
@@ -2802,6 +2892,11 @@ void OnTick()
             if(opened > 0)
             {
                g_rules[r].orders_opened_count++;
+               if(g_rules[r].max_orders > 0 && g_rules[r].orders_opened_count >= g_rules[r].max_orders)
+               {
+                  g_rules[r].active = false;
+                  PrintFormat("Auto Trader Rule #%d (%s) auto-paused immediately: reached max orders limit (%d)", r + 1, g_rules[r].symbol, g_rules[r].max_orders);
+               }
                SaveStateToFile();
                UpdateDashboardUI();
             }
