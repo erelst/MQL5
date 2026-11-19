@@ -14,11 +14,11 @@ Dokumen ini merekam seluruh diskusi, penjelasan kebutuhan pengguna, analisis tek
 ### Solusi Desain Baru
 - **Pelebaran Form Kiri:** Lebar kolom dan koordinat piksel objek input diperlebar secara signifikan agar label tertulis lengkap tanpa singkatan (seperti `ENTRY MULTIPLIER`, `MULTI TP`, `% TF DELAY`).
 - **Pembersihan Tabel Bawah:** Kolom `SIGNALS` yang panjang dan berpotensi memicu teks berdempetan atau tumpang tindih dihapus dari tabel list rules bawah, dan dipusatkan ke **Preview Terminal Box** kanan atas (menampilkan status sinyal aktif serta mode `ANY (OR)` vs `COMBO (AND)`). Ruang tabel bawah menjadi jauh lebih lapang untuk kolom `SYMBOL`, `DIRECTION`, `LOT/RISK`, `RR`, `TF`, `MAX`, `MULT`, `DELAY`, `PRICE BOUNDS`, `AUTO TRAIL`, `STATUS`, dan `ACTIONS`.
+- **Perampingan & Penyelarasan Form Trailing:** Istilah usang `BE TP%` dihapus sepenuhnya. Digantikan dengan parameter aktif **`MAX DIST TR`** (jarak kedekatan ke TP dalam satuan EWMA TR, default `1.10`) dan **`RELVOL THR`** (ambang lonjakan volatilitas, default `1.60`). Parameter ini dapat diatur langsung secara mandiri untuk setiap rule di form dashboard tanpa hardcode.
 - **Perampingan Preview Kanan:** Area preview/simulasi diperkecil dan difokuskan pada ringkasan esensial:
   - Identitas simbol, timeframe, arah trading, dan ringkasan sinyal aktif.
   - Distribusi lot pada tiap tingkatan Multi TP aktif.
-  - Status saklar Trailing serta mode yang sedang bekerja.
-- **Pemisahan Parameter Baku:** Parameter matematis konstan (seperti periode baseline EWMA 30 bar, nilai lambda 0.90, threshold volatilitas 1.60, parameter Stochastic 14/1/3) dikonfigurasi melalui Input Parameter EA (menu F7), menjaga form chart tetap bersih, lega, dan ergonomis. Seluruh angka volatilitas dan jarak trailing tidak di-hardcode sehingga dapat disesuaikan fleksibel.
+  - Status saklar Trailing serta simulasi matematis dinamis berbasis setting rule aktif.
 
 ---
 

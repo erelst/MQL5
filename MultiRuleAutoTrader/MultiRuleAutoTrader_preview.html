@@ -421,8 +421,8 @@
           <div class="form-row">
             <span class="form-label" style="color:var(--gold-bright);">TRAIL EWMA:</span>
             <button class="btn-toggle active-both" id="btn-trail" onclick="toggleTrail()" style="width: 50px; flex-shrink:0;">ON</button>
-            <span style="font-size: 9px; color: var(--text-med); margin-left: 6px;">BE Sisa %:</span>
-            <input type="text" id="inp-trailpct" value="5.0" style="width: 45px;" oninput="updatePreviewFromForm()">
+            <span style="font-size: 9px; color: var(--text-med); margin-left: 6px;">Max Dist TR:</span>
+            <input type="text" id="inp-traildist" value="1.10" style="width: 45px;" oninput="updatePreviewFromForm()">
             <span style="font-size: 9px; color: var(--text-med); margin-left: 6px;">RelVol Thr:</span>
             <input type="text" id="inp-atrmult" value="1.60" style="width: 45px;" oninput="updatePreviewFromForm()">
           </div>
@@ -601,7 +601,7 @@
           lotMode: lotMode,
           lotVal: document.getElementById('inp-lotval').value || '0.01',
           trailOn: isTrailOn,
-          trailPct: document.getElementById('inp-trailpct').value || '5.0',
+          trailDist: document.getElementById('inp-traildist').value || '1.10',
           atrMult: document.getElementById('inp-atrmult').value || '1.60',
           delayClose: isDelayClose,
           delayPct: parseInt(document.getElementById('inp-delaypct').value) || 30,
@@ -689,7 +689,7 @@
 
         let lotTxt = r.lotMode === 'FIXED' ? `${r.lotVal}L` : `${r.lotVal}%R`;
         let boundsTxt = `B:${r.bMax} | S:${r.sMin}`;
-        let trailTxt = r.trailOn ? `<span style="color:var(--gold-bright)">ON (EWMA ${r.atrMult}x)</span>` : `<span style="color:var(--text-med)">OFF</span>`;
+        let trailTxt = r.trailOn ? `<span style="color:var(--gold-bright)">ON (&lt;=${r.trailDist}TR, &gt;${r.atrMult}x)</span>` : `<span style="color:var(--text-med)">OFF</span>`;
         let delayTxt = r.delayClose ? 'TF Close' : `${r.delayPct}%`;
         let statusBadge = r.active ? 
           `<span class="badge-status badge-active" onclick="event.stopPropagation(); toggleRuleStatus(${idx})">ACTIVE</span>` :
@@ -867,7 +867,7 @@
       document.getElementById('inp-mult').value = r.mult;
       document.getElementById('inp-multitp').value = r.multiTp;
       document.getElementById('inp-lotval').value = r.lotVal;
-      document.getElementById('inp-trailpct').value = r.trailPct;
+      document.getElementById('inp-traildist').value = r.trailDist || '1.10';
       document.getElementById('inp-atrmult').value = r.atrMult;
       document.getElementById('inp-delaypct').value = r.delayPct;
       document.getElementById('inp-bmax').value = r.bMax;
@@ -941,7 +941,7 @@
       document.getElementById('inp-mult').value = '1';
       document.getElementById('inp-multitp').value = '1';
       document.getElementById('inp-lotval').value = '0.01';
-      document.getElementById('inp-trailpct').value = '5.0';
+      document.getElementById('inp-traildist').value = '1.10';
       document.getElementById('inp-atrmult').value = '1.60';
       document.getElementById('inp-delaypct').value = '30';
       document.getElementById('inp-bmax').value = 'ALL';
@@ -982,7 +982,7 @@
       const mult = parseInt(document.getElementById('inp-mult').value) || 1;
       const multiTp = parseInt(document.getElementById('inp-multitp').value) || 1;
       const lotVal = document.getElementById('inp-lotval').value.trim() || '0.01';
-      const trailPct = document.getElementById('inp-trailpct').value.trim() || '5.0';
+      const trailDist = document.getElementById('inp-traildist').value.trim() || '1.10';
       const atrMult = document.getElementById('inp-atrmult').value.trim() || '1.60';
       const delayPct = parseInt(document.getElementById('inp-delaypct').value) || 30;
       const bMax = document.getElementById('inp-bmax').value.trim() || 'ALL';
@@ -999,7 +999,7 @@
         lotMode: lotMode,
         lotVal: lotVal,
         trailOn: isTrailOn,
-        trailPct: trailPct,
+        trailDist: trailDist,
         atrMult: atrMult,
         delayClose: isDelayClose,
         delayPct: delayPct,
