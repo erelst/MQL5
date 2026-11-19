@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MULTIRULE AUTO TRADER - Multi-Rule Realtime Dashboard Preview</title>
+  <title>MULTIRULE AUTO TRADER - Multi-Rule Realtime Reversal Engine</title>
   <style>
     :root {
       --canvas-bg: #000000;
@@ -45,7 +45,7 @@
     }
 
     .main-window {
-      width: 880px;
+      width: 960px;
       background: var(--panel-bg);
       border: 1px solid var(--border-hard);
       border-radius: 8px;
@@ -106,10 +106,10 @@
       gap: 14px;
     }
 
-    /* Side by Side Split */
+    /* Side by Side Split: Left Form widened to 540px */
     .deck-grid {
       display: grid;
-      grid-template-columns: 430px 1fr;
+      grid-template-columns: 540px 1fr;
       gap: 12px;
     }
 
@@ -146,7 +146,7 @@
       font-size: 10px;
       font-weight: 800;
       color: var(--text-pure);
-      width: 75px;
+      width: 110px;
       flex-shrink: 0;
     }
 
@@ -171,7 +171,7 @@
     .btn-toggle-group {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
-      gap: 3px;
+      gap: 4px;
       width: 100%;
     }
 
@@ -206,11 +206,17 @@
       color: var(--bear-bright);
     }
 
+    .btn-toggle.active-gold {
+      background: var(--tab-active-bg);
+      border-color: var(--gold-bright);
+      color: var(--gold-bright);
+    }
+
     .btn-submit {
       background: var(--tab-active-bg);
       border: 1px solid var(--cyan-bright);
       color: var(--cyan-bright);
-      padding: 6px;
+      padding: 7px;
       border-radius: 4px;
       font-size: 11px;
       font-weight: 900;
@@ -229,7 +235,7 @@
       background: var(--card-bg);
       border: 1px solid var(--border-hard);
       color: var(--text-med);
-      padding: 6px;
+      padding: 7px;
       border-radius: 4px;
       font-size: 11px;
       font-weight: 800;
@@ -345,7 +351,7 @@
     <div class="window-header">
       <div class="window-title">
         <span>MULTIRULE AUTO TRADER</span>
-        <span class="tag">[MULTI-RULE REALTIME TICK ENGINE]</span>
+        <span class="tag">[MULTI-RULE REALTIME TICK ENGINE - REVERSAL]</span>
       </div>
       <button class="btn-power" id="btn-master" onclick="toggleMasterPower()">
         <span id="txt-master">ALL ACTIVE</span>
@@ -356,28 +362,39 @@
     <div class="content-body">
       <!-- Section 1: Side by Side Deck -->
       <div class="deck-grid">
-        <!-- Deck Kiri: Form Input -->
+        <!-- Deck Kiri: Form Input (Lebar 540px) -->
         <div class="card">
           <div class="card-title">
             <span id="form-heading">ADD AUTO TRADER RULE</span>
-            <span style="font-size: 9px; color: var(--gold-bright);">TICK BREAKOUT</span>
+            <span style="font-size: 9px; color: var(--gold-bright);">REVERSAL ENGINE</span>
           </div>
 
+          <!-- Row A: Symbol & Direction -->
           <div class="form-row">
             <span class="form-label">SYMBOL:</span>
-            <input type="text" id="inp-sym" value="EURUSD" style="color:var(--cyan-bright); width: 80px;" oninput="updatePreviewFromForm()">
-            <div class="btn-toggle-group" style="width: calc(100% - 85px);">
+            <input type="text" id="inp-sym" value="EURUSD" style="color:var(--cyan-bright); width: 85px;" oninput="updatePreviewFromForm()">
+            <div class="btn-toggle-group" style="width: calc(100% - 90px);">
               <button class="btn-toggle active-both" id="btn-both" onclick="setDir('BOTH')">BUY & SELL</button>
               <button class="btn-toggle" id="btn-buy" onclick="setDir('BUY')">BUY ONLY</button>
               <button class="btn-toggle" id="btn-sell" onclick="setDir('SELL')">SELL ONLY</button>
             </div>
           </div>
 
+          <!-- Row B: Signals Selection & Signal Mode -->
+          <div class="form-row">
+            <span class="form-label">SIGNALS:</span>
+            <button class="btn-toggle active-both" id="btn-sig-eng" onclick="toggleSig('ENG')" style="width: 75px;">[x] ENG</button>
+            <button class="btn-toggle active-gold" id="btn-sig-hmr" onclick="toggleSig('HMR')" style="width: 95px;">[x] HMR/SS</button>
+            <button class="btn-toggle active-buy" id="btn-sig-stoch" onclick="toggleSig('STOCH')" style="width: 90px;">[x] STOCH+HA</button>
+            <button class="btn-toggle active-both" id="btn-sig-mode" onclick="toggleSigMode()" style="width: 140px;">MODE: ANY (OR)</button>
+          </div>
+
+          <!-- Row C: RR, Timeframe & Max Order -->
           <div class="form-row">
             <span class="form-label">RR RATIO:</span>
-            <input type="text" id="inp-rr" value="2.00" oninput="updatePreviewFromForm()">
-            <span class="form-label" style="width:55px; text-align:right;">TF (M):</span>
-            <select id="inp-tf" onchange="updatePreviewFromForm()">
+            <input type="text" id="inp-rr" value="2.00" style="width: 70px;" oninput="updatePreviewFromForm()">
+            <span class="form-label" style="width:90px; text-align:right;">TIMEFRAME:</span>
+            <select id="inp-tf" style="width: 70px;" onchange="updatePreviewFromForm()">
               <option value="1">M1</option>
               <option value="5" selected>M5</option>
               <option value="15">M15</option>
@@ -385,38 +402,60 @@
               <option value="60">H1</option>
               <option value="240">H4</option>
             </select>
+            <span class="form-label" style="width:85px; text-align:right;">MAX ORDER:</span>
+            <input type="text" id="inp-maxord" value="1" style="width: 45px;" oninput="updatePreviewFromForm()">
           </div>
 
+          <!-- Row D: Lot Mode, Entry Multiplier & Multi TP -->
           <div class="form-row">
             <span class="form-label">LOT MODE:</span>
-            <button class="btn-toggle active-both" id="btn-lotmode" onclick="toggleLotMode()" style="width: 90px; flex-shrink:0;">FIXED LOT</button>
-            <span class="form-label" style="width:45px; text-align:right;">NILAI:</span>
-            <input type="text" id="inp-lotval" value="0.01" oninput="updatePreviewFromForm()">
+            <button class="btn-toggle active-both" id="btn-lotmode" onclick="toggleLotMode()" style="width: 85px; flex-shrink:0;">FIXED LOT</button>
+            <input type="text" id="inp-lotval" value="0.01" style="width: 50px;" oninput="updatePreviewFromForm()">
+            <span class="form-label" style="width:115px; text-align:right;">ENTRY MULTIPLIER:</span>
+            <input type="text" id="inp-mult" value="1" style="width: 40px;" oninput="updatePreviewFromForm()">
+            <span class="form-label" style="width:70px; text-align:right;">MULTI TP:</span>
+            <input type="text" id="inp-multitp" value="1" style="width: 40px;" oninput="updatePreviewFromForm()">
           </div>
 
+          <!-- Row E: Trailing EWMA TR Settings -->
           <div class="form-row">
-            <span class="form-label" style="color:var(--gold-bright);">TRAIL:</span>
-            <button class="btn-toggle active-both" id="btn-trail" onclick="toggleTrail()" style="width: 45px; flex-shrink:0;">ON</button>
-            <span style="font-size: 9px; color: var(--text-med);">Sisa %:</span>
-            <input type="text" id="inp-trailpct" value="5.0" style="width: 42px;" oninput="updatePreviewFromForm()">
-            <span style="font-size: 9px; color: var(--text-med);">Min ATR:</span>
-            <input type="text" id="inp-atrmult" value="2.0" style="width: 42px;" oninput="updatePreviewFromForm()">
+            <span class="form-label" style="color:var(--gold-bright);">TRAIL EWMA:</span>
+            <button class="btn-toggle active-both" id="btn-trail" onclick="toggleTrail()" style="width: 50px; flex-shrink:0;">ON</button>
+            <span style="font-size: 9px; color: var(--text-med); margin-left: 6px;">BE Sisa %:</span>
+            <input type="text" id="inp-trailpct" value="5.0" style="width: 45px;" oninput="updatePreviewFromForm()">
+            <span style="font-size: 9px; color: var(--text-med); margin-left: 6px;">RelVol Thr:</span>
+            <input type="text" id="inp-atrmult" value="1.60" style="width: 45px;" oninput="updatePreviewFromForm()">
           </div>
 
+          <!-- Row F: % TF Progress Delay vs TF Close -->
           <div class="form-row">
-            <span class="form-label" style="color:var(--bull-bright);">BUY &lt; :</span>
-            <input type="text" id="inp-bmax" value="ALL" placeholder="'ALL' / harga">
-            <span class="form-label" style="color:var(--bear-bright); width:55px; text-align:right;">SELL &gt; :</span>
-            <input type="text" id="inp-smin" value="ALL" placeholder="'ALL' / harga">
+            <span class="form-label">DELAY MODE:</span>
+            <button class="btn-toggle active-both" id="btn-delaymode" onclick="toggleDelayMode()" style="width: 120px; flex-shrink:0;">% TF PROGRESS</button>
+            <span class="form-label" style="width:90px; text-align:right;" id="lbl-delaypct">% TF DELAY:</span>
+            <input type="text" id="inp-delaypct" value="30" style="width: 45px;" oninput="updatePreviewFromForm()">
+            <span style="font-size: 8px; color: var(--text-med); margin-left: 4px;" id="lbl-delaynote">% umur lilin (0=instan)</span>
           </div>
 
+          <!-- Row G: Price Bounds with Grace Period Note -->
+          <div class="form-row" id="row-bounds">
+            <span class="form-label" style="color:var(--bull-bright);">BUY BOUND:</span>
+            <input type="text" id="inp-bmax" value="ALL" placeholder="'ALL' / harga" oninput="updatePreviewFromForm()">
+            <span class="form-label" style="color:var(--bear-bright); width:90px; text-align:right;">SELL BOUND:</span>
+            <input type="text" id="inp-smin" value="ALL" placeholder="'ALL' / harga" oninput="updatePreviewFromForm()">
+          </div>
+          <div style="font-size: 8px; color: var(--text-med); margin-bottom: 6px;">
+            *Toleransi keluar area: 1.5x TF (wajib masuk area terlebih dahulu)
+          </div>
+
+          <!-- Row H: Buttons -->
           <div style="display:flex; gap: 6px;">
             <button class="btn-submit" id="btn-submit" onclick="submitRule()">+ ADD AUTO TRADER RULE</button>
-            <button class="btn-cancel" id="btn-cancel" onclick="cancelEdit()" style="display:none; width: 120px;">CANCEL</button>
+            <button class="btn-cancel" id="btn-default" onclick="setDefaultForm()" style="width: 90px;">DEFAULT</button>
+            <button class="btn-cancel" id="btn-cancel" onclick="cancelEdit()" style="display:none; width: 90px;">CANCEL</button>
           </div>
         </div>
 
-        <!-- Deck Kanan: Live Simulation & Settings Box -->
+        <!-- Deck Kanan: Live Simulation & Settings Box (Lebih Ramping & Esensial) -->
         <div class="card" style="padding: 10px;">
           <div class="card-title" style="margin-bottom: 6px;">
             <span>ACTIVE SETTINGS & TRAIL SIMULATION</span>
@@ -439,15 +478,19 @@
           <thead>
             <tr>
               <th style="width: 35px;">NO</th>
-              <th style="width: 80px;">SYMBOL</th>
-              <th style="width: 95px;">DIRECTION</th>
-              <th style="width: 85px;">LOT / RISK</th>
-              <th style="width: 75px;">RR</th>
-              <th style="width: 50px;">TF</th>
+              <th style="width: 75px;">SYMBOL</th>
+              <th style="width: 85px;">DIRECTION</th>
+              <th style="width: 140px;">SIGNALS</th>
+              <th style="width: 75px;">LOT/RISK</th>
+              <th style="width: 60px;">RR</th>
+              <th style="width: 45px;">TF</th>
+              <th style="width: 45px;">MAX</th>
+              <th style="width: 45px;">MULT</th>
+              <th style="width: 65px;">DELAY</th>
               <th>PRICE BOUNDS</th>
               <th style="width: 110px;">AUTO TRAIL</th>
-              <th style="width: 75px;">STATUS</th>
-              <th style="width: 95px; text-align: center;">ACTIONS</th>
+              <th style="width: 65px;">STATUS</th>
+              <th style="width: 75px; text-align: center;">ACTIONS</th>
             </tr>
           </thead>
           <tbody id="rule-tbody">
@@ -463,6 +506,11 @@
     let currentDir = 'BOTH';
     let lotMode = 'FIXED';
     let isTrailOn = true;
+    let isDelayClose = false;
+    let sigEng = true;
+    let sigHmr = true;
+    let sigStoch = true;
+    let sigMode = 'ANY'; // 'ANY' or 'COMBO'
     let selectedIndex = 0;
     let editingIndex = -1;
 
@@ -472,11 +520,20 @@
         direction: 'BOTH',
         rr: '2.00',
         tf: 'M5',
+        maxOrd: '1',
+        mult: 1,
+        multiTp: 1,
         lotMode: 'FIXED',
         lotVal: '0.01',
         trailOn: true,
         trailPct: '5.0',
-        atrMult: '2.0',
+        atrMult: '1.60',
+        delayClose: false,
+        delayPct: 30,
+        sigEng: true,
+        sigHmr: true,
+        sigStoch: true,
+        sigMode: 'ANY',
         bMax: 'ALL',
         sMin: 'ALL',
         active: true
@@ -486,11 +543,20 @@
         direction: 'BUY',
         rr: '2.50',
         tf: 'M5',
+        maxOrd: '2',
+        mult: 2,
+        multiTp: 2,
         lotMode: 'RISK',
         lotVal: '1.0',
         trailOn: true,
         trailPct: '5.0',
-        atrMult: '2.0',
+        atrMult: '1.60',
+        delayClose: true,
+        delayPct: 0,
+        sigEng: true,
+        sigHmr: true,
+        sigStoch: false,
+        sigMode: 'ANY',
         bMax: '1.27500',
         sMin: 'ALL',
         active: true
@@ -500,11 +566,20 @@
         direction: 'SELL',
         rr: '1.50',
         tf: 'M15',
+        maxOrd: 'UNL',
+        mult: 1,
+        multiTp: 1,
         lotMode: 'FIXED',
         lotVal: '0.02',
         trailOn: false,
         trailPct: '5.0',
-        atrMult: '2.0',
+        atrMult: '1.60',
+        delayClose: false,
+        delayPct: 30,
+        sigEng: false,
+        sigHmr: true,
+        sigStoch: true,
+        sigMode: 'COMBO',
         bMax: 'ALL',
         sMin: '2650.00',
         active: false
@@ -521,11 +596,20 @@
           direction: currentDir,
           rr: document.getElementById('inp-rr').value || '2.00',
           tf: document.getElementById('inp-tf').options[document.getElementById('inp-tf').selectedIndex].text,
+          maxOrd: document.getElementById('inp-maxord').value || '1',
+          mult: parseInt(document.getElementById('inp-mult').value) || 1,
+          multiTp: parseInt(document.getElementById('inp-multitp').value) || 1,
           lotMode: lotMode,
           lotVal: document.getElementById('inp-lotval').value || '0.01',
           trailOn: isTrailOn,
           trailPct: document.getElementById('inp-trailpct').value || '5.0',
-          atrMult: document.getElementById('inp-atrmult').value || '2.0'
+          atrMult: document.getElementById('inp-atrmult').value || '1.60',
+          delayClose: isDelayClose,
+          delayPct: parseInt(document.getElementById('inp-delaypct').value) || 30,
+          sigEng: sigEng,
+          sigHmr: sigHmr,
+          sigStoch: sigStoch,
+          sigMode: sigMode
         };
         tagText = `[RULE #${editingIndex + 1} EDIT]`;
       } else if (selectedIndex >= 0 && selectedIndex < rules.length) {
@@ -543,34 +627,37 @@
       if (r.direction === 'SELL') dirStr = 'SELL ONLY';
 
       let lotStr = r.lotMode === 'FIXED' ? `${r.lotVal} Lot` : `${r.lotVal}% Risk`;
+      let smStr  = r.sigMode === 'ANY' ? 'ANY (OR)' : 'COMBO (AND)';
 
       const simTerminal = document.getElementById('sim-terminal');
       if (r.trailOn) {
         simTerminal.innerHTML = `
           <div>
             Target: <span class="hl-cyan">${r.symbol}</span> (<span class="hl-gold">${r.tf}</span>) | Mode: <span class="hl-cyan">${dirStr}</span><br>
-            Target Ratio: <span class="hl-cyan">1:${r.rr} RR</span> | Lot: <span class="hl-cyan">${lotStr}</span> | Buffer: <span class="hl-gold">50% ATR(14)</span>
+            Target Ratio: <span class="hl-cyan">1:${r.rr} RR</span> | Lot: <span class="hl-cyan">${lotStr}</span><br>
+            Entry Mult: <span class="hl-gold">${r.mult}x</span> | Multi TP: <span class="hl-gold">${r.multiTp}x tingkat</span> | Sinyal: <span class="hl-cyan">${smStr}</span>
           </div>
           <div style="border-top: 1px dashed var(--border-soft); padding-top: 4px; margin-top: 4px;">
-            🛡️ <strong class="hl-gold">Auto Trail SL (BE)</strong>: Sisa ${r.trailPct}% ke TP &rarr; SL dikunci ke <span class="hl-cyan">BE (Open &plusmn; Spread)</span><br>
-            🚀 <strong class="hl-cyan">Volatility Trail TP</strong>: Jika ATR &ge; <span class="hl-gold">${r.atrMult}x ATR Awal</span> &rarr; TP <span class="hl-cyan">+1x Target</span><br>
-            🔒 <strong class="hl-bull">Profit Lock (Cycle 2+)</strong>: Sisa ${r.trailPct}% ke TP baru &rarr; SL dikunci ke <span class="hl-bull">TP Sebelumnya</span>
+            🛡️ <strong class="hl-gold">Auto Trail BE (Jarak Mandiri)</strong>: Sisa &le; 1.1x EWMA TR &rarr; Kunci <span class="hl-cyan">BE (Open &plusmn; Spread)</span><br>
+            🚀 <strong class="hl-cyan">Trail TP Extension</strong>: RelVol &ge; <span class="hl-gold">${r.atrMult}x EWMA</span> &rarr; TP <span class="hl-cyan">Extend Proporsional</span><br>
+            🔒 <strong class="hl-bull">Trail SL Lock (Cycle 2+)</strong>: Sisa &le; 1.1x ke TP baru &rarr; Kunci ke <span class="hl-bull">TP Sebelumnya</span>
           </div>
-          <div style="color:var(--text-med); font-size:9px; margin-top: 4px;">
-            *Klik baris tabel di bawah untuk mengganti simulasi setting
+          <div style="color:var(--text-med); font-size:8px; margin-top: 4px;">
+            *Multi TP dipantau independen dari TP terdekat | Klik baris rule untuk mengganti preview
           </div>
         `;
       } else {
         simTerminal.innerHTML = `
           <div>
             Target: <span class="hl-cyan">${r.symbol}</span> (<span class="hl-gold">${r.tf}</span>) | Mode: <span class="hl-cyan">${dirStr}</span><br>
-            Target Ratio: <span class="hl-cyan">1:${r.rr} RR</span> | Lot: <span class="hl-cyan">${lotStr}</span> | Buffer: <span class="hl-gold">50% ATR(14)</span>
+            Target Ratio: <span class="hl-cyan">1:${r.rr} RR</span> | Lot: <span class="hl-cyan">${lotStr}</span><br>
+            Entry Mult: <span class="hl-gold">${r.mult}x</span> | Multi TP: <span class="hl-gold">${r.multiTp}x tingkat</span> | Sinyal: <span class="hl-cyan">${smStr}</span>
           </div>
           <div style="border-top: 1px dashed var(--border-soft); padding-top: 4px; margin-top: 4px;">
             🛑 <strong class="hl-bear">Auto Trail Engine: OFF</strong><br>
-            Take Profit & Stop Loss tetap di level awal tanpa pergeseran.
+            Take Profit & Stop Loss tetap di level awal tanpa pergeseran trailing.
           </div>
-          <div style="color:var(--text-med); font-size:9px; margin-top: 4px;">
+          <div style="color:var(--text-med); font-size:8px; margin-top: 4px;">
             *Klik baris tabel di bawah untuk mengganti simulasi setting
           </div>
         `;
@@ -595,9 +682,16 @@
         if (r.direction === 'BUY') dirBadge = `<span style="color:var(--bull-bright)">BUY ONLY</span>`;
         if (r.direction === 'SELL') dirBadge = `<span style="color:var(--bear-bright)">SELL ONLY</span>`;
 
-        let lotTxt = r.lotMode === 'FIXED' ? `${r.lotVal} Lot` : `${r.lotVal}% Risk`;
+        let sigsTxt = '';
+        if (r.sigEng) sigsTxt += '[ENG] ';
+        if (r.sigHmr) sigsTxt += '[HMR/SS] ';
+        if (r.sigStoch) sigsTxt += '[ST+HA] ';
+        sigsTxt += (r.sigMode === 'ANY') ? '[OR]' : '[AND]';
+
+        let lotTxt = r.lotMode === 'FIXED' ? `${r.lotVal}L` : `${r.lotVal}%R`;
         let boundsTxt = `B:${r.bMax} | S:${r.sMin}`;
-        let trailTxt = r.trailOn ? `<span style="color:var(--gold-bright)">ON (${r.trailPct}%, ${r.atrMult}x)</span>` : `<span style="color:var(--text-med)">OFF</span>`;
+        let trailTxt = r.trailOn ? `<span style="color:var(--gold-bright)">ON (EWMA ${r.atrMult}x)</span>` : `<span style="color:var(--text-med)">OFF</span>`;
+        let delayTxt = r.delayClose ? 'TF Close' : `${r.delayPct}%`;
         let statusBadge = r.active ? 
           `<span class="badge-status badge-active" onclick="event.stopPropagation(); toggleRuleStatus(${idx})">ACTIVE</span>` :
           `<span class="badge-status badge-paused" onclick="event.stopPropagation(); toggleRuleStatus(${idx})">PAUSED</span>`;
@@ -608,15 +702,19 @@
           <td>#${idx + 1}</td>
           <td style="color:var(--text-pure); font-weight:800;">${r.symbol}</td>
           <td>${dirBadge}</td>
+          <td style="color:var(--cyan-bright); font-size:9px;">${sigsTxt}</td>
           <td>${lotTxt}</td>
           <td style="color:var(--cyan-bright);">1:${r.rr}</td>
           <td style="color:var(--gold-bright); font-weight:800;">[${r.tf}]</td>
-          <td style="color:var(--text-med); font-size:10px;">${boundsTxt}</td>
+          <td>${r.maxOrd}</td>
+          <td style="color:var(--gold-bright);">${r.mult}x</td>
+          <td>${delayTxt}</td>
+          <td style="color:var(--text-med); font-size:9px;">${boundsTxt}</td>
           <td>${trailTxt}</td>
           <td>${statusBadge}</td>
           <td style="text-align: center;">
             <button class="btn-sm" onclick="event.stopPropagation(); editRule(${idx})">EDIT</button>
-            <button class="btn-sm btn-del" onclick="event.stopPropagation(); deleteRule(${idx})">DEL</button>
+            <button class="btn-sm btn-del" onclick="event.stopPropagation(); deleteRule(${idx})">X</button>
           </td>
         `;
         tbody.appendChild(tr);
@@ -651,14 +749,71 @@
       document.getElementById('btn-both').className = (dir === 'BOTH') ? 'btn-toggle active-both' : 'btn-toggle';
       document.getElementById('btn-buy').className  = (dir === 'BUY') ? 'btn-toggle active-buy' : 'btn-toggle';
       document.getElementById('btn-sell').className = (dir === 'SELL') ? 'btn-toggle active-sell' : 'btn-toggle';
+      
+      const btnHmr = document.getElementById('btn-sig-hmr');
+      if (dir === 'BUY') btnHmr.innerText = '[x] HAMMER';
+      else if (dir === 'SELL') btnHmr.innerText = '[x] SHOOTING';
+      else btnHmr.innerText = '[x] HMR/SS';
+      
       updatePreviewFromForm();
+    }
+
+    function toggleSig(which) {
+      if (which === 'ENG') {
+        sigEng = !sigEng;
+        if (sigMode === 'COMBO' && sigEng && sigHmr) sigHmr = false;
+      }
+      if (which === 'HMR') {
+        sigHmr = !sigHmr;
+        if (sigMode === 'COMBO' && sigHmr && sigEng) sigEng = false;
+      }
+      if (which === 'STOCH') {
+        sigStoch = !sigStoch;
+      }
+      refreshSigButtons();
+      updatePreviewFromForm();
+    }
+
+    function toggleSigMode() {
+      if (sigMode === 'ANY') {
+        sigMode = 'COMBO';
+        sigEng = true;
+        sigHmr = false;
+        sigStoch = true;
+      } else {
+        sigMode = 'ANY';
+        sigEng = true;
+        sigHmr = true;
+        sigStoch = true;
+      }
+      refreshSigButtons();
+      updatePreviewFromForm();
+    }
+
+    function refreshSigButtons() {
+      const btnEng = document.getElementById('btn-sig-eng');
+      const btnHmr = document.getElementById('btn-sig-hmr');
+      const btnStoch = document.getElementById('btn-sig-stoch');
+      const btnMode = document.getElementById('btn-sig-mode');
+
+      btnEng.className = sigEng ? 'btn-toggle active-both' : 'btn-toggle';
+      btnHmr.className = sigHmr ? 'btn-toggle active-gold' : 'btn-toggle';
+      btnStoch.className = sigStoch ? 'btn-toggle active-buy' : 'btn-toggle';
+
+      if (sigMode === 'COMBO') {
+        btnMode.innerText = 'MODE: COMBO (AND)';
+        btnMode.className = 'btn-toggle active-gold';
+      } else {
+        btnMode.innerText = 'MODE: ANY (OR)';
+        btnMode.className = 'btn-toggle active-both';
+      }
     }
 
     function toggleLotMode() {
       const btn = document.getElementById('btn-lotmode');
       if (lotMode === 'FIXED') {
         lotMode = 'RISK';
-        btn.innerText = '% RISK / SL';
+        btn.innerText = '% RISK';
         btn.className = 'btn-toggle active-buy';
       } else {
         lotMode = 'FIXED';
@@ -681,6 +836,28 @@
       updatePreviewFromForm();
     }
 
+    function toggleDelayMode() {
+      isDelayClose = !isDelayClose;
+      const btn = document.getElementById('btn-delaymode');
+      const inp = document.getElementById('inp-delaypct');
+      const lbl = document.getElementById('lbl-delaypct');
+      const note = document.getElementById('lbl-delaynote');
+      if (isDelayClose) {
+        btn.innerText = 'TF CLOSE';
+        btn.className = 'btn-toggle active-gold';
+        inp.style.display = 'none';
+        lbl.style.display = 'none';
+        note.style.display = 'none';
+      } else {
+        btn.innerText = '% TF PROGRESS';
+        btn.className = 'btn-toggle active-both';
+        inp.style.display = 'block';
+        lbl.style.display = 'block';
+        note.style.display = 'inline';
+      }
+      updatePreviewFromForm();
+    }
+
     function editRule(idx) {
       editingIndex = idx;
       selectedIndex = idx;
@@ -688,15 +865,44 @@
       document.getElementById('inp-sym').value = r.symbol;
       setDir(r.direction);
       document.getElementById('inp-rr').value = r.rr;
+      document.getElementById('inp-maxord').value = r.maxOrd;
+      document.getElementById('inp-mult').value = r.mult;
+      document.getElementById('inp-multitp').value = r.multiTp;
       document.getElementById('inp-lotval').value = r.lotVal;
       document.getElementById('inp-trailpct').value = r.trailPct;
       document.getElementById('inp-atrmult').value = r.atrMult;
+      document.getElementById('inp-delaypct').value = r.delayPct;
       document.getElementById('inp-bmax').value = r.bMax;
       document.getElementById('inp-smin').value = r.sMin;
 
+      sigEng = r.sigEng;
+      sigHmr = r.sigHmr;
+      sigStoch = r.sigStoch;
+      sigMode = r.sigMode;
+      refreshSigButtons();
+
+      isDelayClose = r.delayClose;
+      const btnDelay = document.getElementById('btn-delaymode');
+      const inpDelay = document.getElementById('inp-delaypct');
+      const lblDelay = document.getElementById('lbl-delaypct');
+      const noteDelay = document.getElementById('lbl-delaynote');
+      if (isDelayClose) {
+        btnDelay.innerText = 'TF CLOSE';
+        btnDelay.className = 'btn-toggle active-gold';
+        inpDelay.style.display = 'none';
+        lblDelay.style.display = 'none';
+        noteDelay.style.display = 'none';
+      } else {
+        btnDelay.innerText = '% TF PROGRESS';
+        btnDelay.className = 'btn-toggle active-both';
+        inpDelay.style.display = 'block';
+        lblDelay.style.display = 'block';
+        noteDelay.style.display = 'inline';
+      }
+
       lotMode = r.lotMode;
       const btnLot = document.getElementById('btn-lotmode');
-      btnLot.innerText = lotMode === 'FIXED' ? 'FIXED LOT' : '% RISK / SL';
+      btnLot.innerText = lotMode === 'FIXED' ? 'FIXED LOT' : '% RISK';
       btnLot.className = lotMode === 'FIXED' ? 'btn-toggle active-both' : 'btn-toggle active-buy';
 
       isTrailOn = r.trailOn;
@@ -728,13 +934,59 @@
       renderTable();
     }
 
+    function setDefaultForm() {
+      document.getElementById('inp-sym').value = 'EURUSD';
+      setDir('BOTH');
+      document.getElementById('inp-rr').value = '2.00';
+      document.getElementById('inp-tf').value = '5';
+      document.getElementById('inp-maxord').value = '1';
+      document.getElementById('inp-mult').value = '1';
+      document.getElementById('inp-multitp').value = '1';
+      document.getElementById('inp-lotval').value = '0.01';
+      document.getElementById('inp-trailpct').value = '5.0';
+      document.getElementById('inp-atrmult').value = '1.60';
+      document.getElementById('inp-delaypct').value = '30';
+      document.getElementById('inp-bmax').value = 'ALL';
+      document.getElementById('inp-smin').value = 'ALL';
+      
+      sigEng = true;
+      sigHmr = true;
+      sigStoch = true;
+      sigMode = 'ANY';
+      refreshSigButtons();
+
+      isDelayClose = false;
+      const btnDelay = document.getElementById('btn-delaymode');
+      btnDelay.innerText = '% TF PROGRESS';
+      btnDelay.className = 'btn-toggle active-both';
+      document.getElementById('inp-delaypct').style.display = 'block';
+      document.getElementById('lbl-delaypct').style.display = 'block';
+      document.getElementById('lbl-delaynote').style.display = 'inline';
+
+      lotMode = 'FIXED';
+      const btnLot = document.getElementById('btn-lotmode');
+      btnLot.innerText = 'FIXED LOT';
+      btnLot.className = 'btn-toggle active-both';
+
+      isTrailOn = true;
+      const btnTrail = document.getElementById('btn-trail');
+      btnTrail.innerText = 'ON';
+      btnTrail.className = 'btn-toggle active-both';
+
+      cancelEdit();
+    }
+
     function submitRule() {
       const sym = document.getElementById('inp-sym').value.trim().toUpperCase() || 'EURUSD';
       const rr = document.getElementById('inp-rr').value.trim() || '2.00';
       const tfText = document.getElementById('inp-tf').options[document.getElementById('inp-tf').selectedIndex].text;
+      const maxOrd = document.getElementById('inp-maxord').value.trim() || '1';
+      const mult = parseInt(document.getElementById('inp-mult').value) || 1;
+      const multiTp = parseInt(document.getElementById('inp-multitp').value) || 1;
       const lotVal = document.getElementById('inp-lotval').value.trim() || '0.01';
       const trailPct = document.getElementById('inp-trailpct').value.trim() || '5.0';
-      const atrMult = document.getElementById('inp-atrmult').value.trim() || '2.0';
+      const atrMult = document.getElementById('inp-atrmult').value.trim() || '1.60';
+      const delayPct = parseInt(document.getElementById('inp-delaypct').value) || 30;
       const bMax = document.getElementById('inp-bmax').value.trim() || 'ALL';
       const sMin = document.getElementById('inp-smin').value.trim() || 'ALL';
 
@@ -743,11 +995,20 @@
         direction: currentDir,
         rr: parseFloat(rr).toFixed(2),
         tf: tfText,
+        maxOrd: maxOrd,
+        mult: mult,
+        multiTp: multiTp,
         lotMode: lotMode,
         lotVal: lotVal,
         trailOn: isTrailOn,
         trailPct: trailPct,
         atrMult: atrMult,
+        delayClose: isDelayClose,
+        delayPct: delayPct,
+        sigEng: sigEng,
+        sigHmr: sigHmr,
+        sigStoch: sigStoch,
+        sigMode: sigMode,
         bMax: bMax,
         sMin: sMin,
         active: true
@@ -781,6 +1042,7 @@
     }
 
     // Init
+    refreshSigButtons();
     renderTable();
   </script>
 </body>

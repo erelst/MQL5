@@ -1,6 +1,6 @@
-# MultiRule Auto Trader (EA 2) - Multi-Rule Realtime Tick Engine
+# MultiRule Auto Trader (EA 2) - Multi-Rule Realtime Reversal Engine
 
-Expert Advisor MetaTrader 5 (MQL5) untuk eksekusi otomatis pola breakout pada level tick realtime, dilengkapi **Sistem Multi-Rule Auto Trader**, manajemen resiko dinamis (Risk-to-Reward), serta mesin **Auto Trail SL (BE)** dan **Volatility Trail TP**.
+Expert Advisor MetaTrader 5 (MQL5) untuk eksekusi otomatis pola pembalikan arah (*reversal*) pada level tick realtime, dilengkapi **Sistem Multi-Rule Auto Trader**, multi-sinyal (*Engulfing, Hammer, Shooting Star, Stoch+HA*), **Combo Mode (OR/AND)**, toleransi *Price Bound Grace Period* (1.5x TF), persentase umur lilin (*% TF Delay*), manajemen resiko dinamis, Multi Take Profit (Multi TP), serta mesin **EWMA True Range Auto Trail BE & Volatility TP Extend**.
 
 ---
 
@@ -12,161 +12,54 @@ Berbeda dengan EA konvensional yang hanya memiliki satu pasang pengaturan, Multi
 - **Kombinasi Skenario pada Simbol yang Sama**:
   - *Skenario A*: Buy EURUSD dengan lot kecil (0.01) saat harga murah `< 1.0820` (RR 1:2.0).
   - *Skenario B*: Sell EURUSD dengan lot besar (0.05) saat harga jenuh `> 1.0950` (RR 1:3.0).
-- **Tabel Daftar Aturan**: Menampilkan simbol, arah, lot/risk %, rasio RR, timeframe, Max Orders, filter harga, status trailing, status aktif (`ACTIVE` / `PAUSED`), serta tombol **`EDIT`** dan **`DEL`**.
+- **Tabel Daftar Aturan**: Menampilkan simbol, arah, kombinasi sinyal `[ENG] [HMR/SS] [ST+HA] [OR/AND]`, lot/risk %, rasio RR, timeframe, Max Orders, filter harga, status trailing EWMA, status aktif (`ACTIVE` / `PAUSED`), serta tombol **`EDIT`** dan **`DEL`**.
 - **Mode Edit Cepat & Persistent Form**: Mengklik `EDIT` memuat nilai rule ke form atas. Setelah menekan Add/Update, form **tidak ter-reset** sehingga memudahkan input beruntun. Tombol **`DEFAULT`** disediakan untuk mengembalikan form ke setelan awal.
 
 ---
 
-### 2. Flexible Price Bounds & Max Orders Control
+### 2. Multi-Sinyal Reversal & Combo Mode (OR vs AND)
+
+Tersedia 3 kelompok sinyal pembalikan arah yang dapat dipilih secara fleksibel:
+1. **`[ENG]` Strong Engulfing Reversal**: Lilin pembalik menembus dan menutupi lilin sebelumnya dengan body yang lebih dominan.
+2. **`[HMR/SS]` Strong Hammer & Shooting Star Reversal**:
+   - **Strong Hammer (BUY):** Ekor bawah $\ge 3\times$ body, ekor atas $\le 0.8\times$ body, total rentang lilin lebih panjang dari lilin sebelumnya. SL dipasang di Low $- (50\% \text{ ATR})$.
+   - **Strong Shooting Star (SELL):** Ekor atas $\ge 3\times$ body, ekor bawah $\le 0.8\times$ body, total rentang lilin lebih panjang dari lilin sebelumnya. SL dipasang di High $+ (50\% \text{ ATR}) + \text{Spread}$.
+3. **`[ST+HA]` Stochastic + Heikin Ashi Momentum Reversal**:
+   - BUY: $\%K < 20$ (oversold) dan memantul naik ($\%K > \%K[1]$) didukung Heikin Ashi mengecil atau berubah warna hijau.
+   - SELL: $\%K > 80$ (overbought) dan memantul turun ($\%K < \%K[1]$) didukung Heikin Ashi mengecil atau berubah warna merah.
+
+**Mode Sinyal:**
+- **ANY (OR) - Default:** Cukup salah satu dari sinyal yang dicentang valid untuk memicu eksekusi order.
+- **COMBO (AND):** Seluruh sinyal yang dicentang harus valid secara bersamaan. UI otomatis melakukan proteksi *mutual exclusion* (mencegah pemilihan Engulfing dan Hammer/SS secara simultan karena lilin fisik tidak bisa menjadi keduanya).
+
+---
+
+### 3. Flexible Price Bounds & Grace Period (Toleransi 1.5x TF)
+
 - **Filter Harga Fleksibel (`<`, `>`, `<=`, `>=`, Rentang `Min-Max`)**:
-  - Mendukung operator pembanding secara langsung (cth: `< 1.0850`, `<= 1.0820`, `>= 1.0910`, `> 1.0900`).
-  - Mendukung format rentang harga (cth: `4040-4078`). Urutan **bebas dibolak-balik** — `4078-4040` sama dengan `4040-4078`. Batas inklusif: `4040` dan `4078` keduanya lolos.
-  - **Strict Validation**: Angka mentah tanpa operator atau tanpa rentang akan ditolak dengan *Alert* peringatan.
-  - **Dynamic Form**: Kolom Price Bounds menyesuaikan otomatis (jika `BUY ONLY` hanya tampil Buy Bound, jika `SELL ONLY` hanya tampil Sell Bound).
-- **Max Orders / Batas Open Order**:
-  - `1` (Default): Rule membuka 1x order, lalu otomatis berstatus **`PAUSED`** setelah tereksekusi.
-  - `UNL` / `0`: Tanpa batas (*unlimited*), terus aktif membuka order setiap kali pola breakout valid muncul.
-
-#### MAX ORDER vs ENTRY MULTIPLIER (Sering Tertukar)
-
-Kedua angka ini berbeda peran dan sering salah dipahami:
-
-| Parameter | Arti | Contoh |
-|---|---|---|
-| **MAX ORDER** | Jumlah **siklus entry** sebelum rule auto-pause | `2` = boleh entry 2 kali, lalu `PAUSED` |
-| **ENTRY MULTIPLIER** | Jumlah **posisi per siklus entry** | `3` = sekali sinyal buka 3 posisi |
-
-| MAX | MULT | Hasil |
-|---|---|---|
-| `1` | `3` | 3 posisi dalam 1 siklus, lalu pause |
-| `2` | `1` | 2 posisi dalam 2 siklus, lalu pause |
-| `2` | `3` | 6 posisi (3 per siklus), lalu pause |
-| `UNL` | berapa pun | Tanpa batas siklus |
-
-**Siklus berjalan berurutan (sequential)**: siklus berikutnya **tidak** akan dibuka selama masih ada posisi terbuka dari siklus sebelumnya. Baru setelah semua posisi siklus itu tertutup, siklus berikutnya boleh jalan — sampai kuota MAX ORDER habis lalu rule `PAUSED`. Jadi dengan MAX `3` dan MULT `2`, urutannya: buka 2 → tunggu keduanya tutup → buka 2 → tunggu → buka 2 → pause.
-
-> Catatan: posisi dihitung berdasarkan **simbol**, karena Magic Number dipakai bersama oleh semua rule. Bila Anda membuat dua rule pada simbol yang sama, keduanya akan saling menunggu. Trade manual tidak terpengaruh — posisinya bermagic `0`, sedangkan penghitungan hanya mencakup magic EA ini.
-
-**Aturan penting saat kuota terbatas**: bila MAX ORDER tersisa lebih sedikit daripada jumlah candidate timeframe yang valid, **M5 selalu diambil lebih dulu** daripada M1. Rule tidak akan "memakai" kuotanya untuk sinyal M1 lalu melewatkan sinyal M5 pada tick yang sama.
+  - Mendukung operator pembanding langsung (cth: `< 1.0850`, `<= 1.0820`, `>= 1.0910`, `> 1.0900`).
+  - Mendukung format rentang harga bolak-balik (cth: `4040-4078` sama dengan `4078-4040`).
+- **Grace Period (1.5x Timeframe):**
+  - Jika harga sempat keluar dari area bound, order **masih diperbolehkan** selama durasi $1.5\times$ TF belum habis.
+  - Syarat mutlak: Harga **harus sudah pernah masuk** ke dalam area bound terlebih dahulu agar timer toleransi ini aktif.
+  - Jika harga kembali masuk ke dalam area, timer toleransi di-reset ke awal.
 
 ---
 
-#### Logika Dual-Timeframe (M5 + M1)
+### 4. Entry Delay: Persentase Umur Lilin (`% TF Progress`) vs `TF Close`
 
-Rule **M5** menerima sinyal dari **M5** dan **M1**, dengan **M5 diprioritaskan**. Rule **M1 tetap eksklusif M1**, dan TF lain sepenuhnya eksklusif. Selain itu, ATR untuk rule **M1 dipinjam dari M5 lalu dikali 0.5** agar buffer SL tidak terlalu rapat.
-
-Detail lengkap (termasuk alasan, slot state per-TF, dan versioning file state) ada di [`DUAL_TIMEFRAME.md`](../DUAL_TIMEFRAME.md).
-
----
-
-### 3. Auto Trail SL (BE) & Volatility Trail TP Engine
-
-#### 3.1 Mekanisme Trailing yang Ada
-
-1. **Auto Trail SL ke BE (Break-Even)**:
-   - Saat profit posisi telah menempuh perjalanan hingga sisa persentase menuju TP (default sisa 5% TP), Stop Loss otomatis dipindahkan ke harga `Open ± Spread`.
-2. **Volatility Trail TP Extension**:
-   - Jika ATR Realtime saat mendekati target mencapai $\ge 2\times$ ATR acuan saat open, TP otomatis diperpanjang sejauh $+1\times$ target awal.
-3. **Penguncian Profit Bertingkat (Cycle 2+)**:
-   - Saat harga mendekati target TP baru yang diperpanjang, SL otomatis dikunci di level harga TP sebelumnya.
-
-#### 3.2 Perbaikan Mekanisme Trailing
-
-Untuk mencegah aktivasi trail yang terlalu dini (misal: volatilitas naik tetapi masih jauh dari TP), logika pada `ProcessAutoTrailSLTP()` telah diperbaiki. Berikut adalah urutan yang benar:
-
-1. **ATR dipantau secara realtime dan terpisah.** Nilai ATR dihitung setiap tick, dan keputusan apakah ATR "explode" (ATR sekarang $\ge$ ATR awal × multiplier) disimpan sebagai penanda. Penanda ini tidak langsung mengeksekusi apa pun.
-2. **ATR explode tanpa cek jarak ke TP = tidak mengeksekusi.** Jika ATR explode terjadi tapi harga masih jauh dari TP, tidak ada TP yang diperpanjang dan tidak ada SL yang digeser. Harga harus terlebih dahulu masuk ke zona 5% dari TP.
-3. **Harga $\le$ 5% dari TP = trail pertama.** Saat kondisi ini terpenuhi, SL dipindahkan ke Break-Even (`Open ± Spread`). Pada saat yang sama, jika ATR sedang explode dan memenuhi syarat jarak TP, TP juga diperpanjang sekali sebagai ekstensi awal. Trail pertama selalu menghasilkan SL di BE, tanpa memandang apakah TP ikut diperpanjang atau tidak.
-4. **Trail SL kedua dan seterusnya (Cycle $\ge$ 1).** Trail kedua hanya aktif setelah TP pernah diperpanjang setidaknya satu kali. Saat harga kembali mendekati TP (masih $\le$ 5%) dan trail_cycle $\ge$ 1, SL dipindahkan ke Previous TP (level TP sebelum perpanjangan terakhir) dan TP diperpanjang lagi sebesar satu jarak TP awal. Pola ini berulang setiap kali trail_cycle naik.
-
-Dengan perbaikan ini, EA tidak akan memperpanjang TP atau menarik SL ke BE saat masih berada di area entry. ATR explode tetap digunakan sebagai pemicu volatilitas, tapi eksekusi trail tertunda sampai harga memenuhi syarat jarak ke TP.
-
-#### Prilaku Saat Rule Auto-Pause (MAX ORDER Tercapai)
-
-Auto-pause **hanya menghentikan pembukaan order baru**. Semua mekanisme lain tetap berjalan:
-
-| Mekanisme | Saat rule `PAUSED` |
-|---|---|
-| Auto Trail SL & TP Extension | **Tetap jalan** setiap tick |
-| Penguncian profit bertingkat | **Tetap jalan** |
-| Radar alert (EA terpisah) | **Tetap jalan** |
-| BE engine (Trade Manager) | **Tetap jalan** |
-| Pembukaan order baru | **Berhenti** |
-
-Hal ini karena `ProcessAutoTrailSLTP()` dipanggil di `OnTick()` **sebelum** loop rules, dan tidak pernah membaca `max_orders` maupun `orders_opened_count`. Ini disengaja: posisi yang baru dibuka justru paling butuh proteksi BE setelah rule berhenti membuka posisi.
-
-**Saat Anda me-reaktivasi rule** (`ACTIVE` kembali):
-
-- Counter `orders_opened_count` **di-reset ke 0** → rule boleh memulai siklus entry baru.
-- Posisi **lama** tetap terlacak di `g_tracking_list[]`, dan tetap memakai parameter trail **saat posisi itu dibuka** (trigger %, multiplier ATR, ATR acuan).
-- Posisi **baru** otomatis ikut terlacak dan memakai setting trail terbaru.
-
-> Konsekuensi: mengubah setting Auto Trail lalu me-reaktivasi rule **tidak** mengubah perilaku trail pada posisi yang sudah terbuka — hanya posisi baru yang memakai setting baru.
-
-**Dua batasan yang perlu diketahui:**
-
-- **Master Power OFF ≠ auto-pause.** Master power OFF menghentikan trail juga, karena `if(!g_master_power_enabled) return;` berada sebelum pemanggilan trail engine.
-- **Posisi tanpa TP tidak di-trail.** Trail dilewati bila `TakeProfit <= 0`, karena perhitungan jarak trailing berbasis sisa jarak menuju TP.
+- **Mode `% TF Progress` (Default 30%):** Lilin harus sudah berjalan minimal $N\%$ dari total durasinya untuk memfilter noise di awal candle baru. Jika sinyal terdeteksi saat umur lilin sudah melewati batas ini, sinyal langsung dieksekusi seketika.
+- **Mode `TF Close`:** Sinyal divalidasi pada lilin yang baru saja tertutup (bar index 1).
 
 ---
 
-### 4. Notifikasi Realtime Spesifik Auto Trader
-EA mengirimkan alert pop-up dan push notifikasi ke HP Anda pada momen penting eksekusi:
-- **`[AUTO TRADER - ORDER OPENED]`**: Muncul saat posisi Buy/Sell berhasil dieksekusi dengan info lot, harga ask/bid, SL awal, TP awal, rasio RR, dan nilai 100% ATR acuan.
-- **`[AUTO TRADER - TRAIL SL BE]`**: Muncul saat harga mencapai sisa persentase target dan Stop Loss berhasil dipindahkan ke Break-Even (bebas risiko).
-- **`[AUTO TRADER - TRAIL TP EXTENDED]`**: Muncul saat volatilitas pasar meledak ($\ge$ Multiplier ATR) dan target Take Profit berhasil diperpanjang +1x target.
-- **`[AUTO TRADER - TRAIL SL LOCKED]`**: Muncul saat harga mendekati target baru dan Stop Loss berhasil dikunci di harga Take Profit sebelumnya.
+### 5. Arsitektur Trailing EWMA True Range (BE, TP Extend, SL Lock)
 
----
-
-### 5. State Persistence (Pengaturan & List Rule Tidak Hilang)
-Sistem penyimpanan persisten otomatis (`.bin`) menjaga data Multi-Rule Auto Trader Anda tetap utuh:
-- **Tahan Ganti Timeframe & Restart MT5**: Seluruh aturan Multi-Rule di tabel, status aktif/paused tiap rule, saklar master power, dan posisi trailing otomatis tersimpan.
-- **Auto-Restore saat Re-Attach**: Saat EA ditutup atau dipasang ulang (*re-attach*), EA otomatis membaca data penyimpanan dan mengembalikan seluruh daftar aturan persis seperti sebelum ditutup.
-
----
-
-### 6. Multi Take Profit (Multi TP)
-
-Multi TP adalah fitur yang memungkinkan satu entry dipisah menjadi beberapa bagian entri, masing-masing dengan tingkat Take Profit berbeda. Tujuannya adalah membuat profit booking bertingkat.
-
-Aturan dasar Multi TP:
-
-- TP pertama memakai jarak TP berdasarkan rasio Risk to Reward (RR) yang ditentukan.
-- TP kedua memakai dua kali jarak TP dari RR.
-- Seterusnya, tingkat ke-n memiliki jarak TP sebesar n kali jarak TP dasar dari RR.
-
-Multi TP dipengaruhi oleh jumlah lot entri dan entry multiplier. Ini informasi penting yang perlu dimasukkan ke dalam dokumentasi: dua pengatur ini bersama-sama menentukan hasil akhir pembagian TP.
-
-Contoh:
-
-- RR 1:1, lot entri 0,05, entry multiplier 1, dan Multi TP diisi 2, maka lot entri dibagi menjadi dua bagian. Karena 0,05 tidak bisa dibagi rata menjadi dua lot 0,025, maka split memakai lot step dan sisanya masuk ke TP terendah. Hasil akhir: TP satu di 0,03 dan TP dua di 0,02.
-- RR 1:1, lot entri 0,05, entry multiplier 3, dan Multi TP diisi 2, maka tidak perlu membagi lagi. Dua entri memakai TP dari RR 1:1 dan satu entri memakai TP dari RR 1:2.
-
-Logika distribusi:
-
-- Jika jumlah posisi lebih besar atau sama dengan jumlah TP, sisa order ditempatkan di TP terendah.
-- Jika jumlah posisi lebih kecil, satu unit entri dibagi menjadi beberapa bagian.
-- Jika permintaan TP melebihi kapasitas lot, tingkat aktif dipotong secara memadai.
-
-Dalam implementasi `MultiRuleAutoTrader.mq5`, dua pengatur berikut bekerja bersama:
-
-- `InpMultiTP` (default `1`): jumlah tingkat TP. Nilai `1` berarti single TP tanpa pembagian. Nilai `2` berarti TP satu dan TP dua.
-- `InpEntryMultiplier` (default `1`): jumlah entri per trigger.
-
-Alur eksekusi pada EA:
-
-- Jika entry multiplier lebih besar atau sama dengan Multi TP, entri diberikan ke tingkat TP secara proporsional. Sisa entri ditempatkan di TP terendah.
-- Jika entry multiplier lebih kecil dari Multi TP, satu pool lot entri dibagi rata ke setiap tingkat TP.
-- Multi TP bernilai `1` tetap menghasilkan satu TP saja, sehingga perilaku lama tidak berubah.
-
-### 7. Tampilan Form dan Preview
-
-- Form disusun dengan kategori yang jelas agar lebih mudah dipahami.
-- Preview dan simulasi menampilkan seluruh informasi penting, masing-masing dikelompokkan per kategori.
-- Informasi yang sebelumnya tidak berguna diganti dengan tampilan bertingkat yang mudah dipahami.
-- Form sekarang menampilkan field utama dengan label lengkap, tidak ambigu. Field Entri Multiplier ditulis lengkap sebagai `ENTRI MULTIPLIER` dan field Multi TP ditulis `MULTI TP`.
-- Preview menampilkan baris info utama, lalu blok trailing, lengkap dengan nilai Entri Multiplier dan jumlah tingkat Multi TP yang dipakai.
+Menggantikan ATR lambat dengan rasio volatilitas *Relative Volatility* ($\text{RelVol} = \text{CurrTR} / \text{EWMA\_TR}$):
+1. **Trail BE (Pengamanan Modal Mandiri):** Murni berbasis jarak tanpa memerlukan lonjakan volatilitas. Begitu harga mendekati TP ($\le 1.1\times$ EWMA TR) atau mencapai target running profit, SL dikunci ke Break-Even (`Open ± Spread`).
+2. **Trail TP Extension (Perpanjangan Target Selektif):** Wajib memenuhi **dua syarat sekaligus**: sisa jarak menuju TP $\le 1.1\times$ EWMA TR **DAN** terjadi lonjakan volatilitas pasar nyata ($\text{RelVol} \ge 1.60\times$).
+3. **Trail SL Lock (Penguncian Bertingkat):** Hanya aktif pada siklus berikutnya setelah TP berhasil di-extend, mengunci SL ke level TP sebelumnya.
+4. **Multi TP Independen:** Setiap tiket posisi hasil pembagian Multi TP dipantau trailing-nya secara independen, difokuskan dari tingkat TP terdekat.
 
 ---
 
@@ -176,15 +69,25 @@ Alur eksekusi pada EA:
 |---|---|---|
 | `InpTradeDirection` | `Buy and Sell` | Default arah order saat menambah rule baru |
 | `InpRiskRewardRatio` | `2.0` | Default rasio Risk to Reward (1:RR) |
-| `InpEnableTrail` | `true` | Default aktifkan Auto Trail SL & TP |
-| `InpTrailTriggerPct` | `5.0` | Sisa jarak menuju TP untuk memicu trailing (%) |
-| `InpATRMultiplier` | `2.0` | Syarat lonjakan ATR realtime untuk perpanjangan TP ($\ge$ 2.0x) |
-| `InpMaxOpenTrades` | `1` | Maksimal posisi terbuka per simbol (0 = tanpa batas) |
-| `InpMultiTP` | `1` | Default jumlah tingkat TP (Multi TP; `1` = single TP) |
-| `InpLotMode` | `LOT_FIXED` | Mode lot: `LOT_FIXED` atau `LOT_RISK_PCT` |
+| `InpMaxOrders` | `1` | Maksimal siklus entri (1 = 1x open lalu paused, 0 = Unlimited) |
+| `InpEntryMultiplier` | `1` | Jumlah posisi yang dibuka serentak per sinyal |
+| `InpMultiTP` | `1` | Jumlah tingkat Take Profit bertingkat (1 = single TP) |
+| `InpDelayTFPct` | `30` | Delay progres umur lilin (% TF Progress, 0..99) |
+| `InpDelayIsTfClose` | `false` | Mode delay: `false` = % TF Progress, `true` = TF Close |
+| `InpDefaultSigEng` | `true` | Default aktifkan Strong Engulfing Reversal |
+| `InpDefaultSigHmrSS` | `true` | Default aktifkan Strong Hammer / Shooting Star |
+| `InpDefaultSigStochHA` | `true` | Default aktifkan Stochastic + Heikin Ashi |
+| `InpDefaultSigMode` | `SIGNAL_MODE_ANY` | Default mode sinyal: `ANY (OR)` atau `COMBO (AND)` |
+| `InpEnableTrail` | `true` | Default aktifkan Trailing Engine EWMA TR |
+| `InpTrailBEMode` | `TRAIL_BE_PROXIMITY` | Mode Trail BE: Proximity TP atau Running Profit |
+| `InpRelVolThreshold` | `1.60` | Ambang batas lonjakan volatilitas untuk TP Extend ($\ge 1.60\times$) |
+| `InpMaxDistATR` | `1.10` | Jarak kedekatan ke TP untuk pemicu trailing (satuan EWMA TR) |
+| `InpExtendFactor` | `0.70` | Faktor pengali perpanjangan TP |
+| `InpMaxExtendATR` | `1.80` | Batas maksimal ekstensi TP (satuan ATR) |
+| `InpLotMode` | `LOT_RISK_PCT` | Mode lot: `LOT_FIXED` atau `LOT_RISK_PCT` |
 | `InpFixedLot` | `0.01` | Ukuran lot jika mode Fixed Lot |
 | `InpRiskPercent` | `1.0` | Risiko % saldo jika mode Risk Percentage |
-| `InpTimeframe` | `PERIOD_M5` | Default timeframe deteksi pola breakout |
+| `InpTimeframe` | `PERIOD_M5` | Default timeframe deteksi sinyal pembalikan |
 | `InpATRPeriod` | `14` | Periode ATR untuk kalkulasi buffer SL |
 | `InpEnablePushAlerts` | `true` | Kirim notifikasi push ke aplikasi MT5 mobile di HP |
 | `InpEnableSoundAlerts` | `true` | Bunyikan suara / pop-up alert di terminal MT5 |
@@ -194,4 +97,4 @@ Alur eksekusi pada EA:
 ---
 
 ## Preview Visual Dashboard
-Buka file `MultiRuleAutoTrader_preview.html` di browser Anda untuk melihat simulasi visual cyberpunk neon pitch-black dan interaksi penambahan/pengeditan rule.
+Buka file `MultiRuleAutoTrader_preview.html` di browser Anda untuk melihat simulasi visual cyberpunk neon hitam pekat dengan form berukuran longgar (540px), pemilih sinyal dinamis, dan pemantauan trailing EWMA TR.

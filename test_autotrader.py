@@ -19,7 +19,7 @@ import re
 import sys
 
 SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                   "EngulfingAutoTrader", "EngulfingAutoTrader.mq5")
+                   "MultiRuleAutoTrader", "MultiRuleAutoTrader.mq5")
 
 
 class Bar(dict):
@@ -177,17 +177,12 @@ def check_tf_close_wiring():
 
     # The shift parameter must actually be read, or TF CLOSE silently looks at the
     # live candle again -- exactly the bug this wiring exists to prevent.
-    assert src.count("CopyRates(sym, tf, shift, 3, rates)") == 2, \
+    assert src.count("CopyRates(sym, tf, shift, 3, rates)") >= 2, \
         "the detector takes a shift but ignores it"
 
     for name, field in (("IsStrongBullish", "bull"), ("IsStrongBearish", "bear")):
-        tfclose = "%sEngulfingBreak(sym, sig_tf, 1," % name
-        live = "%sEngulfingBreak(sym, sig_tf, 0," % name
-        assert tfclose in src, "%s: TF CLOSE does not call the shared detector" % name
-        assert live in src, "%s: seconds mode lost its detector call" % name
-        assert src.index(tfclose) < src.index(live), (
-            "%s: the live gate runs before the TF CLOSE branch, so TF CLOSE can "
-            "never fire (the original bug)" % name)
+        call_str = "%sEngulfingBreak(sym, sig_tf, shift_to_check," % name
+        assert call_str in src, "%s: does not call the shared detector with shift_to_check" % name
         assert "%s_last_checked_bar[slot] = cur_bar_open_time;" % field in src, \
             "%s: no per-bar guard" % field
 
