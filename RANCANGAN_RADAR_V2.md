@@ -110,3 +110,19 @@ struct SRadarSymbol
   - Mode Delay: `% TF PROGRESS` (dengan input nilai persentase 0-99%) atau `TF CLOSE`.
   - Filter Price Bounds: Tetap mendukung operator `<, >, <=, >=`, rentang `Min-Max`, atau `ALL`.
   - **Persistensi Form Input (`CaptureRadarFormInputs`):** Menangkap seluruh input teks simbol, TF, batas harga, dan delay sebelum tombol toggle diklik, sehingga teks yang sedang diketik tidak terhapus saat berpindah mode sinyal atau delay.
+
+---
+
+## 6. Auto Trail Engine SL & TP (EWMA True Range) di Order Manager
+
+- **Arsitektur Trailing Terintegrasi:**
+  - `TradeManagerReversalRadar` kini menyematkan mesin EWMA True Range ($\lambda = 0.90$, 30 bar acuan) yang identik dengan `MultiRuleAutoTrader`.
+  - **Trail BE (Break-Even):** Bergerak saat sisa jarak ke target TP awal $\le 30\%$ (`InpTrailBERemDistPct = 0.30`). Mengunci SL ke `Open + Spread` (Buy) atau `Open - Spread` (Sell).
+  - **Trail TP Extension:** Perpanjangan TP dinamis saat proximity ke TP $\le 1.10\text{TR}$ dan lonjakan volatilitas relatif $\text{RelVol} \ge 1.60\times$.
+  - **Trail SL Lock ke Previous TP:** Mengunci SL ke level TP sebelumnya pada siklus perpanjangan ke-2 dan seterusnya.
+- **Deteksi Posisi & Proteksi Konflik AutoTrader:**
+  - Membaca Magic Number posisi: jika `POSITION_MAGIC == InpAutoTraderMagic (882201)`, status di kolom tabel otomatis menampilkan label **`[AT TRAIL]`** (neon cyan).
+  - Posisi manual/lain yang di-trail melalui Radar menampilkan label **`[ON]`** / **`[ON (C1)]`** (neon gold).
+  - Tombol **`[ACTIVATE AUTO TRAIL]`** secara otomatis mendeteksi dan melewati (*skip*) posisi `[AT TRAIL]` untuk mencegah modifikasi ganda antara kedua EA.
+- **Persistensi Binary State Format v7:**
+  - Menyimpan status tabel posisi aktif (`SPositionTracking`), form input Auto Trail (`MAX DIST TR`, `RELVOL`, `BE DIST %`, `BASE TF`), dan watchlist radar ke dalam `TMRR_State_<login>.bin` v7 dengan kompatibilitas mundur penuh dari file state v6.
