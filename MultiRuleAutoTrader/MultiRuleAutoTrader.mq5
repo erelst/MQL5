@@ -504,7 +504,7 @@ bool CheckStochHA(const string sym, const ENUM_TIMEFRAMES tf, const int shift, b
    int stoch_handle = iStochastic(sym, tf, InpStochLength, InpStochD, InpStochK, MODE_SMA, STO_LOWHIGH);
    if(stoch_handle == INVALID_HANDLE) return false;
    
-   double k_val[2];
+   double k_val[];
    ArraySetAsSeries(k_val, true);
    if(CopyBuffer(stoch_handle, 0, shift, 2, k_val) < 2)
    {
