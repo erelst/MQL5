@@ -823,7 +823,7 @@ void ProcessAutoTrailSLTP()
                   if(m_trade.PositionModify(tkt, be_sl, cur_tp))
                   {
                      g_tracking_list[i].be_applied = true;
-                     string msg = StringFormat("[AUTO TRADER - TRAIL SL BE]\nSymbol: %s\nTicket: #%d (BUY)\nAction: SL moved to BE\nNew SL: %.5f", sym, tkt, be_sl);
+                     string msg = StringFormat("[TRAIL BE] %s #%d (BUY)\nAction: Move SL to Break-Even\nNew SL: %.5f | Locked: +Spread", sym, tkt, be_sl);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);
                   }
@@ -838,7 +838,7 @@ void ProcessAutoTrailSLTP()
                   if(m_trade.PositionModify(tkt, be_sl, cur_tp))
                   {
                      g_tracking_list[i].be_applied = true;
-                     string msg = StringFormat("[AUTO TRADER - TRAIL SL BE]\nSymbol: %s\nTicket: #%d (SELL)\nAction: SL moved to BE\nNew SL: %.5f", sym, tkt, be_sl);
+                     string msg = StringFormat("[TRAIL BE] %s #%d (SELL)\nAction: Move SL to Break-Even\nNew SL: %.5f | Locked: -Spread", sym, tkt, be_sl);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);
                   }
@@ -893,8 +893,8 @@ void ProcessAutoTrailSLTP()
                   g_tracking_list[i].prev_tp_level = cur_tp;
                   g_tracking_list[i].trail_cycle++;
                   g_tracking_list[i].be_applied = true;
-                  string msg = StringFormat("[AUTO TRADER - TRAIL TP EXTENDED]\nSymbol: %s\nTicket: #%d (BUY)\nRelVol: %.2f | Extend: +%.5f\nNew TP: %.5f (Cycle %d)",
-                                            sym, tkt, rel_vol, extend_amount, new_tp, g_tracking_list[i].trail_cycle);
+                  string msg = StringFormat("[TRAIL TP EXTEND] %s #%d (BUY)\nAction: Extend TP (Cycle %d)\nNew TP: %.5f (+%.5f) | RelVol: %.2f",
+                                            sym, tkt, g_tracking_list[i].trail_cycle, new_tp, extend_amount, rel_vol);
                   if(InpEnableSoundAlerts) Alert(msg);
                   if(InpEnablePushAlerts)  SendNotification(msg);
                }
@@ -921,8 +921,8 @@ void ProcessAutoTrailSLTP()
                   g_tracking_list[i].prev_tp_level = cur_tp;
                   g_tracking_list[i].trail_cycle++;
                   g_tracking_list[i].be_applied = true;
-                  string msg = StringFormat("[AUTO TRADER - TRAIL TP EXTENDED]\nSymbol: %s\nTicket: #%d (SELL)\nRelVol: %.2f | Extend: -%.5f\nNew TP: %.5f (Cycle %d)",
-                                            sym, tkt, rel_vol, extend_amount, new_tp, g_tracking_list[i].trail_cycle);
+                  string msg = StringFormat("[TRAIL TP EXTEND] %s #%d (SELL)\nAction: Extend TP (Cycle %d)\nNew TP: %.5f (-%.5f) | RelVol: %.2f",
+                                            sym, tkt, g_tracking_list[i].trail_cycle, new_tp, extend_amount, rel_vol);
                   if(InpEnableSoundAlerts) Alert(msg);
                   if(InpEnablePushAlerts)  SendNotification(msg);
                }
@@ -945,7 +945,7 @@ void ProcessAutoTrailSLTP()
                {
                   if(m_trade.PositionModify(tkt, lock_sl, cur_tp))
                   {
-                     string msg = StringFormat("[AUTO TRADER - TRAIL SL LOCKED]\nSymbol: %s\nTicket: #%d (BUY)\nAction: SL locked to Prev TP\nNew SL: %.5f", sym, tkt, lock_sl);
+                     string msg = StringFormat("[TRAIL SL LOCK] %s #%d (BUY)\nAction: Lock SL to Prev TP\nNew SL: %.5f", sym, tkt, lock_sl);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);
                   }
@@ -958,7 +958,7 @@ void ProcessAutoTrailSLTP()
                {
                   if(m_trade.PositionModify(tkt, lock_sl, cur_tp))
                   {
-                     string msg = StringFormat("[AUTO TRADER - TRAIL SL LOCKED]\nSymbol: %s\nTicket: #%d (SELL)\nAction: SL locked to Prev TP\nNew SL: %.5f", sym, tkt, lock_sl);
+                     string msg = StringFormat("[TRAIL SL LOCK] %s #%d (SELL)\nAction: Lock SL to Prev TP\nNew SL: %.5f", sym, tkt, lock_sl);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);
                   }
@@ -2420,6 +2420,7 @@ void OnTick()
             
             // Evaluate Execution Mode: ANY (OR) vs COMBO (AND)
             bool trigger_buy = false;
+            string sig_name = "";
             double chosen_sl = 0.0;
             
             if(g_rules[r].signal_mode == SIGNAL_MODE_COMBO)
@@ -2433,9 +2434,10 @@ void OnTick()
                if(all_active_ok && (g_rules[r].sig_engulfing || g_rules[r].sig_hammer_ss || g_rules[r].sig_stoch_ha))
                {
                   trigger_buy = true;
-                  if(buy_eng_valid)       chosen_sl = eng_sl_level;
-                  else if(buy_hmr_valid)  chosen_sl = hmr_sl_level;
-                  else                    chosen_sl = ask - atr_50 * 2.0;
+                  sig_name = "COMBO: ";
+                  if(buy_eng_valid)   { sig_name += "[ENG] "; chosen_sl = eng_sl_level; }
+                  if(buy_hmr_valid)   { sig_name += "[HAMMER] "; chosen_sl = hmr_sl_level; }
+                  if(buy_stoch_valid) { sig_name += "[STOCH+HA]"; if(chosen_sl == 0.0) chosen_sl = ask - atr_50 * 2.0; }
                }
             }
             else
@@ -2444,16 +2446,19 @@ void OnTick()
                if(g_rules[r].sig_engulfing && buy_eng_valid)
                {
                   trigger_buy = true;
+                  sig_name    = "Strong Bullish Engulfing";
                   chosen_sl   = eng_sl_level;
                }
                else if(g_rules[r].sig_hammer_ss && buy_hmr_valid)
                {
                   trigger_buy = true;
+                  sig_name    = "Strong Hammer Reversal";
                   chosen_sl   = hmr_sl_level;
                }
                else if(g_rules[r].sig_stoch_ha && buy_stoch_valid)
                {
                   trigger_buy = true;
+                  sig_name    = "Stochastic + Heikin Ashi Buy";
                   chosen_sl   = ask - atr_50 * 2.0;
                }
             }
@@ -2538,8 +2543,11 @@ void OnTick()
                      if(g_rules[r].enable_trail)
                         RegisterPositionTracking(deal_tkt, sym, tf, atr100, ask, cur_tp, g_rules[r].trail_max_dist, g_rules[r].atr_multiplier);
                      
-                     string msg = StringFormat("[AUTO TRADER - ORDER OPENED (%d/%d)]\nSymbol: %s (%s signal)\nTicket: #%d (BUY)\nLot: %.2f | Ask: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)",
-                                               m + 1, plan_cnt, sym, EnumToString(sig_tf), deal_tkt, cur_lot, ask, sl_price, cur_tp, g_rules[r].risk_reward_ratio);
+                     string msg = StringFormat("[BUY] %s %s (%s)\nSignal: %s\nEntry: %.5f | SL: %.5f | TP: %.5f\nOrder: #%d (%d/%d) | Lot: %.2f | RR: 1:%.2f",
+                                               sym, EnumToString(sig_tf), sig_name,
+                                               sig_name,
+                                               ask, sl_price, cur_tp,
+                                               deal_tkt, m + 1, plan_cnt, cur_lot, g_rules[r].risk_reward_ratio);
                      msg += " | Signal bar: " + TimeToString(sig_bar_time);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);
@@ -2638,6 +2646,7 @@ void OnTick()
             
             // Evaluate Execution Mode: ANY (OR) vs COMBO (AND)
             bool trigger_sell = false;
+            string sig_name   = "";
             double chosen_sl  = 0.0;
             
             if(g_rules[r].signal_mode == SIGNAL_MODE_COMBO)
@@ -2650,9 +2659,10 @@ void OnTick()
                if(all_active_ok && (g_rules[r].sig_engulfing || g_rules[r].sig_hammer_ss || g_rules[r].sig_stoch_ha))
                {
                   trigger_sell = true;
-                  if(sell_eng_valid)      chosen_sl = eng_sl_level;
-                  else if(sell_ss_valid)  chosen_sl = ss_sl_level;
-                  else                    chosen_sl = bid + atr_50 * 2.0 + spread;
+                  sig_name = "COMBO: ";
+                  if(sell_eng_valid)   { sig_name += "[ENG] "; chosen_sl = eng_sl_level; }
+                  if(sell_ss_valid)    { sig_name += "[SHOOTING STAR] "; chosen_sl = ss_sl_level; }
+                  if(sell_stoch_valid) { sig_name += "[STOCH+HA]"; if(chosen_sl == 0.0) chosen_sl = bid + atr_50 * 2.0 + spread; }
                }
             }
             else
@@ -2660,16 +2670,19 @@ void OnTick()
                if(g_rules[r].sig_engulfing && sell_eng_valid)
                {
                   trigger_sell = true;
+                  sig_name     = "Strong Bearish Engulfing";
                   chosen_sl    = eng_sl_level;
                }
                else if(g_rules[r].sig_hammer_ss && sell_ss_valid)
                {
                   trigger_sell = true;
+                  sig_name     = "Strong Shooting Star Reversal";
                   chosen_sl    = ss_sl_level;
                }
                else if(g_rules[r].sig_stoch_ha && sell_stoch_valid)
                {
                   trigger_sell = true;
+                  sig_name     = "Stochastic + Heikin Ashi Sell";
                   chosen_sl    = bid + atr_50 * 2.0 + spread;
                }
             }
@@ -2754,8 +2767,11 @@ void OnTick()
                      if(g_rules[r].enable_trail)
                         RegisterPositionTracking(deal_tkt, sym, tf, atr100, bid, cur_tp, g_rules[r].trail_max_dist, g_rules[r].atr_multiplier);
                      
-                     string msg = StringFormat("[AUTO TRADER - ORDER OPENED (%d/%d)]\nSymbol: %s (%s signal)\nTicket: #%d (SELL)\nLot: %.2f | Bid: %.5f\nSL: %.5f | TP: %.5f (1:%.2f RR)",
-                                               m + 1, plan_cnt, sym, EnumToString(sig_tf), deal_tkt, cur_lot, bid, sl_price, cur_tp, g_rules[r].risk_reward_ratio);
+                     string msg = StringFormat("[SELL] %s %s (%s)\nSignal: %s\nEntry: %.5f | SL: %.5f | TP: %.5f\nOrder: #%d (%d/%d) | Lot: %.2f | RR: 1:%.2f",
+                                               sym, EnumToString(sig_tf), sig_name,
+                                               sig_name,
+                                               bid, sl_price, cur_tp,
+                                               deal_tkt, m + 1, plan_cnt, cur_lot, g_rules[r].risk_reward_ratio);
                      msg += " | Signal bar: " + TimeToString(sig_bar_time);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);

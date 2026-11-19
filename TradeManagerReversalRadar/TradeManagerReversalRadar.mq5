@@ -614,13 +614,13 @@ void OnChartEvent(const int id,
          double points_val = test_atr50 / point;
          double test_sl = cur_price - test_atr50;
          
-         string msg = StringFormat("[ENGULFING ALERT - TEST]\nSymbol: %s (M5)\nType: Realtime Strong BULLISH Break\nPrice: %s\n50%% ATR(%d): %.1f pips (%.0f pts)\nSuggested SL: %s\nStatus: Notifications Working!",
+         string msg = StringFormat("[TEST NOTIFICATION] %s (M5)\nSignal: System Test Check\nEntry: %s | SL: %s\n50%% ATR(%d): %.1f pips (%.0f pts) | Status: OK",
                                    test_sym,
                                    DoubleToString(cur_price, digits),
+                                   DoubleToString(test_sl, digits),
                                    InpDefaultATRPeriod,
                                    pips_val,
-                                   points_val,
-                                   DoubleToString(test_sl, digits));
+                                   points_val);
          
          if(InpEnableSoundAlerts) Alert(msg);
          
@@ -860,12 +860,14 @@ void ProcessReversalForSymbol(int index)
             double pips_val = atr_50 / pips_factor;
             double points_val = atr_50 / point;
             
-            string msg = StringFormat("[REVERSAL ALERT] %s (%s) [%s]\nSignal: %s\nDirection: BULLISH (BUY)\nPrice: %s\n50%% ATR(%d): %.1f pips (%.0f pts)\nSuggested SL: %s",
-                                      sym, EnumToString(sig_tf), mode_tag, sig_name,
+            string msg = StringFormat("[BUY] %s %s (%s)\nSignal: %s\nEntry: %s | SL: %s\n50%% ATR(%d): %.1f pips (%.0f pts) | Mode: %s",
+                                      sym, EnumToString(sig_tf), sig_name,
+                                      sig_name,
                                       DoubleToString(cur_price, digits),
+                                      DoubleToString(rec_sl, digits),
                                       g_radar_symbols[index].atr_period,
                                       pips_val, points_val,
-                                      DoubleToString(rec_sl, digits));
+                                      mode_tag);
             
             if(InpEnableSoundAlerts) Alert(msg);
             if(InpEnablePushAlerts)  SendNotification(msg);
@@ -954,12 +956,14 @@ void ProcessReversalForSymbol(int index)
             double pips_val = atr_50 / pips_factor;
             double points_val = atr_50 / point;
             
-            string msg = StringFormat("[REVERSAL ALERT] %s (%s) [%s]\nSignal: %s\nDirection: BEARISH (SELL)\nPrice: %s\n50%% ATR(%d): %.1f pips (%.0f pts)\nSuggested SL: %s",
-                                      sym, EnumToString(sig_tf), mode_tag, sig_name,
+            string msg = StringFormat("[SELL] %s %s (%s)\nSignal: %s\nEntry: %s | SL: %s\n50%% ATR(%d): %.1f pips (%.0f pts) | Mode: %s",
+                                      sym, EnumToString(sig_tf), sig_name,
+                                      sig_name,
                                       DoubleToString(cur_price, digits),
+                                      DoubleToString(rec_sl, digits),
                                       g_radar_symbols[index].atr_period,
                                       pips_val, points_val,
-                                      DoubleToString(rec_sl, digits));
+                                      mode_tag);
             
             if(InpEnableSoundAlerts) Alert(msg);
             if(InpEnablePushAlerts)  SendNotification(msg);
