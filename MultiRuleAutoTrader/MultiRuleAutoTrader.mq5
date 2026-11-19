@@ -51,6 +51,7 @@ struct AutoTraderRule
    bool                 enable_trail;
    double               trail_max_dist;    // Max Proximity to TP in EWMA TR units (default 1.10)
    double               atr_multiplier;    // Relative Volatility Threshold (default 1.60)
+   double               trail_be_rem_dist_pct; // Sisa jarak ke target TP untuk BE (default 0.30)
    string               bull_price_filter; // e.g. "< 1.0850", "<= 1.0820", "4040-4078", "ALL"
    string               bear_price_filter; // e.g. "> 1.0900", ">= 1.0910", "4040-4078", "ALL"
    int                  max_orders;        // 1 = 1x open then paused, 0/-1 = Unlimited
