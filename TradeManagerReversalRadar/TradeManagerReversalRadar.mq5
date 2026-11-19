@@ -144,6 +144,8 @@ string            g_prefix = "TMRR_";
 #define CLR_ROW_SELECTED    C'26,21,13'
 #define CLR_ROW_ALT         C'18,24,34'
 #define CLR_TAB_ACTIVE_BG   C'34,21,8'
+#define CLR_POWER_ON_BG     C'8,34,18'
+#define CLR_POWER_OFF_BG    C'34,8,18'
 
 //+------------------------------------------------------------------+
 //| ROBUST SYMBOL MATCHING HELPER                                    |
