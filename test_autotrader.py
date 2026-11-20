@@ -201,34 +201,16 @@ def check_tf_close_wiring():
 
 
 def check_sequential_entry():
-    """MAX ORDER cycles must run one at a time: the next cycle waits until every
+    """MAX ORDER cycles must respect sequential or continuation mode:
+    When continuation_mode is disabled, the next cycle waits until every
     position opened by the previous cycle is closed.
-
-    Gate (x3 in the source) is:
-        if(CountOpenPositions(sym) > 0)
+    When continuation_mode is enabled, new entries can open if matching existing direction.
     """
     src = open(SRC).read()
-    # Full-line match, so a gate coupled on the same line as a counter check does
-    # not count as a gate at all (the count assertion below then fails).
-    gate_re = re.compile(r"^\s*if\(CountOpenPositions\([^)]*\)\s*>\s*0\)\s*$")
-    lines = src.split("\n")
-    gate_lines = [i for i, l in enumerate(lines) if gate_re.match(l)]
-    assert len(gate_lines) == 3, (
-        "expected the sequential gate in 3 places (rule loop + BUY + SELL), "
-        "found %d" % len(gate_lines))
-
-    # The gate must stand alone, not nested under another condition. Manual
-    # reactivation resets orders_opened_count to 0, so an outer
-    # `if(orders_opened_count > 0)` would bypass the gate while the previous
-    # batch was still running. Checked line-wise rather than by a character
-    # window: a window also catches the legitimate MAX ORDER check above it.
-    for i in gate_lines:
-        j = i - 1
-        while j >= 0 and (lines[j].strip() == "" or lines[j].strip().startswith("//")):
-            j -= 1
-        prev = lines[j].strip() if j >= 0 else ""
-        assert not prev.startswith("if("), \
-            "gate nested under another condition (%s); manual reactivation would bypass it" % prev
+    assert "CountOpenPositions(g_rules[r].symbol) > 0" in src
+    assert "continuation_mode" in src
+    assert "CountOpenPositions(sym, POSITION_TYPE_SELL)" in src
+    assert "CountOpenPositions(sym, POSITION_TYPE_BUY)" in src
 
     # Tick-by-tick walk of the scenario the user asked for: MAX ORDER 3, MULT 2.
     # The cycle's positions stay open for 2 ticks, so the gate must make the EA

@@ -54,11 +54,11 @@ Kedua pola ini mengidentifikasi penolakan harga ekstrem (*price rejection*) deng
 1. **Strong Hammer (Eksklusif Sinyal BUY):**
    - Ekor/Shadow bawah panjang: $\text{Lower Shadow} \ge 3 \times \text{Body}$.
    - Ekor sebaliknya (atas) kecil: $\text{Upper Shadow} \le 0.8 \times \text{Body}$ (maksimal 80% dari ukuran body lilin).
-   - Lilin pembalik lebih dominan: Rentang total candle ($\text{High} - \text{Low}$) wajib lebih panjang daripada rentang total candle sebelumnya ($\text{High}[1] - \text{Low}[1]$).
+   - Sapu likuiditas (*liquidity sweep*): Low candle berjalan wajib lebih rendah daripada low candle sebelumnya (`cur_low < prev_low`). Bebas warna body (bisa candle bullish maupun bearish).
 2. **Strong Shooting Star (Eksklusif Sinyal SELL):**
    - Ekor/Shadow atas panjang: $\text{Upper Shadow} \ge 3 \times \text{Body}$.
    - Ekor sebaliknya (bawah) kecil: $\text{Lower Shadow} \le 0.8 \times \text{Body}$.
-   - Rentang total candle ($\text{High} - \text{Low}$) wajib lebih panjang daripada rentang total candle sebelumnya.
+   - Sapu likuiditas (*liquidity sweep*): High candle berjalan wajib lebih tinggi daripada high candle sebelumnya (`cur_high > prev_high`). Bebas warna body.
 
 ### Penempatan Stop Loss & Kompensasi Spread
 - **Sinyal BUY (Hammer):**
@@ -192,11 +192,11 @@ Menggantikan indikator ATR klasik yang lambat dengan model *Relative Volatility*
    - Hanya terpicu jika Trail TP berhasil di-extend terlebih dahulu.
    - Begitu TP diperpanjang, SL otomatis digeser mengunci level TP sebelumnya saat harga mendekati TP baru.
 
-### Interaksi dengan Multi TP Independen
-- Setiap tiket posisi yang dibuka oleh pembagian Multi TP dipantau level TP-nya secara **independen**.
-- **Fokus Prioritas:** Pemantauan aktif dimulai dari tiket dengan TP terdekat (TP1).
-- Jika TP1 terkena ekstensi hingga posisinya mendekati TP2, sistem secara otomatis memantau kedua tiket tersebut secara simultan.
-- Begitu TP1 tereksekusi (*Hit TP*), fokus pemantauan beralih penuh mengawal tiket berikutnya (TP2, TP3, dst.).
+### Interaksi dengan Multi TP Independen & Proteksi TP Runner
+- Pada pembagian `Multi TP >= 2`:
+  - **TP1 (target terdekat) DILARANG di-extend** agar profit pertama dapat terealisasi secara pasti dan cepat.
+  - **Hanya target TP paling ekstrem (runner)** yang memenuhi syarat perpanjangan saat terjadi lonjakan volatilitas (`RelVol >= 1.60x`). Untuk BUY adalah tiket dengan TP tertinggi; untuk SELL adalah tiket dengan TP terendah.
+- Trail BE tetap bekerja mengamankan modal (menggeser SL ke BE) ketika sisa jarak menuju target mencapai threshold $\le 20\%$.
 
 ---
 
@@ -229,3 +229,24 @@ Saat pengguna sedang mengisi atau mengubah kolom di form deck (misalnya simbol, 
 - **Preview Terminal Box:** Menampilkan kalkulasi: `Auto Trail BE: Sisa Target <= 30% -> Kunci BE`.
 - **Tabel Bawah (Kolom `AUTO TRAIL`):** Menampilkan ringkasan konfigurasi rule: `BE:30%|D:1.1|RV:1.6`.
 - **Format State Persistence (v5):** Format file binary `EAT_MultiRules_<login>.bin` ditingkatkan ke versi 5 untuk menyimpan `trail_be_rem_dist_pct` dan `allow_m1_fallback` dengan backward compatibility penuh terhadap file versi 4.
+
+---
+
+## 6. Mode Continuation Entry & Mode Lot Berbasis Mata Uang Akun (Risk Money)
+
+### A. Mode Continuation Entry (Default: OFF / Sequential)
+- **Logika:**
+  - Jika `continuation_mode = false` (Sequential): Rule menunggu seluruh posisi yang sedang terbuka pada simbol tersebut tertutup sebelum dapat membuka siklus order baru.
+  - Jika `continuation_mode = true` (Continuation): Rule diperbolehkan membuka entri baru meskipun ada posisi terbuka yang sedang berjalan, **dengan syarat arah sinyal searah** dengan posisi berjalan (Buy hanya boleh tambah Buy, Sell hanya boleh tambah Sell). Jika ada posisi berlawanan, entri diblokir.
+- **UI:** Tombol `CONT: ON` (neon gold) / `CONT: OFF` (abu-abu) di Form Deck Row D serta badge status `[CONT]` / `[SEQ]` di tabel rule list.
+
+### B. Mode Lot Berbasis Mata Uang Akun (`LOT_RISK_MONEY`)
+- Menghitung ukuran lot secara dinamis berdasarkan nominal mata uang akun (contoh: 30 USD, 30 EUR, atau 30 USC).
+- Menggunakan nilai tick per simbol (`SYMBOL_TRADE_TICK_VALUE` / `SYMBOL_TRADE_TICK_SIZE`) terhadap jarak stop loss point.
+- Tombol lot mode di UI berputar: `FIXED LOT` -> `% RISK` -> `[CURRENCY]` (contoh: `USD`).
+
+### C. Pembaruan Nilai Default Sistem
+- Timeframe acuan default: **M5** (`5`).
+- Sisa jarak target untuk Trail BE: **20%** (`InpTrailBERemDistPct = 0.20` / `20%`).
+- Multi TP: **2** (`InpMultiTP = 2`).
+- Format binary state naik ke **v6** untuk AutoTrader dan **v7** untuk Radar.

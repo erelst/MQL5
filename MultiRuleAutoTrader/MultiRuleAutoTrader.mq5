@@ -25,7 +25,8 @@ enum ENUM_TRADE_DIRECTION
 enum ENUM_LOT_MODE
 {
    LOT_FIXED,      // Fixed Lot Size
-   LOT_RISK_PCT    // Risk Percentage (% Balance per SL)
+   LOT_RISK_PCT,   // Risk Percentage (% Balance per SL)
+   LOT_RISK_MONEY  // Risk Amount in Account Currency (USD, EUR, USC, etc.)
 };
 
 enum ENUM_SIGNAL_MODE
@@ -59,6 +60,7 @@ struct AutoTraderRule
    int                  multi_tp;          // Number of TP tiers per entry (1 = single TP / no splitting)
    int                  delay_tf_pct;      // % TF progress delay (0..99%, 30 = default)
    bool                 delay_is_tf_close; // true = wait for TF candle close, false = % TF progress
+   bool                 continuation_mode; // true = allow multiple entries in same direction, false = sequential (default false)
    int                  orders_opened_count; // Tracks total opened orders for this rule lifecycle
    bool                 active;
    // Signal Selection Flags
@@ -102,7 +104,8 @@ input ENUM_TRADE_DIRECTION InpTradeDirection   = TRADE_DIR_BOTH; // Default Dire
 input double               InpRiskRewardRatio  = 2.0;            // Default RR Ratio (1:RR)
 input int                  InpMaxOrders        = 1;              // Default Max Orders (1 = 1x open then paused, 0 = Unlimited)
 input int                  InpEntryMultiplier  = 1;              // Default Entri Multiplier (Multi-Position per Trigger)
-input int                  InpMultiTP          = 1;              // Default Multi TP (Tiered Take Profit per entry; 1 = single TP)
+input int                  InpMultiTP          = 2;              // Default Multi TP (Tiered Take Profit per entry; 1 = single TP, 2 = default)
+input bool                 InpContinuationMode = false;          // Default Continuation Mode (false = Sequential, true = Continuation)
 input int                  InpDelayTFPct       = 30;             // Default Entry Delay (% TF Progress, 0..99)
 input bool                 InpDelayIsTfClose   = false;          // Default Entry Delay Mode (false = % TF Progress, true = TF Close)
 input int                  InpSlippage         = 10;             // Max Slippage (Points)
@@ -117,7 +120,7 @@ input ENUM_SIGNAL_MODE     InpDefaultSigMode   = SIGNAL_MODE_ANY;// Default Sign
 input group "=== AUTO TRAIL SL & TP (EWMA TR ENGINE) ==="
 input bool                 InpEnableTrail      = true;           // Default Enable Trail SL & TP
 input ENUM_TRAIL_BE_MODE   InpTrailBEMode      = TRAIL_BE_PROXIMITY; // Default Trail BE Mode
-input double               InpTrailBERemDistPct= 0.30;           // Default Trail BE Remaining TP Distance Ratio (0.30 = 30%)
+input double               InpTrailBERemDistPct= 0.20;           // Default Trail BE Remaining TP Distance Ratio (0.20 = 20%)
 input double               InpMaxDistATR       = 1.10;           // Default Max Proximity to TP (in EWMA TR units)
 input double               InpRelVolThreshold  = 1.60;           // Default RelVol Threshold (>= 1.60x)
 input double               InpEWMALambda       = 0.90;           // EWMA TR Lambda Decay (0.88 - 0.92)
@@ -140,9 +143,10 @@ input group "=== MONEY MANAGEMENT ==="
 input ENUM_LOT_MODE        InpLotMode          = LOT_RISK_PCT;   // Default Lot Mode
 input double               InpFixedLot         = 0.01;           // Default Fixed Lot Size
 input double               InpRiskPercent      = 1.0;            // Default Risk Percent (% Balance)
+input double               InpRiskMoney        = 30.0;           // Default Risk Amount in Account Currency
 
 input group "=== ATR & BODY SETTINGS ==="
-input ENUM_TIMEFRAMES      InpTimeframe        = PERIOD_M5;      // Default Timeframe
+input ENUM_TIMEFRAMES      InpTimeframe        = PERIOD_M5;      // Default Timeframe (5 = M5)
 input int                  InpATRPeriod        = 14;             // ATR Period for 50% calculation
 input double               InpBodyRatioMult    = 1.0;            // Min Body Ratio vs Previous Candle
 
@@ -184,11 +188,12 @@ double               g_form_lot_val     = 1.0;
 bool                 g_form_trail_on    = true;
 double               g_form_trail_dist  = 1.10; // Max Proximity in EWMA TR units
 double               g_form_atr_mult    = 1.6;  // RelVol Threshold
-double               g_form_be_dist_pct = 30.0; // Sisa Jarak TP % untuk BE (default 30%)
+double               g_form_be_dist_pct = 20.0; // Sisa Jarak TP % untuk BE (default 20%)
 bool                 g_form_m1_fallback = true; // M1 fallback for M5 timeframe rules
 int                  g_form_max_orders  = 1;
 int                  g_form_entry_mult  = 1;
-int                  g_form_multi_tp   = 1;
+int                  g_form_multi_tp   = 2;     // Default Multi TP = 2
+bool                 g_form_continuation= false; // Default Continuation = OFF
 int                  g_form_delay_pct   = 30; // % TF progress delay (0..99)
 bool                 g_form_delay_close = false;
 bool                 g_form_sig_eng     = true;
@@ -446,10 +451,8 @@ bool IsStrongHammer(const string sym, const ENUM_TIMEFRAMES tf, const int shift,
    // Syarat 2: Upper shadow <= 0.8x body
    if(upper_shadow > 0.8 * body_size) return false;
    
-   // Syarat 3: Rentang lilin > rentang lilin sebelumnya
-   double cur_range  = cur_high - cur_low;
-   double prev_range = prev_high - prev_low;
-   if(cur_range <= prev_range) return false;
+   // Syarat 3: Low candle hammer harus lebih rendah dari low candle sebelumnya (sweep low)
+   if(cur_low >= prev_low) return false;
    
    return true;
 }
@@ -492,10 +495,8 @@ bool IsStrongShootingStar(const string sym, const ENUM_TIMEFRAMES tf, const int 
    // Syarat 2: Lower shadow <= 0.8x body
    if(lower_shadow > 0.8 * body_size) return false;
    
-   // Syarat 3: Rentang lilin > rentang lilin sebelumnya
-   double cur_range  = cur_high - cur_low;
-   double prev_range = prev_high - prev_low;
-   if(cur_range <= prev_range) return false;
+   // Syarat 3: High candle shooting star harus lebih tinggi dari high candle sebelumnya (sweep high)
+   if(cur_high <= prev_high) return false;
    
    return true;
 }
@@ -623,13 +624,20 @@ bool CheckStochHA(const string sym, const ENUM_TIMEFRAMES tf, const int shift, b
 }
 
 //+------------------------------------------------------------------+
-//| LOT SIZE CALCULATION (FIXED OR RISK %)                           |
+//| LOT SIZE CALCULATION (FIXED, RISK %, OR RISK MONEY)              |
 //+------------------------------------------------------------------+
 double CalculateLotSize(const string sym, ENUM_LOT_MODE mode, double lot_val, double entry_price, double sl_price)
 {
    if(mode == LOT_FIXED) return lot_val;
    
-   double risk_amount = AccountInfoDouble(ACCOUNT_BALANCE) * (lot_val / 100.0);
+   double risk_amount = 0.0;
+   if(mode == LOT_RISK_PCT)
+      risk_amount = AccountInfoDouble(ACCOUNT_BALANCE) * (lot_val / 100.0);
+   else if(mode == LOT_RISK_MONEY)
+      risk_amount = lot_val; // Direct money risk in account currency
+      
+   if(risk_amount <= 0) return 0.01;
+   
    double sl_distance = MathAbs(entry_price - sl_price);
    if(sl_distance <= 0) return 0.01;
    
@@ -655,7 +663,7 @@ double CalculateLotSize(const string sym, ENUM_LOT_MODE mode, double lot_val, do
 //+------------------------------------------------------------------+
 //| COUNT OPEN TRADES FOR THIS EA ON THIS SYMBOL                     |
 //+------------------------------------------------------------------+
-int CountOpenPositions(const string sym)
+int CountOpenPositions(const string sym, ENUM_POSITION_TYPE ptype = (ENUM_POSITION_TYPE)-1)
 {
    int count = 0;
    for(int i = PositionsTotal() - 1; i >= 0; i--)
@@ -663,7 +671,10 @@ int CountOpenPositions(const string sym)
       if(m_position.SelectByIndex(i))
       {
          if(m_position.Symbol() == sym && m_position.Magic() == InpMagicNumber)
-            count++;
+         {
+            if(ptype == (ENUM_POSITION_TYPE)-1 || m_position.PositionType() == ptype)
+               count++;
+         }
       }
    }
    return count;
@@ -865,7 +876,32 @@ void ProcessAutoTrailSLTP()
       
       // ===================================================================
       // 2. TRAIL TP EXTENSION: JARAK DEKAT TP + LONJAKAN VOLATILITAS NYATA
+      // Pada Multi-TP (ada posisi lain dengan magic & arah sama pada simbol ini):
+      // - TP1 (target terdekat) DILARANG di-extend agar profit pertama pasti secured.
+      // - Hanya target paling ekstrem (tertinggi untuk BUY, terendah untuk SELL) yang di-extend!
       // ===================================================================
+      bool is_eligible_tp_runner = true;
+      for(int p_chk = PositionsTotal() - 1; p_chk >= 0; p_chk--)
+      {
+         if(m_position.SelectByIndex(p_chk))
+         {
+            if(m_position.Symbol() == sym && m_position.Magic() == m_position.Magic())
+            {
+               if(m_position.PositionType() == ptype && m_position.Ticket() != tkt)
+               {
+                  double other_tp = m_position.TakeProfit();
+                  if(other_tp > 0)
+                  {
+                     if(ptype == POSITION_TYPE_BUY  && other_tp > cur_tp) { is_eligible_tp_runner = false; break; }
+                     if(ptype == POSITION_TYPE_SELL && other_tp < cur_tp) { is_eligible_tp_runner = false; break; }
+                  }
+               }
+            }
+         }
+      }
+      // Re-select posisi tkt yang sedang diproses
+      if(!m_position.SelectByTicket(tkt)) continue;
+
       double dist_to_tp = 0.0;
       if(ptype == POSITION_TYPE_BUY)  dist_to_tp = MathAbs(cur_tp - bid) / ewma_tr;
       if(ptype == POSITION_TYPE_SELL) dist_to_tp = MathAbs(cur_tp - ask) / ewma_tr;
@@ -876,7 +912,7 @@ void ProcessAutoTrailSLTP()
       bool proximity_ok  = (dist_to_tp <= max_dist_allowed);
       bool volatility_ok = (rel_vol >= relvol_threshold);
       
-      if(proximity_ok && volatility_ok)
+      if(is_eligible_tp_runner && proximity_ok && volatility_ok)
       {
          double excess = rel_vol - relvol_threshold;
          double extend_amount = excess * atr_ref * InpExtendFactor;
@@ -1215,16 +1251,33 @@ void CreateDashboardUI()
    // Row D: Lot Mode & Value & Multiplier (y = upper_y + 96)
    int row_d_y = upper_y + 96;
    CreateLabel("LBL_LOT_MODE", root_x + 22, row_d_y + 3, "LOT MODE:", CLR_TEXT_PURE, 8, true);
-   string lot_mode_str = (g_form_lot_mode == LOT_FIXED) ? "FIXED LOT" : "% RISK";
-   color lot_mode_clr = (g_form_lot_mode == LOT_FIXED) ? CLR_CYAN_NEON : CLR_GOLD_NEON;
+   string cur_code = AccountInfoString(ACCOUNT_CURRENCY);
+   if(cur_code == "") cur_code = "USD";
+   string lot_mode_str = "FIXED LOT";
+   color lot_mode_clr = CLR_CYAN_NEON;
+   if(g_form_lot_mode == LOT_RISK_PCT)
+   {
+      lot_mode_str = "% RISK";
+      lot_mode_clr = CLR_GOLD_NEON;
+   }
+   else if(g_form_lot_mode == LOT_RISK_MONEY)
+   {
+      lot_mode_str = cur_code;
+      lot_mode_clr = CLR_BULL_NEON;
+   }
    CreateButton("BTN_TOGGLE_LOT_MODE", root_x + 85, row_d_y, 75, 20, lot_mode_str, CLR_CANVAS_BG, lot_mode_clr, CLR_BORDER_HARD);
    CreateEdit("INP_LOT", root_x + 165, row_d_y, 50, 20, DoubleToString(g_form_lot_val, 2), CLR_CANVAS_BG, CLR_TEXT_PURE);
    
-   CreateLabel("LBL_ENTRI_MULT", root_x + 225, row_d_y + 3, "ENTRY MULTIPLIER:", CLR_TEXT_PURE, 8, true);
-   CreateEdit("INP_ENTRI_MULT", root_x + 345, row_d_y, 40, 20, IntegerToString(g_form_entry_mult), CLR_CANVAS_BG, CLR_GOLD_NEON);
+   CreateLabel("LBL_ENTRI_MULT", root_x + 225, row_d_y + 3, "ENTRY MULT:", CLR_TEXT_PURE, 8, true);
+   CreateEdit("INP_ENTRI_MULT", root_x + 305, row_d_y, 35, 20, IntegerToString(g_form_entry_mult), CLR_CANVAS_BG, CLR_GOLD_NEON);
    
-   CreateLabel("LBL_MULTI_TP", root_x + 395, row_d_y + 3, "MULTI TP:", CLR_TEXT_PURE, 8, true);
-   CreateEdit("INP_MULTI_TP", root_x + 460, row_d_y, 45, 20, IntegerToString(g_form_multi_tp), CLR_CANVAS_BG, CLR_GOLD_NEON);
+   CreateLabel("LBL_MULTI_TP", root_x + 348, row_d_y + 3, "MULTI TP:", CLR_TEXT_PURE, 8, true);
+   CreateEdit("INP_MULTI_TP", root_x + 405, row_d_y, 30, 20, IntegerToString(g_form_multi_tp), CLR_CANVAS_BG, CLR_GOLD_NEON);
+
+   string cont_str = g_form_continuation ? "CONT: ON" : "CONT: OFF";
+   color  cont_bg  = g_form_continuation ? CLR_TAB_ACTIVE_BG : CLR_PANEL_BG;
+   color  cont_clr = g_form_continuation ? CLR_GOLD_NEON : CLR_TEXT_MED;
+   CreateButton("BTN_TOGGLE_CONT", root_x + 442, row_d_y, 82, 20, cont_str, cont_bg, cont_clr, cont_clr);
    
    // Row E: Trailing EWMA TR Settings (y = upper_y + 120)
    int row_e_y = upper_y + 120;
@@ -1343,7 +1396,9 @@ void UpdatePreviewTerminalBox()
    
    string prev_tf    = StringSubstr(EnumToString(g_form_tf), 7);
    double prev_rr    = g_form_rr;
-   string prev_lot   = (g_form_lot_mode == LOT_FIXED) ? DoubleToString(g_form_lot_val, 2) + " Lot" : DoubleToString(g_form_lot_val, 1) + "% Risk";
+   string prev_lot   = (g_form_lot_mode == LOT_FIXED) ? DoubleToString(g_form_lot_val, 2) + " Lot" : 
+                       (g_form_lot_mode == LOT_RISK_PCT ? DoubleToString(g_form_lot_val, 1) + "% Risk" : 
+                       DoubleToString(g_form_lot_val, 2) + " " + (AccountInfoString(ACCOUNT_CURRENCY) != "" ? AccountInfoString(ACCOUNT_CURRENCY) : "Money"));
    bool   prev_trail = g_form_trail_on;
    double prev_dist  = g_form_trail_dist;
    double prev_atr_m = g_form_atr_mult;
@@ -1365,7 +1420,9 @@ void UpdatePreviewTerminalBox()
       if(g_rules[idx].timeframe == PERIOD_M5)
          prev_tf += g_rules[idx].allow_m1_fallback ? "+M1" : " ONLY";
       prev_rr    = g_rules[idx].risk_reward_ratio;
-      prev_lot   = (g_rules[idx].lot_mode == LOT_FIXED) ? DoubleToString(g_rules[idx].lot_value, 2) + " Lot" : DoubleToString(g_rules[idx].lot_value, 1) + "% Risk";
+      prev_lot   = (g_rules[idx].lot_mode == LOT_FIXED) ? DoubleToString(g_rules[idx].lot_value, 2) + " Lot" : 
+                   (g_rules[idx].lot_mode == LOT_RISK_PCT ? DoubleToString(g_rules[idx].lot_value, 1) + "% Risk" : 
+                   DoubleToString(g_rules[idx].lot_value, 2) + " " + (AccountInfoString(ACCOUNT_CURRENCY) != "" ? AccountInfoString(ACCOUNT_CURRENCY) : "Money"));
       prev_trail = g_rules[idx].enable_trail;
       prev_dist  = g_rules[idx].trail_max_dist;
       prev_atr_m = g_rules[idx].atr_multiplier;
@@ -1470,7 +1527,9 @@ void UpdateDashboardUI()
       if(g_rules[i].direction == TRADE_DIR_SELL) { dir_str = "SELL ONLY"; dir_clr = CLR_BEAR_NEON; }
       CreateLabel(r_pfx + "DIR", root_x + 135, cur_y + 9, dir_str, dir_clr, 8, true);
       
-      string lot_str = (g_rules[i].lot_mode == LOT_FIXED) ? DoubleToString(g_rules[i].lot_value, 2) + "L" : DoubleToString(g_rules[i].lot_value, 1) + "%R";
+      string lot_str = (g_rules[i].lot_mode == LOT_FIXED) ? DoubleToString(g_rules[i].lot_value, 2) + "L" : 
+                       (g_rules[i].lot_mode == LOT_RISK_PCT ? DoubleToString(g_rules[i].lot_value, 1) + "%R" : 
+                       DoubleToString(g_rules[i].lot_value, 1) + (AccountInfoString(ACCOUNT_CURRENCY) != "" ? AccountInfoString(ACCOUNT_CURRENCY) : "M"));
       CreateLabel(r_pfx + "LOT", root_x + 225, cur_y + 9, lot_str, CLR_TEXT_PURE, 8, false);
       
       CreateLabel(r_pfx + "RR", root_x + 295, cur_y + 9, StringFormat("1:%.1f", g_rules[i].risk_reward_ratio), CLR_CYAN_NEON, 8, true);
@@ -1545,7 +1604,7 @@ void SaveStateToFile()
    if(handle != INVALID_HANDLE)
    {
       FileWriteInteger(handle, g_master_power_enabled ? 1 : 0);
-      FileWriteInteger(handle, 5); // v5 = v4 plus trail_be_rem_dist_pct and allow_m1_fallback
+      FileWriteInteger(handle, 6); // v6 = v5 plus continuation_mode
       
       int total_rules = ArraySize(g_rules);
       FileWriteInteger(handle, total_rules);
@@ -1588,6 +1647,9 @@ void SaveStateToFile()
          FileWriteInteger(handle, (int)g_rules[i].signal_mode);
          FileWriteDouble(handle, g_rules[i].trail_be_rem_dist_pct);
          FileWriteInteger(handle, g_rules[i].allow_m1_fallback ? 1 : 0);
+
+         // V6 additions per rule
+         FileWriteInteger(handle, g_rules[i].continuation_mode ? 1 : 0);
       }
 
       // 3. Persistent Add/Edit form state (so re-attach keeps last typed values)
@@ -1627,6 +1689,9 @@ void SaveStateToFile()
       FileWriteInteger(handle, (int)g_form_sig_mode);
       FileWriteDouble(handle, g_form_be_dist_pct);
       FileWriteInteger(handle, g_form_m1_fallback ? 1 : 0);
+
+      // V6 additions for form state
+      FileWriteInteger(handle, g_form_continuation ? 1 : 0);
 
       FileClose(handle);
    }
@@ -1722,7 +1787,7 @@ void LoadStateFromFile()
          g_rules[i].orders_opened_count = FileReadInteger(handle);
          g_rules[i].active            = (FileReadInteger(handle) == 1);
          
-         if(state_ver >= 5)
+         if(state_ver >= 6)
          {
             g_rules[i].sig_engulfing = (FileReadInteger(handle) == 1);
             g_rules[i].sig_hammer_ss = (FileReadInteger(handle) == 1);
@@ -1730,6 +1795,17 @@ void LoadStateFromFile()
             g_rules[i].signal_mode   = (ENUM_SIGNAL_MODE)FileReadInteger(handle);
             g_rules[i].trail_be_rem_dist_pct = FileReadDouble(handle);
             g_rules[i].allow_m1_fallback = (FileReadInteger(handle) == 1);
+            g_rules[i].continuation_mode = (FileReadInteger(handle) == 1);
+         }
+         else if(state_ver >= 5)
+         {
+            g_rules[i].sig_engulfing = (FileReadInteger(handle) == 1);
+            g_rules[i].sig_hammer_ss = (FileReadInteger(handle) == 1);
+            g_rules[i].sig_stoch_ha  = (FileReadInteger(handle) == 1);
+            g_rules[i].signal_mode   = (ENUM_SIGNAL_MODE)FileReadInteger(handle);
+            g_rules[i].trail_be_rem_dist_pct = FileReadDouble(handle);
+            g_rules[i].allow_m1_fallback = (FileReadInteger(handle) == 1);
+            g_rules[i].continuation_mode = false;
          }
          else if(state_ver >= 4)
          {
@@ -1739,6 +1815,7 @@ void LoadStateFromFile()
             g_rules[i].signal_mode   = (ENUM_SIGNAL_MODE)FileReadInteger(handle);
             g_rules[i].trail_be_rem_dist_pct = InpTrailBERemDistPct;
             g_rules[i].allow_m1_fallback = true;
+            g_rules[i].continuation_mode = false;
          }
          else
          {
@@ -1748,6 +1825,7 @@ void LoadStateFromFile()
             g_rules[i].signal_mode   = SIGNAL_MODE_ANY;
             g_rules[i].trail_be_rem_dist_pct = InpTrailBERemDistPct;
             g_rules[i].allow_m1_fallback = true;
+            g_rules[i].continuation_mode = false;
          }
          
          g_rules[i].bull_bound_entered_time = 0;
@@ -1801,7 +1879,7 @@ void LoadStateFromFile()
          g_form_trail_dist  = FileReadDouble(handle);
          g_form_atr_mult    = FileReadDouble(handle);
          
-         if(state_ver >= 5 && FileIsEnding(handle) == false)
+         if(state_ver >= 6 && FileIsEnding(handle) == false)
          {
             g_form_sig_eng   = (FileReadInteger(handle) == 1);
             g_form_sig_hmr   = (FileReadInteger(handle) == 1);
@@ -1809,6 +1887,17 @@ void LoadStateFromFile()
             g_form_sig_mode  = (ENUM_SIGNAL_MODE)FileReadInteger(handle);
             g_form_be_dist_pct = FileReadDouble(handle);
             g_form_m1_fallback = (FileReadInteger(handle) == 1);
+            g_form_continuation= (FileReadInteger(handle) == 1);
+         }
+         else if(state_ver >= 5 && FileIsEnding(handle) == false)
+         {
+            g_form_sig_eng   = (FileReadInteger(handle) == 1);
+            g_form_sig_hmr   = (FileReadInteger(handle) == 1);
+            g_form_sig_stoch = (FileReadInteger(handle) == 1);
+            g_form_sig_mode  = (ENUM_SIGNAL_MODE)FileReadInteger(handle);
+            g_form_be_dist_pct = FileReadDouble(handle);
+            g_form_m1_fallback = (FileReadInteger(handle) == 1);
+            g_form_continuation= false;
          }
          else if(state_ver >= 4 && FileIsEnding(handle) == false)
          {
@@ -2002,11 +2091,23 @@ void OnChartEvent(const int id,
             g_form_lot_mode = LOT_RISK_PCT;
             g_form_lot_val = 1.0; // Default Risk%
          }
+         else if(g_form_lot_mode == LOT_RISK_PCT)
+         {
+            g_form_lot_mode = LOT_RISK_MONEY;
+            g_form_lot_val = InpRiskMoney; // Default Risk Money (e.g. 30 USD)
+         }
          else
          {
             g_form_lot_mode = LOT_FIXED;
             g_form_lot_val = 0.01; // Default Fixed Lot
          }
+         CreateDashboardUI();
+         return;
+      }
+      else if(sparam == g_prefix + "BTN_TOGGLE_CONT")
+      {
+         CaptureFormInputs();
+         g_form_continuation = !g_form_continuation;
          CreateDashboardUI();
          return;
       }
@@ -2056,11 +2157,12 @@ void OnChartEvent(const int id,
          g_form_trail_on   = InpEnableTrail;
          g_form_trail_dist = InpMaxDistATR;
          g_form_atr_mult   = InpRelVolThreshold;
-         g_form_be_dist_pct= 30.0;
+         g_form_be_dist_pct= 20.0;
          g_form_m1_fallback= true;
          g_form_max_orders = InpMaxOrders;
          g_form_entry_mult = InpEntryMultiplier;
          g_form_multi_tp  = InpMultiTP;
+         g_form_continuation= InpContinuationMode;
          g_form_delay_pct  = InpDelayTFPct;
          g_form_delay_close= InpDelayIsTfClose;
          g_form_sig_eng    = InpDefaultSigEng;
@@ -2230,6 +2332,7 @@ void OnChartEvent(const int id,
          g_rules[target_idx].sig_hammer_ss       = g_form_sig_hmr;
          g_rules[target_idx].sig_stoch_ha        = g_form_sig_stoch;
          g_rules[target_idx].signal_mode         = g_form_sig_mode;
+         g_rules[target_idx].continuation_mode   = g_form_continuation;
          g_rules[target_idx].bull_bound_entered_time = 0;
          g_rules[target_idx].bear_bound_entered_time = 0;
          g_rules[target_idx].bull_bound_exit_time    = 0;
@@ -2290,6 +2393,7 @@ void OnChartEvent(const int id,
             g_form_sig_hmr      = g_rules[i].sig_hammer_ss;
             g_form_sig_stoch    = g_rules[i].sig_stoch_ha;
             g_form_sig_mode     = g_rules[i].signal_mode;
+            g_form_continuation = g_rules[i].continuation_mode;
             g_form_max_orders   = g_rules[i].max_orders;
             g_form_bmax         = g_rules[i].bull_price_filter;
             g_form_smin         = g_rules[i].bear_price_filter;
@@ -2357,15 +2461,15 @@ void OnTick()
          continue;
       }
       
-      // Sequential entries: no new cycle while the previous batch is still open.
-      // CountOpenPositions matches symbol + magic, i.e. only positions THIS EA
-      // opened; a manual trade carries a different magic and cannot block entry.
-      // Deliberately NOT conditioned on orders_opened_count: manual reactivation
-      // resets that counter to 0, which would bypass this gate while the previous
-      // batch was still running.
-      // ponytail: symbol-keyed, so two rules on the SAME symbol block each other.
-      if(CountOpenPositions(g_rules[r].symbol) > 0)
-         continue;
+      // Sequential / Continuation Entry Gate:
+      // - If continuation_mode == false: no new cycle while ANY position from this EA is still open on this symbol.
+      // - If continuation_mode == true: allowed to enter again, but only in the SAME direction as currently open positions.
+      //   (e.g., if open positions are BUY, only subsequent BUY signals may fire; SELL signals are blocked, and vice versa).
+      if(!g_rules[r].continuation_mode)
+      {
+         if(CountOpenPositions(g_rules[r].symbol) > 0)
+            continue;
+      }
       
       string sym = g_rules[r].symbol;
       ENUM_TIMEFRAMES tf = g_rules[r].timeframe;
@@ -2463,7 +2567,10 @@ void OnTick()
          {
             if(g_rules[r].max_orders > 0 && g_rules[r].orders_opened_count >= g_rules[r].max_orders)
                break;
-            if(CountOpenPositions(sym) > 0)
+            // Continuation gate for BUY: blocked if any SELL position is open; or if non-continuation and ANY position open
+            if(!g_rules[r].continuation_mode && CountOpenPositions(sym) > 0)
+               break;
+            if(g_rules[r].continuation_mode && CountOpenPositions(sym, POSITION_TYPE_SELL) > 0)
                break;
             
             ENUM_TIMEFRAMES sig_tf = cand_tf[c];
@@ -2696,7 +2803,10 @@ void OnTick()
          {
             if(g_rules[r].max_orders > 0 && g_rules[r].orders_opened_count >= g_rules[r].max_orders)
                break;
-            if(CountOpenPositions(sym) > 0)
+            // Continuation gate for SELL: blocked if any BUY position is open; or if non-continuation and ANY position open
+            if(!g_rules[r].continuation_mode && CountOpenPositions(sym) > 0)
+               break;
+            if(g_rules[r].continuation_mode && CountOpenPositions(sym, POSITION_TYPE_BUY) > 0)
                break;
             
             ENUM_TIMEFRAMES sig_tf = cand_tf[c];

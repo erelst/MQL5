@@ -65,12 +65,12 @@ struct SRadarSymbol
 - **Strong Hammer (BUY):**
   - Shadow bawah: $\text{Lower Shadow} \ge 3 \times \text{Body}$.
   - Shadow atas: $\text{Upper Shadow} \le 0.8 \times \text{Body}$.
-  - Rentang total candle $>$ rentang total candle sebelumnya.
+  - Sapu likuiditas (*liquidity sweep*): Low candle berjalan wajib lebih rendah daripada low candle sebelumnya (`cur_low < prev_low`). Bebas warna body.
   - Rekomendasi SL: $\text{Low} - 50\% \text{ ATR}$.
 - **Strong Shooting Star (SELL):**
   - Shadow atas: $\text{Upper Shadow} \ge 3 \times \text{Body}$.
   - Shadow bawah: $\text{Lower Shadow} \le 0.8 \times \text{Body}$.
-  - Rentang total candle $>$ rentang total candle sebelumnya.
+  - Sapu likuiditas (*liquidity sweep*): High candle berjalan wajib lebih tinggi daripada high candle sebelumnya (`cur_high > prev_high`). Bebas warna body.
   - Rekomendasi SL: $\text{High} + 50\% \text{ ATR} + \text{Spread}$ (otomatis dikompensasikan dengan spread broker).
 
 ### 3.3 Stochastic (14,1,3) + Heikin Ashi Reversal
@@ -117,8 +117,8 @@ struct SRadarSymbol
 
 - **Arsitektur Trailing Terintegrasi:**
   - `TradeManagerReversalRadar` kini menyematkan mesin EWMA True Range ($\lambda = 0.90$, 30 bar acuan) yang identik dengan `MultiRuleAutoTrader`.
-  - **Trail BE (Break-Even):** Bergerak saat sisa jarak ke target TP awal $\le 30\%$ (`InpTrailBERemDistPct = 0.30`). Mengunci SL ke `Open + Spread` (Buy) atau `Open - Spread` (Sell).
-  - **Trail TP Extension:** Perpanjangan TP dinamis saat proximity ke TP $\le 1.10\text{TR}$ dan lonjakan volatilitas relatif $\text{RelVol} \ge 1.60\times$.
+  - **Trail BE (Break-Even):** Bergerak saat sisa jarak ke target TP awal $\le 20\%$ (`InpTrailBERemDistPct = 0.20`, default baru). Mengunci SL ke `Open + Spread` (Buy) atau `Open - Spread` (Sell).
+  - **Trail TP Extension & Proteksi Multi-TP Runner:** Perpanjangan TP dinamis saat proximity ke TP $\le 1.10\text{TR}$ dan lonjakan volatilitas relatif $\text{RelVol} \ge 1.60\times$. Pada posisi Multi-TP ($\ge 2$), **TP1 tidak di-extend** agar profit terdekat pasti terkunci; hanya TP runner paling ekstrem yang di-extend.
   - **Trail SL Lock ke Previous TP:** Mengunci SL ke level TP sebelumnya pada siklus perpanjangan ke-2 dan seterusnya.
 - **Deteksi Posisi & Proteksi Konflik AutoTrader:**
   - Membaca Magic Number posisi: jika `POSITION_MAGIC == InpAutoTraderMagic (882201)`, status di kolom tabel otomatis menampilkan label **`[AT TRAIL]`** (neon cyan).

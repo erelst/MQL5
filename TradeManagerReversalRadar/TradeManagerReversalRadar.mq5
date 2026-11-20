@@ -109,7 +109,7 @@ input bool     InpEnableSoundAlerts    = true;       // Enable Sound/Pop-up Aler
 input group "=== AUTO TRAIL SL & TP (EWMA TR ENGINE) ==="
 input bool                 InpEnableTrail      = true;               // Default Enable Trail SL & TP
 input ENUM_TRAIL_BE_MODE   InpTrailBEMode      = TRAIL_BE_PROXIMITY; // Default Trail BE Mode
-input double               InpTrailBERemDistPct= 0.30;               // Default Trail BE Remaining TP Distance (0.30 = 30%)
+input double               InpTrailBERemDistPct= 0.20;               // Default Trail BE Remaining TP Distance (0.20 = 20%)
 input double               InpMaxDistATR       = 1.10;               // Default Max Proximity to TP (in EWMA TR units)
 input double               InpRelVolThreshold  = 1.60;               // Default RelVol Threshold (>= 1.60x)
 input double               InpEWMALambda       = 0.90;               // EWMA TR Lambda Decay (0.88 - 0.92)
@@ -165,7 +165,7 @@ double            g_be_fixed_price = 0.0; // Fixed SL price for BE_OFFSET_CUSTOM
 // Persistent Auto Trail Form Inputs (Order Manager)
 double            g_form_trail_max_dist   = 1.10; // Max Dist TR
 double            g_form_trail_atr_mult   = 1.60; // RelVol Thresh
-double            g_form_trail_be_rem_pct = 30.0; // BE Dist %
+double            g_form_trail_be_rem_pct = 20.0; // BE Dist % (default 20%)
 string            g_form_trail_tf         = "5";  // TF acuan (default M5)
 
 const int         MAX_ROWS_PER_PAGE = 8;
@@ -1331,6 +1331,30 @@ void ProcessAutoTrailSLTP()
       }
       
       // 2. TRAIL TP EXTENSION: JARAK DEKAT TP + LONJAKAN VOLATILITAS NYATA
+      // Pada Multi-TP (ada posisi lain dengan magic & arah sama pada simbol ini):
+      // - TP1 (target terdekat) DILARANG di-extend agar profit pertama pasti secured.
+      // - Hanya target paling ekstrem (tertinggi untuk BUY, terendah untuk SELL) yang di-extend!
+      bool is_eligible_tp_runner = true;
+      for(int p_chk = PositionsTotal() - 1; p_chk >= 0; p_chk--)
+      {
+         if(m_position.SelectByIndex(p_chk))
+         {
+            if(m_position.Symbol() == sym && m_position.Magic() == m_position.Magic())
+            {
+               if(m_position.PositionType() == ptype && m_position.Ticket() != tkt)
+               {
+                  double other_tp = m_position.TakeProfit();
+                  if(other_tp > 0)
+                  {
+                     if(ptype == POSITION_TYPE_BUY  && other_tp > cur_tp) { is_eligible_tp_runner = false; break; }
+                     if(ptype == POSITION_TYPE_SELL && other_tp < cur_tp) { is_eligible_tp_runner = false; break; }
+                  }
+               }
+            }
+         }
+      }
+      if(!m_position.SelectByTicket(tkt)) continue;
+
       double dist_to_tp = 0.0;
       if(ptype == POSITION_TYPE_BUY)  dist_to_tp = MathAbs(cur_tp - bid) / ewma_tr;
       if(ptype == POSITION_TYPE_SELL) dist_to_tp = MathAbs(cur_tp - ask) / ewma_tr;
@@ -1341,7 +1365,7 @@ void ProcessAutoTrailSLTP()
       bool proximity_ok  = (dist_to_tp <= max_dist_allowed);
       bool volatility_ok = (rel_vol >= relvol_threshold);
       
-      if(proximity_ok && volatility_ok)
+      if(is_eligible_tp_runner && proximity_ok && volatility_ok)
       {
          double excess = rel_vol - relvol_threshold;
          double extend_amount = excess * atr_ref * InpExtendFactor;
@@ -1645,10 +1669,8 @@ bool IsStrongHammer(const string sym, const ENUM_TIMEFRAMES tf, const int shift,
    // Syarat 2: Upper shadow <= 0.8x body
    if(upper_shadow > 0.8 * body_size) return false;
    
-   // Syarat 3: Rentang lilin > rentang lilin sebelumnya
-   double cur_range  = cur_high - cur_low;
-   double prev_range = prev_high - prev_low;
-   if(cur_range <= prev_range) return false;
+   // Syarat 3: Low candle hammer harus lebih rendah dari low candle sebelumnya (sweep low)
+   if(cur_low >= prev_low) return false;
    
    return true;
 }
@@ -1687,10 +1709,8 @@ bool IsStrongShootingStar(const string sym, const ENUM_TIMEFRAMES tf, const int 
    // Syarat 2: Lower shadow <= 0.8x body
    if(lower_shadow > 0.8 * body_size) return false;
    
-   // Syarat 3: Rentang lilin > rentang lilin sebelumnya
-   double cur_range  = cur_high - cur_low;
-   double prev_range = prev_high - prev_low;
-   if(cur_range <= prev_range) return false;
+   // Syarat 3: High candle shooting star harus lebih tinggi dari high candle sebelumnya (sweep high)
+   if(cur_high <= prev_high) return false;
    
    return true;
 }

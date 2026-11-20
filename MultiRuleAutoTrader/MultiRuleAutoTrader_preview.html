@@ -406,15 +406,16 @@
             <input type="text" id="inp-maxord" value="1" style="width: 45px;" oninput="updatePreviewFromForm()">
           </div>
 
-          <!-- Row D: Lot Mode, Entry Multiplier & Multi TP -->
+          <!-- Row D: Lot Mode, Entry Multiplier, Multi TP & Continuation -->
           <div class="form-row">
             <span class="form-label">LOT MODE:</span>
-            <button class="btn-toggle active-both" id="btn-lotmode" onclick="toggleLotMode()" style="width: 85px; flex-shrink:0;">FIXED LOT</button>
-            <input type="text" id="inp-lotval" value="0.01" style="width: 50px;" oninput="updatePreviewFromForm()">
-            <span class="form-label" style="width:115px; text-align:right;">ENTRY MULTIPLIER:</span>
-            <input type="text" id="inp-mult" value="1" style="width: 40px;" oninput="updatePreviewFromForm()">
-            <span class="form-label" style="width:70px; text-align:right;">MULTI TP:</span>
-            <input type="text" id="inp-multitp" value="1" style="width: 40px;" oninput="updatePreviewFromForm()">
+            <button class="btn-toggle active-both" id="btn-lotmode" onclick="toggleLotMode()" style="width: 75px; flex-shrink:0;">FIXED LOT</button>
+            <input type="text" id="inp-lotval" value="0.01" style="width: 45px;" oninput="updatePreviewFromForm()">
+            <span class="form-label" style="width:80px; text-align:right;">MULT:</span>
+            <input type="text" id="inp-mult" value="1" style="width: 30px;" oninput="updatePreviewFromForm()">
+            <span class="form-label" style="width:65px; text-align:right;">MULTI TP:</span>
+            <input type="text" id="inp-multitp" value="2" style="width: 30px;" oninput="updatePreviewFromForm()">
+            <button class="btn-toggle" id="btn-cont" onclick="toggleContinuation()" style="width: 75px; flex-shrink:0; margin-left: 6px;">CONT: OFF</button>
           </div>
 
           <!-- Row E: Trailing EWMA TR Settings -->
@@ -485,6 +486,7 @@
               <th style="width: 45px;">TF</th>
               <th style="width: 45px;">MAX</th>
               <th style="width: 45px;">MULT</th>
+              <th style="width: 50px;">MODE</th>
               <th style="width: 65px;">DELAY</th>
               <th style="width: 120px;">PRICE BOUNDS</th>
               <th style="width: 135px;">AUTO TRAIL</th>
@@ -505,6 +507,7 @@
     let currentDir = 'BOTH';
     let lotMode = 'FIXED';
     let isTrailOn = true;
+    let isContinuation = false;
     let isDelayClose = false;
     let sigEng = true;
     let sigHmr = true;
@@ -521,9 +524,10 @@
         tf: 'M5',
         maxOrd: '1',
         mult: 1,
-        multiTp: 1,
+        multiTp: 2,
         lotMode: 'FIXED',
         lotVal: '0.01',
+        continuation: false,
         trailOn: true,
         trailPct: '5.0',
         atrMult: '1.60',
@@ -547,6 +551,7 @@
         multiTp: 2,
         lotMode: 'RISK',
         lotVal: '1.0',
+        continuation: true,
         trailOn: true,
         trailPct: '5.0',
         atrMult: '1.60',
@@ -567,9 +572,10 @@
         tf: 'M15',
         maxOrd: 'UNL',
         mult: 1,
-        multiTp: 1,
+        multiTp: 2,
         lotMode: 'FIXED',
         lotVal: '0.02',
+        continuation: false,
         trailOn: false,
         trailPct: '5.0',
         atrMult: '1.60',
@@ -597,9 +603,10 @@
           tf: document.getElementById('inp-tf').options[document.getElementById('inp-tf').selectedIndex].text,
           maxOrd: document.getElementById('inp-maxord').value || '1',
           mult: parseInt(document.getElementById('inp-mult').value) || 1,
-          multiTp: parseInt(document.getElementById('inp-multitp').value) || 1,
+          multiTp: parseInt(document.getElementById('inp-multitp').value) || 2,
           lotMode: lotMode,
           lotVal: document.getElementById('inp-lotval').value || '0.01',
+          continuation: isContinuation,
           trailOn: isTrailOn,
           trailDist: document.getElementById('inp-traildist').value || '1.10',
           atrMult: document.getElementById('inp-atrmult').value || '1.60',
@@ -625,14 +632,14 @@
       if (r.direction === 'BUY') dirStr = 'BUY ONLY';
       if (r.direction === 'SELL') dirStr = 'SELL ONLY';
 
-      let lotStr = r.lotMode === 'FIXED' ? `${r.lotVal} Lot` : `${r.lotVal}% Risk`;
+      let lotStr = r.lotMode === 'FIXED' ? `${r.lotVal} Lot` : (r.lotMode === 'RISK' ? `${r.lotVal}% Risk` : `${r.lotVal} USD`);
       let smStr  = r.sigMode === 'ANY' ? 'ANY (OR)' : 'COMBO (AND)';
       let sigs = [];
       if (r.sigEng) sigs.push('ENGULF');
       if (r.sigHmr) sigs.push('HAMMER/SS');
       if (r.sigStoch) sigs.push('STOCH+HA');
       let sigStr = sigs.length > 0 ? sigs.join(' + ') : 'NONE';
-      let bePctStr = (r.bePct !== undefined) ? r.bePct : 30;
+      let bePctStr = (r.bePct !== undefined) ? r.bePct : 20;
 
       const simTerminal = document.getElementById('sim-terminal');
       if (r.trailOn) {
@@ -695,7 +702,8 @@
         if (r.sigStoch) sigsTxt += '[ST+HA] ';
         sigsTxt += (r.sigMode === 'ANY') ? '[OR]' : '[AND]';
 
-        let lotTxt = r.lotMode === 'FIXED' ? `${r.lotVal}L` : `${r.lotVal}%R`;
+        let lotTxt = r.lotMode === 'FIXED' ? `${r.lotVal}L` : (r.lotMode === 'RISK' ? `${r.lotVal}%R` : `${r.lotVal}$`);
+        let contBadge = r.continuation ? `<span style="color:var(--gold-bright); font-size:9px;">[CONT]</span>` : `<span style="color:var(--text-med); font-size:9px;">[SEQ]</span>`;
         let boundsTxt = `B:${r.bMax} | S:${r.sMin}`;
         let trailTxt = r.trailOn ? `<span style="color:var(--gold-bright)">ON (&lt;=${r.trailDist}TR, &gt;${r.atrMult}x)</span>` : `<span style="color:var(--text-med)">OFF</span>`;
         let delayTxt = r.delayClose ? 'TF Close' : `${r.delayPct}%`;
@@ -714,6 +722,7 @@
           <td style="color:var(--gold-bright); font-weight:800;">[${r.tf}]</td>
           <td>${r.maxOrd}</td>
           <td style="color:var(--gold-bright);">${r.mult}x</td>
+          <td>${contBadge}</td>
           <td>${delayTxt}</td>
           <td style="color:var(--text-med); font-size:9px;">${boundsTxt}</td>
           <td>${trailTxt}</td>
@@ -821,10 +830,27 @@
         lotMode = 'RISK';
         btn.innerText = '% RISK';
         btn.className = 'btn-toggle active-buy';
+      } else if (lotMode === 'RISK') {
+        lotMode = 'MONEY';
+        btn.innerText = 'USD';
+        btn.className = 'btn-toggle active-sell';
       } else {
         lotMode = 'FIXED';
         btn.innerText = 'FIXED LOT';
         btn.className = 'btn-toggle active-both';
+      }
+      updatePreviewFromForm();
+    }
+
+    function toggleContinuation() {
+      isContinuation = !isContinuation;
+      const btn = document.getElementById('btn-cont');
+      if (isContinuation) {
+        btn.innerText = 'CONT: ON';
+        btn.className = 'btn-toggle active-gold';
+      } else {
+        btn.innerText = 'CONT: OFF';
+        btn.className = 'btn-toggle';
       }
       updatePreviewFromForm();
     }
@@ -908,8 +934,21 @@
 
       lotMode = r.lotMode;
       const btnLot = document.getElementById('btn-lotmode');
-      btnLot.innerText = lotMode === 'FIXED' ? 'FIXED LOT' : '% RISK';
-      btnLot.className = lotMode === 'FIXED' ? 'btn-toggle active-both' : 'btn-toggle active-buy';
+      if (lotMode === 'FIXED') {
+        btnLot.innerText = 'FIXED LOT';
+        btnLot.className = 'btn-toggle active-both';
+      } else if (lotMode === 'RISK') {
+        btnLot.innerText = '% RISK';
+        btnLot.className = 'btn-toggle active-buy';
+      } else {
+        btnLot.innerText = 'USD';
+        btnLot.className = 'btn-toggle active-sell';
+      }
+
+      isContinuation = !!r.continuation;
+      const btnCont = document.getElementById('btn-cont');
+      btnCont.innerText = isContinuation ? 'CONT: ON' : 'CONT: OFF';
+      btnCont.className = isContinuation ? 'btn-toggle active-gold' : 'btn-toggle';
 
       isTrailOn = r.trailOn;
       const btnTrail = document.getElementById('btn-trail');
@@ -974,6 +1013,11 @@
       btnLot.innerText = 'FIXED LOT';
       btnLot.className = 'btn-toggle active-both';
 
+      isContinuation = false;
+      const btnCont = document.getElementById('btn-cont');
+      btnCont.innerText = 'CONT: OFF';
+      btnCont.className = 'btn-toggle';
+
       isTrailOn = true;
       const btnTrail = document.getElementById('btn-trail');
       btnTrail.innerText = 'ON';
@@ -988,7 +1032,7 @@
       const tfText = document.getElementById('inp-tf').options[document.getElementById('inp-tf').selectedIndex].text;
       const maxOrd = document.getElementById('inp-maxord').value.trim() || '1';
       const mult = parseInt(document.getElementById('inp-mult').value) || 1;
-      const multiTp = parseInt(document.getElementById('inp-multitp').value) || 1;
+      const multiTp = parseInt(document.getElementById('inp-multitp').value) || 2;
       const lotVal = document.getElementById('inp-lotval').value.trim() || '0.01';
       const trailDist = document.getElementById('inp-traildist').value.trim() || '1.10';
       const atrMult = document.getElementById('inp-atrmult').value.trim() || '1.60';
@@ -1006,6 +1050,7 @@
         multiTp: multiTp,
         lotMode: lotMode,
         lotVal: lotVal,
+        continuation: isContinuation,
         trailOn: isTrailOn,
         trailDist: trailDist,
         atrMult: atrMult,
