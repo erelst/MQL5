@@ -250,6 +250,14 @@ Saat pengguna sedang mengisi atau mengubah kolom di form deck (misalnya simbol, 
 - **Logika:**
   - Jika `continuation_mode = false` (Sequential): Rule menunggu seluruh posisi yang sedang terbuka pada simbol tersebut tertutup sebelum dapat membuka siklus order baru.
   - Jika `continuation_mode = true` (Continuation): Rule diperbolehkan membuka entri baru meskipun ada posisi terbuka yang sedang berjalan, **dengan syarat arah sinyal searah** dengan posisi berjalan (Buy hanya boleh tambah Buy, Sell hanya boleh tambah Sell). Jika ada posisi berlawanan, entri diblokir.
+- **Independensi Lintas Rule dan Lintas Simbol:**
+  - **Interaksi Antar-Rule pada Simbol yang Sama:**
+    - Jika Rule A telah membuka posisi BUY, lalu Rule B (pada simbol yang sama) mendeteksi sinyal BUY: Rule B **bisa membuka order** asalkan `continuation_mode` pada Rule B aktif (`true`).
+    - Jika Rule B mendeteksi sinyal SELL saat posisi BUY masih terbuka: Rule B **tetap diblokir** (meskipun continuation aktif) demi mencegah hedging/locking arah berlawanan di simbol yang sama.
+    - Jika `continuation_mode` pada Rule B nonaktif (`false` / sequential): Rule B tidak akan mengeksekusi order baru sampai seluruh posisi di simbol tersebut bersih.
+  - **Independensi Penuh Lintas Simbol:**
+    - Pengecekan posisi (`CountOpenPositions(sym)`) berjalan strictly **per-simbol**.
+    - Keberadaan posisi terbuka di satu simbol (misal `BTCUSD` oleh Rule 1) **sama sekali tidak mempengaruhi** rule di simbol lain (misal `ETHUSD` atau `EURUSD` oleh Rule 2). Rule di simbol lain tetap bebas membuka order terlepas dari apakah `continuation_mode` miliknya bernilai ON maupun OFF.
 - **UI:** Tombol `CONT: ON` (neon gold) / `CONT: OFF` (abu-abu) di Form Deck Row D serta badge status `[CONT]` / `[SEQ]` di tabel rule list.
 
 ### B. Mode Lot Berbasis Mata Uang Akun (`LOT_RISK_MONEY`)

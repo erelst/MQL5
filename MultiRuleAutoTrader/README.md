@@ -63,6 +63,15 @@ Menggantikan ATR lambat dengan rasio volatilitas *Relative Volatility* ($\text{R
 
 ---
 
+### 6. Mode Continuation vs Sequential Entry (Independensi Simbol)
+
+- **Mode Sequential (`CONT: OFF` - Default):** Rule tidak akan membuka posisi baru jika masih ada posisi aktif pada simbol tersebut.
+- **Mode Continuation (`CONT: ON`):** Memperbolehkan penambahan posisi baru searah (*scaling-in*) meskipun ada posisi terbuka yang sedang berjalan.
+  - **Interaksi Antar-Rule pada Simbol Sama:** Jika Rule A telah membuka posisi BUY, Rule B pada simbol yang sama **bisa membuka order** selama sinyalnya juga BUY dan `continuation_mode` Rule B bernilai `ON`. Namun jika Rule B mendeteksi SELL, order diblokir otomatis untuk mencegah hedging berlawanan arah.
+  - **Independensi Mutlak Lintas Simbol:** Pengecekan posisi aktif dihitung strictly **per-simbol**. Posisi terbuka di `BTCUSD` tidak pernah memblokir rule di `ETHUSD` atau pasangan simbol lainnya, baik mode continuation di rule tersebut bernilai ON maupun OFF.
+
+---
+
 ## Parameter Input Dasar
 
 | Parameter | Default | Keterangan |
