@@ -253,9 +253,13 @@ Saat pengguna sedang mengisi atau mengubah kolom di form deck (misalnya simbol, 
 - **UI:** Tombol `CONT: ON` (neon gold) / `CONT: OFF` (abu-abu) di Form Deck Row D serta badge status `[CONT]` / `[SEQ]` di tabel rule list.
 
 ### B. Mode Lot Berbasis Mata Uang Akun (`LOT_RISK_MONEY`)
-- Menghitung ukuran lot secara dinamis berdasarkan nominal mata uang akun (contoh: 30 USD, 30 EUR, atau 30 USC).
+- Menghitung ukuran lot secara dinamis berdasarkan nominal mata uang akun (contoh: 30 USD, 30 EUR, atau 50 USC).
 - Menggunakan nilai tick per simbol (`SYMBOL_TRADE_TICK_VALUE` / `SYMBOL_TRADE_TICK_SIZE`) terhadap jarak stop loss point.
-- Tombol lot mode di UI berputar: `FIXED LOT` -> `% RISK` -> `[CURRENCY]` (contoh: `USD`).
+- **Prinsip Granularitas Diskrit & Konservatif:**
+  - Di pasar riil, risiko nominal tidak pernah bisa persis sampai sen terakhir karena volume trading terikat batasan diskrit broker (`SYMBOL_VOLUME_STEP` dan `SYMBOL_VOLUME_MIN`).
+  - Kalkulasi lot menggunakan pembulatan ke bawah (`MathFloor`) ke kelipatan step terdekat untuk menjamin kerugian aktual saat terkena SL **tidak akan melampaui** nominal risiko yang ditetapkan (contoh: target risiko 50 USC menghasilkan lot diskrit dengan risiko riil ~49 USC, bukan dinaikkan ke atas yang bisa membengkak menjadi 51+ USC).
+  - Normalisasi ini juga diaplikasikan secara rekursif saat lot dipecah ke beberapa tingkatan Multi-TP.
+- Tombol lot mode di UI berputar: `FIXED LOT` -> `% RISK` -> `[CURRENCY]` (contoh: `USD` / `USC`).
 
 ### C. Pembaruan Nilai Default Sistem
 - Timeframe acuan default: **M5** (`5`).
