@@ -1250,7 +1250,8 @@ void ProcessAutoTrailSLTP()
       
       if(cur_tp <= 0) continue;
       
-      m_trade.SetExpertMagicNumber(m_position.Magic());
+      ulong cur_magic = m_position.Magic();
+      m_trade.SetExpertMagicNumber(cur_magic);
       
       ENUM_TIMEFRAMES tf = AtrBaseTF(g_tracking_list[i].timeframe);
       double curr_tr  = GetTrueRange(sym, tf, 0);
@@ -1339,7 +1340,7 @@ void ProcessAutoTrailSLTP()
       {
          if(m_position.SelectByIndex(p_chk))
          {
-            if(m_position.Symbol() == sym && m_position.Magic() == m_position.Magic())
+            if(m_position.Symbol() == sym && m_position.Magic() == cur_magic)
             {
                if(m_position.PositionType() == ptype && m_position.Ticket() != tkt)
                {
