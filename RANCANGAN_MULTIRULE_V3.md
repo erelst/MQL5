@@ -235,6 +235,13 @@ Saat pengguna sedang mengisi atau mengubah kolom di form deck (misalnya simbol, 
 - **Tabel Bawah (Kolom `AUTO TRAIL`):** Menampilkan ringkasan konfigurasi rule: `BE:30%|D:1.1|RV:1.6`.
 - **Format State Persistence (v5):** Format file binary `EAT_MultiRules_<login>.bin` ditingkatkan ke versi 5 untuk menyimpan `trail_be_rem_dist_pct` dan `allow_m1_fallback` dengan backward compatibility penuh terhadap file versi 4.
 
+### D. Normalisasi Volume Multi-TP & Diagnostic Trade Logging
+- **Akar Masalah (Bug Invalid Volume):** Pada Multi-TP (misal Multi TP = 2), pembagian lot (`pool / mtp`) menghasilkan pecahan desimal yang melanggar `SYMBOL_VOLUME_STEP` broker (contoh: 0.51 lot dibagi 2 menjadi 0.255 lot pada BTCUSD dengan step 0.01), sehingga server broker menolak order dengan pesan `[Invalid volume]`.
+- **Standar Solusi:**
+  1. **Fungsi Terpusat `NormalizeLotSize(sym, raw_lot)`:** Menyelaraskan seluruh kalkulasi lot (Fixed, Risk %, Risk Money, dan pembagian pecahan Multi-TP) dengan `SYMBOL_VOLUME_STEP`, `SYMBOL_VOLUME_MIN`, serta pembulatan presisi desimal dinamis (`lot_digits`).
+  2. **Audit Eksekusi Multi-TP:** Setiap pecahan lot pada `plan_lot[p]` dan `cur_lot` dipastikan melewati normalisasi sebelum dikirim ke `m_trade.Buy()` / `m_trade.Sell()`.
+  3. **Trade Error Diagnostics:** Menambahkan log penolakan eksekusi broker (`PrintFormat("[BUY/SELL FAILED]...")`) yang merinci kode error `ResultRetcode()` dan deskripsinya ke tab Experts agar masalah server/broker selalu terlihat transparan.
+
 ---
 
 ## 6. Mode Continuation Entry & Mode Lot Berbasis Mata Uang Akun (Risk Money)

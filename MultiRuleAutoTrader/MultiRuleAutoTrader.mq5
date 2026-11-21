@@ -624,11 +624,35 @@ bool CheckStochHA(const string sym, const ENUM_TIMEFRAMES tf, const int shift, b
 }
 
 //+------------------------------------------------------------------+
+//| NORMALIZE LOT BY SYMBOL VOLUME STEP & MIN/MAX LIMITS             |
+//+------------------------------------------------------------------+
+double NormalizeLotSize(const string sym, double raw_lot)
+{
+   double min_lot  = SymbolInfoDouble(sym, SYMBOL_VOLUME_MIN);
+   double max_lot  = SymbolInfoDouble(sym, SYMBOL_VOLUME_MAX);
+   double lot_step = SymbolInfoDouble(sym, SYMBOL_VOLUME_STEP);
+   if(lot_step <= 0) lot_step = 0.01;
+   
+   // Determine precision from lot_step (e.g., 0.1 -> 1 digit, 0.01 -> 2 digits, 0.001 -> 3 digits)
+   int lot_digits = 2;
+   if(lot_step >= 1.0) lot_digits = 0;
+   else if(lot_step >= 0.1) lot_digits = 1;
+   else if(lot_step >= 0.01) lot_digits = 2;
+   else if(lot_step >= 0.001) lot_digits = 3;
+   else lot_digits = 4;
+   
+   double norm_lot = MathFloor(raw_lot / lot_step) * lot_step;
+   if(norm_lot < min_lot) norm_lot = min_lot;
+   if(max_lot > 0 && norm_lot > max_lot) norm_lot = max_lot;
+   return NormalizeDouble(norm_lot, lot_digits);
+}
+
+//+------------------------------------------------------------------+
 //| LOT SIZE CALCULATION (FIXED, RISK %, OR RISK MONEY)              |
 //+------------------------------------------------------------------+
 double CalculateLotSize(const string sym, ENUM_LOT_MODE mode, double lot_val, double entry_price, double sl_price)
 {
-   if(mode == LOT_FIXED) return lot_val;
+   if(mode == LOT_FIXED) return NormalizeLotSize(sym, lot_val);
    
    double risk_amount = 0.0;
    if(mode == LOT_RISK_PCT)
@@ -636,28 +660,20 @@ double CalculateLotSize(const string sym, ENUM_LOT_MODE mode, double lot_val, do
    else if(mode == LOT_RISK_MONEY)
       risk_amount = lot_val; // Direct money risk in account currency
       
-   if(risk_amount <= 0) return 0.01;
+   if(risk_amount <= 0) return NormalizeLotSize(sym, 0.01);
    
    double sl_distance = MathAbs(entry_price - sl_price);
-   if(sl_distance <= 0) return 0.01;
+   if(sl_distance <= 0) return NormalizeLotSize(sym, 0.01);
    
    double tick_size  = SymbolInfoDouble(sym, SYMBOL_TRADE_TICK_SIZE);
    double tick_value = SymbolInfoDouble(sym, SYMBOL_TRADE_TICK_VALUE);
-   if(tick_size <= 0 || tick_value <= 0) return 0.01;
+   if(tick_size <= 0 || tick_value <= 0) return NormalizeLotSize(sym, 0.01);
    
    double point_loss_per_lot = (sl_distance / tick_size) * tick_value;
-   if(point_loss_per_lot <= 0) return 0.01;
+   if(point_loss_per_lot <= 0) return NormalizeLotSize(sym, 0.01);
    
    double calculated_lot = risk_amount / point_loss_per_lot;
-   double min_lot  = SymbolInfoDouble(sym, SYMBOL_VOLUME_MIN);
-   double max_lot  = SymbolInfoDouble(sym, SYMBOL_VOLUME_MAX);
-   double lot_step = SymbolInfoDouble(sym, SYMBOL_VOLUME_STEP);
-   
-   calculated_lot = MathFloor(calculated_lot / lot_step) * lot_step;
-   if(calculated_lot < min_lot) calculated_lot = min_lot;
-   if(calculated_lot > max_lot) calculated_lot = max_lot;
-   
-   return calculated_lot;
+   return NormalizeLotSize(sym, calculated_lot);
 }
 
 //+------------------------------------------------------------------+
@@ -2730,7 +2746,7 @@ void OnTick()
             else if(mtp > 1)
             {
                double pool = lots * (double)mult;
-               double per = pool / (double)mtp;
+               double per = NormalizeLotSize(sym, pool / (double)mtp);
                for(int t = 1; t <= mtp; t++)
                {
                   plan_tp[plan_cnt] = NormalizeDouble(ask + (sl_dist * g_rules[r].risk_reward_ratio * (double)t), digits);
@@ -2756,7 +2772,7 @@ void OnTick()
                   int m = m_ord;
                   m_ord++;
                   double cur_tp = plan_tp[p];
-                  double cur_lot = plan_lot[p];
+                  double cur_lot = NormalizeLotSize(sym, plan_lot[p]);
                   if(m_trade.Buy(cur_lot, sym, ask, sl_price, cur_tp, StringFormat("MultiRule Buy #%d (RR 1:%.1f)", m + 1, g_rules[r].risk_reward_ratio)))
                   {
                      ulong deal_tkt = m_trade.ResultOrder();
@@ -2774,6 +2790,13 @@ void OnTick()
                      msg += " | Signal bar: " + TimeToString(sig_bar_time);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);
+                     Print(msg);
+                  }
+                  else
+                  {
+                     PrintFormat("[BUY FAILED] %s: Error %d (%s) | Lot: %.3f | Ask: %.5f | SL: %.5f | TP: %.5f",
+                                 sym, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription(),
+                                 cur_lot, ask, sl_price, cur_tp);
                   }
                }
             }
@@ -2962,7 +2985,7 @@ void OnTick()
             else if(mtp > 1)
             {
                double pool = lots * (double)mult_s;
-               double per = pool / (double)mtp;
+               double per = NormalizeLotSize(sym, pool / (double)mtp);
                for(int t = 1; t <= mtp; t++)
                {
                   plan_tp[plan_cnt] = NormalizeDouble(bid - (sl_dist * g_rules[r].risk_reward_ratio * (double)t), digits);
@@ -2988,7 +3011,7 @@ void OnTick()
                   int m = m_ord;
                   m_ord++;
                   double cur_tp = plan_tp[p];
-                  double cur_lot = plan_lot[p];
+                  double cur_lot = NormalizeLotSize(sym, plan_lot[p]);
                   if(m_trade.Sell(cur_lot, sym, bid, sl_price, cur_tp, StringFormat("MultiRule Sell #%d (RR 1:%.1f)", m + 1, g_rules[r].risk_reward_ratio)))
                   {
                      ulong deal_tkt = m_trade.ResultOrder();
@@ -3006,6 +3029,13 @@ void OnTick()
                      msg += " | Signal bar: " + TimeToString(sig_bar_time);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);
+                     Print(msg);
+                  }
+                  else
+                  {
+                     PrintFormat("[SELL FAILED] %s: Error %d (%s) | Lot: %.3f | Bid: %.5f | SL: %.5f | TP: %.5f",
+                                 sym, m_trade.ResultRetcode(), m_trade.ResultRetcodeDescription(),
+                                 cur_lot, bid, sl_price, cur_tp);
                   }
                }
             }

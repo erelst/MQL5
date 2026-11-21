@@ -313,6 +313,21 @@ def check_rule_reactivation():
     print("test_rule_reactivation: OK (edit submit & toggle reliably activate and reset orders counter)")
 
 
+def check_lot_normalization():
+    """Multi-TP lot splitting must normalize by volume step and min lot.
+
+    Without this, 0.51 lot split over 2 TPs yields 0.255 lot, which broker
+    rejects with [Invalid volume].
+    """
+    src = open(SRC).read()
+    assert "double NormalizeLotSize(const string sym, double raw_lot)" in src
+    assert "double per = NormalizeLotSize(sym, pool / (double)mtp);" in src
+    assert "double cur_lot = NormalizeLotSize(sym, plan_lot[p]);" in src
+    assert "PrintFormat(\"[BUY FAILED] %s: Error %d" in src
+    assert "PrintFormat(\"[SELL FAILED] %s: Error %d" in src
+    print("test_lot_normalization: OK (NormalizeLotSize protects Multi-TP fractions & logs trade rejections)")
+
+
 if __name__ == "__main__":
     try:
         check_detector()
@@ -320,6 +335,7 @@ if __name__ == "__main__":
         check_sequential_entry()
         check_price_range_order()
         check_rule_reactivation()
+        check_lot_normalization()
     except Exception as exc:  # noqa: BLE001 - a test, any failure is a failure
         print("test_autotrader: FAILED -> %s" % exc)
         sys.exit(1)
