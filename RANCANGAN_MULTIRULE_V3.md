@@ -192,6 +192,17 @@ Menggantikan indikator ATR klasik yang lambat dengan model *Relative Volatility*
    - Hanya terpicu jika Trail TP berhasil di-extend terlebih dahulu.
    - Begitu TP diperpanjang, SL otomatis digeser mengunci level TP sebelumnya saat harga mendekati TP baru.
 
+### Perilaku Saat Modifikasi Manual SL / TP oleh Pengguna
+Sistem trailing didesain sepenuhnya toleran dan adaptif terhadap intervensi manual pengguna di chart:
+- **Modifikasi SL Manual (One-Way Protection):**
+  - Mesin trailing membaca nilai SL live posisi (`m_position.StopLoss()`) pada setiap tick.
+  - EA menerapkan aturan proteksi satu arah: SL hanya akan dimodifikasi jika level Break-Even yang dihitung lebih menguntungkan dibanding SL saat ini (`be_sl > cur_sl` untuk BUY, atau `be_sl < cur_sl` untuk SELL).
+  - Jika pengguna telah menggeser SL secara manual lebih jauh ke arah profit (melebihi titik BE), EA **tidak akan menurunkan/memundurkan SL** kembali ke titik BE, melainkan langsung menandai `be_applied = true` dan mengizinkan tahapan trailing berikutnya berjalan.
+- **Modifikasi TP Manual (Dynamic Proximity Adaptation):**
+  - Sisa jarak menuju target dihitung secara live terhadap level TP terbaru dari server broker: `dist_to_tp = MathAbs(cur_tp - price) / ewma_tr`.
+  - Jika pengguna menggeser TP lebih jauh atau lebih dekat, ambang kedekatan trailing dan trigger Break-Even secara otomatis menyesuaikan diri terhadap TP baru tersebut.
+  - Perpanjangan TP lanjutan (*TP Extend*) saat lonjakan volatilitas (`RelVol >= 1.60x`) tetap berfungsi normal dan bertolak dari level TP hasil modifikasi manual tersebut.
+
 ### Interaksi dengan Multi TP Independen & Proteksi TP Runner
 - Pada pembagian `Multi TP >= 2`:
   - **TP1 (target terdekat) DILARANG di-extend** agar profit pertama dapat terealisasi secara pasti dan cepat.

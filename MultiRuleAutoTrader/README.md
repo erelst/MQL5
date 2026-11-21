@@ -60,6 +60,9 @@ Menggantikan ATR lambat dengan rasio volatilitas *Relative Volatility* ($\text{R
 2. **Trail TP Extension (Perpanjangan Target Selektif):** Wajib memenuhi **dua syarat sekaligus**: sisa jarak menuju TP $\le 1.1\times$ EWMA TR **DAN** terjadi lonjakan volatilitas pasar nyata ($\text{RelVol} \ge 1.60\times$).
 3. **Trail SL Lock (Penguncian Bertingkat):** Hanya aktif pada siklus berikutnya setelah TP berhasil di-extend, mengunci SL ke level TP sebelumnya.
 4. **Multi TP Independen:** Setiap tiket posisi hasil pembagian Multi TP dipantau trailing-nya secara independen, difokuskan dari tingkat TP terdekat.
+5. **Toleransi Modifikasi Manual:** Jika SL atau TP digeser manual di chart:
+   - *SL Manual:* EA menerapkan proteksi satu arah (tidak akan memundurkan SL jika posisi SL manual sudah lebih baik/profit dari titik BE).
+   - *TP Manual:* Jarak proximity dan pemicu extend otomatis mengikuti level TP baru hasil modifikasi pengguna secara live.
 
 ---
 
