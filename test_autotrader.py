@@ -342,6 +342,18 @@ def check_combo_packages():
     print("test_combo_packages: OK (COMBO dual-confirmation & STOCH+HA wired for BUY & SELL)")
 
 
+def check_auto_adopt_and_ticket_resolution():
+    """Verify Auto-Adopt EA positions and position ticket resolution."""
+    src = open(SRC).read()
+    assert "ulong ResolvePositionTicket(ulong order_ticket, ulong deal_ticket, string sym)" in src
+    assert "void AdoptOpenEAPositions()" in src
+    assert "m_position.Magic() != InpMagicNumber" in src
+    assert "m_position.Magic() == InpMagicNumber" in src
+    assert "m_position.Magic() == m_position.Magic()" not in src, "Typo magic equality must be eliminated"
+    assert "AdoptOpenEAPositions();" in src
+    print("test_auto_adopt_and_ticket_resolution: OK (Position ticket resolved + EA positions auto-adopted safely)")
+
+
 if __name__ == "__main__":
     try:
         check_detector()
@@ -351,6 +363,7 @@ if __name__ == "__main__":
         check_rule_reactivation()
         check_lot_normalization()
         check_combo_packages()
+        check_auto_adopt_and_ticket_resolution()
     except Exception as exc:  # noqa: BLE001 - a test, any failure is a failure
         print("test_autotrader: FAILED -> %s" % exc)
         sys.exit(1)

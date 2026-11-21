@@ -296,3 +296,32 @@ Saat pengguna sedang mengisi atau mengubah kolom di form deck (misalnya simbol, 
 - Sisa jarak target untuk Trail BE: **20%** (`InpTrailBERemDistPct = 0.20` / `20%`).
 - Multi TP: **2** (`InpMultiTP = 2`).
 - Format binary state naik ke **v6** untuk AutoTrader dan **v7** untuk Radar.
+
+---
+
+## 7. Sistem Resolusi Tiket Posisi MT5 & Auto-Adoption Posisi Berjalan
+
+### A. Resolusi Tiket Posisi MT5 (`ResolvePositionTicket`)
+- **Akar Masalah:**
+  - Fungsi eksekusi standar `m_trade.Buy()` / `m_trade.Sell()` mengembalikan `m_trade.ResultOrder()` (tiket order) dan `m_trade.ResultDeal()` (tiket deal).
+  - Pada akun retail MT5 tipe Hedging maupun broker dengan eksekusi pasar dinamis, nomor tiket posisi terbuka (`PositionSelectByTicket`) kerap berbeda dari nomor order awal.
+  - Jika EA hanya mendaftarkan `deal_tkt = m_trade.ResultOrder()`, maka saat `ProcessAutoTrailSLTP()` mengecek `m_position.SelectByTicket(tkt)`, pemanggilan tersebut gagal (`false`) dan menandai tracking nonaktif (`active = false`), sehingga posisi kehilangan pengawalan Auto Trail sejak tick pertama.
+- **Standar Solusi:**
+  - Dibuat fungsi resolver bertingkat `ResolvePositionTicket(order_ticket, deal_ticket, sym)`:
+    1. Cek langsung `PositionSelectByTicket(order_ticket)`. Jika langsung valid, gunakan `order_ticket`.
+    2. Cek histori deal eksekusi via `HistoryDealSelect(deal_ticket)` lalu ambil `DEAL_POSITION_ID` dan validasi via `PositionSelectByTicket(pos_id)`.
+    3. Fallback: Cari posisi terbuka paling baru pada simbol tersebut yang memiliki `m_position.Magic() == InpMagicNumber`.
+
+### B. Auto-Adoption Posisi Berjalan (`AdoptOpenEAPositions`)
+- **Penyebab Insiden (EA Reload / Reset RAM):**
+  - Array pelacakan `g_tracking_list[]` berada di memori RAM. Jika EA ter-reload (recompile, ganti timeframe chart, restart terminal MT5, atau submit edit form), list tracking di RAM menjadi kosong sementara order di broker masih berjalan.
+  - Akibatnya, posisi yang sudah berjalan tidak lagi dikawal oleh Trail BE maupun TP Extend, sehingga bisa langsung menyentuh TP tanpa pernah di-extend.
+- **Standar Solusi:**
+  - Diterapkan fungsi `AdoptOpenEAPositions()` yang dipanggil di setiap `OnInit()` dan awal loop `OnTick()`.
+  - **Prinsip Keamanan & Isolasi:**
+    - **Hanya Posisi Milik EA:** Filter strictly `m_position.Magic() == InpMagicNumber`.
+    - **Order Manual Tidak Disentuh:** Order manual (`Magic == 0`) maupun order dari EA lain sama sekali tidak diadopsi atau diganggu.
+    - Menghubungkan kembali posisi berjalan dengan konfigurasi rule aktif yang sesuai pada simbol tersebut (timeframe, trail dist, relvol threshold, dan BE distance ratio).
+    - Jika rule spesifik telah dihapus atau dipause namun ordernya masih terbuka di broker, posisi tetap dikawal menggunakan default safety trail parameter.
+  - Memperbaiki bug typo perbandingan magic number di loop Multi-TP check: `m_position.Magic() == InpMagicNumber` (sebelumnya `m_position.Magic() == m_position.Magic()`).
+

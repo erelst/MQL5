@@ -220,6 +220,8 @@ void SaveStateToFile();
 void LoadStateFromFile();
 void ProcessAutoTrailSLTP();
 void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, double atr100, double open_p, double tp_p, double trail_dist, double atr_mult, double be_rem_dist_pct);
+ulong ResolvePositionTicket(ulong order_ticket, ulong deal_ticket, string sym);
+void AdoptOpenEAPositions();
 string FindExactOrMarketWatchSymbol(string input_sym);
 bool EvaluatePriceFilter(double price, string filter_str);
 double GetTrueRange(const string sym, const ENUM_TIMEFRAMES tf, int shift = 0);
@@ -735,6 +737,126 @@ double GetEWMA_TR(const string sym, const ENUM_TIMEFRAMES tf, int barsToUse = 30
 }
 
 //+------------------------------------------------------------------+
+//| POSITION TICKET RESOLVER & AUTO-ADOPTION SYSTEM                  |
+//+------------------------------------------------------------------+
+ulong ResolvePositionTicket(ulong order_ticket, ulong deal_ticket, string sym)
+{
+   // 1. Coba verifikasi apakah order_ticket langsung valid sebagai tiket posisi di broker
+   if(order_ticket > 0 && PositionSelectByTicket(order_ticket))
+      return order_ticket;
+      
+   // 2. Coba periksa deal history untuk mendapatkan DEAL_POSITION_ID
+   if(deal_ticket > 0 && HistoryDealSelect(deal_ticket))
+   {
+      ulong pos_id = (ulong)HistoryDealGetInteger(deal_ticket, DEAL_POSITION_ID);
+      if(pos_id > 0 && PositionSelectByTicket(pos_id))
+         return pos_id;
+   }
+   
+   // 3. Fallback: Cari posisi terbuka paling baru di simbol ini milik Magic EA kita
+   ulong best_ticket = 0;
+   datetime best_time = 0;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong tkt = PositionGetTicket(i);
+      if(tkt > 0)
+      {
+         if(PositionGetString(POSITION_SYMBOL) == sym && PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
+         {
+            datetime pos_time = (datetime)PositionGetInteger(POSITION_TIME);
+            if(pos_time >= best_time)
+            {
+               best_time = pos_time;
+               best_ticket = tkt;
+            }
+         }
+      }
+   }
+   return best_ticket;
+}
+
+void AdoptOpenEAPositions()
+{
+   // Murni mengadopsi posisi yang dibuka oleh EA ini (m_position.Magic() == InpMagicNumber).
+   // Order manual (magic 0) atau EA lain TIDAK AKAN disentuh!
+   int total_pos = PositionsTotal();
+   if(total_pos == 0) return;
+   
+   int total_rules = ArraySize(g_rules);
+   
+   for(int i = 0; i < total_pos; i++)
+   {
+      ulong tkt = PositionGetTicket(i);
+      if(tkt == 0) continue;
+      
+      if(!m_position.SelectByTicket(tkt)) continue;
+      
+      // Strict Filter: Hanya posisi milik EA kita
+      if(m_position.Magic() != InpMagicNumber) continue;
+      
+      string sym = m_position.Symbol();
+      ENUM_POSITION_TYPE ptype = m_position.PositionType();
+      double open_p = m_position.PriceOpen();
+      double tp_p   = m_position.TakeProfit();
+      if(tp_p <= 0) continue; // Butuh target TP awal
+      
+      // Cek apakah tiket posisi ini sudah aktif dalam tracking list
+      bool already_tracked = false;
+      int t_size = ArraySize(g_tracking_list);
+      for(int k = 0; k < t_size; k++)
+      {
+         if(g_tracking_list[k].ticket == tkt && g_tracking_list[k].active)
+         {
+            already_tracked = true;
+            break;
+         }
+      }
+      if(already_tracked) continue;
+      
+      // Cari konfigurasi rule yang paling relevan untuk simbol ini
+      ENUM_TIMEFRAMES adopted_tf = _Period;
+      double trail_dist = InpMaxDistATR;
+      double atr_mult   = InpRelVolThreshold;
+      double be_rem_pct = InpTrailBERemDistPct;
+      bool trail_enabled = true;
+      
+      bool found_rule = false;
+      for(int r = 0; r < total_rules; r++)
+      {
+         if(g_rules[r].symbol == sym)
+         {
+            // Cocokkan arah jika memungkinkan
+            if((ptype == POSITION_TYPE_BUY  && (g_rules[r].direction == TRADE_DIR_BUY  || g_rules[r].direction == TRADE_DIR_BOTH)) ||
+               (ptype == POSITION_TYPE_SELL && (g_rules[r].direction == TRADE_DIR_SELL || g_rules[r].direction == TRADE_DIR_BOTH)))
+            {
+               adopted_tf    = g_rules[r].timeframe;
+               trail_dist    = g_rules[r].trail_max_dist;
+               atr_mult      = g_rules[r].atr_multiplier;
+               be_rem_pct    = g_rules[r].trail_be_rem_dist_pct;
+               trail_enabled = g_rules[r].enable_trail;
+               found_rule    = true;
+               break;
+            }
+         }
+      }
+      
+      if(!found_rule)
+      {
+         // Jika rule spesifik dihapus tapi posisinya masih open, pakai default trail rule
+         trail_enabled = true;
+         adopted_tf    = _Period;
+      }
+      
+      if(!trail_enabled) continue;
+      
+      double atr100 = CalculateATR100(sym, AtrBaseTF(adopted_tf), InpATRPeriod);
+      RegisterPositionTracking(tkt, sym, adopted_tf, atr100, open_p, tp_p, trail_dist, atr_mult, be_rem_pct);
+      PrintFormat("[AUTO-ADOPT] Position #%I64u on %s (Magic: %I64u) adopted by Auto Trail (TF: %s | BE Rem: %.0f%% | D: %.1f | RV: %.1f)",
+                  tkt, sym, (ulong)m_position.Magic(), EnumToString(adopted_tf), be_rem_pct * 100.0, trail_dist, atr_mult);
+   }
+}
+
+//+------------------------------------------------------------------+
 //| POSITION TRACKING MANAGEMENT (AUTO TRAIL SL & TRAIL TP)          |
 //+------------------------------------------------------------------+
 void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, double atr100, double open_p, double tp_p, double trail_dist, double atr_mult, double be_rem_dist_pct)
@@ -901,7 +1023,7 @@ void ProcessAutoTrailSLTP()
       {
          if(m_position.SelectByIndex(p_chk))
          {
-            if(m_position.Symbol() == sym && m_position.Magic() == m_position.Magic())
+            if(m_position.Symbol() == sym && m_position.Magic() == InpMagicNumber)
             {
                if(m_position.PositionType() == ptype && m_position.Ticket() != tkt)
                {
@@ -1982,6 +2104,8 @@ int OnInit()
    
    CreateDashboardUI();
    
+   AdoptOpenEAPositions();
+   
    PrintFormat("MultiRuleAutoTrader Initialized | Multi-Rules Active: %d rules loaded", ArraySize(g_rules));
    return(INIT_SUCCEEDED);
 }
@@ -2487,6 +2611,7 @@ void OnTick()
 {
    if(!g_master_power_enabled) return;
    
+   AdoptOpenEAPositions();
    ProcessAutoTrailSLTP();
    
    int total_rules = ArraySize(g_rules);
@@ -2816,18 +2941,20 @@ void OnTick()
                   double cur_lot = NormalizeLotSize(sym, plan_lot[p]);
                   if(m_trade.Buy(cur_lot, sym, ask, sl_price, cur_tp, StringFormat("MultiRule Buy #%d (RR 1:%.1f)", m + 1, g_rules[r].risk_reward_ratio)))
                   {
-                     ulong deal_tkt = m_trade.ResultOrder();
+                     ulong ord_tkt  = m_trade.ResultOrder();
+                     ulong deal_tkt = m_trade.ResultDeal();
+                     ulong pos_tkt  = ResolvePositionTicket(ord_tkt, deal_tkt, sym);
                      opened++;
                      
                      double atr100 = atr_50 * 2.0;
                      if(g_rules[r].enable_trail)
-                        RegisterPositionTracking(deal_tkt, sym, tf, atr100, ask, cur_tp, g_rules[r].trail_max_dist, g_rules[r].atr_multiplier, g_rules[r].trail_be_rem_dist_pct);
+                        RegisterPositionTracking(pos_tkt > 0 ? pos_tkt : ord_tkt, sym, tf, atr100, ask, cur_tp, g_rules[r].trail_max_dist, g_rules[r].atr_multiplier, g_rules[r].trail_be_rem_dist_pct);
                      
                      string msg = StringFormat("[BUY] %s %s (%s)\nSignal: %s\nEntry: %.5f | SL: %.5f | TP: %.5f\nOrder: #%d (%d/%d) | Lot: %.2f | RR: 1:%.2f",
                                                sym, EnumToString(sig_tf), sig_name,
                                                sig_name,
                                                ask, sl_price, cur_tp,
-                                               deal_tkt, m + 1, plan_cnt, cur_lot, g_rules[r].risk_reward_ratio);
+                                               pos_tkt > 0 ? pos_tkt : ord_tkt, m + 1, plan_cnt, cur_lot, g_rules[r].risk_reward_ratio);
                      msg += " | Signal bar: " + TimeToString(sig_bar_time);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);
@@ -3061,18 +3188,20 @@ void OnTick()
                   double cur_lot = NormalizeLotSize(sym, plan_lot[p]);
                   if(m_trade.Sell(cur_lot, sym, bid, sl_price, cur_tp, StringFormat("MultiRule Sell #%d (RR 1:%.1f)", m + 1, g_rules[r].risk_reward_ratio)))
                   {
-                     ulong deal_tkt = m_trade.ResultOrder();
+                     ulong ord_tkt  = m_trade.ResultOrder();
+                     ulong deal_tkt = m_trade.ResultDeal();
+                     ulong pos_tkt  = ResolvePositionTicket(ord_tkt, deal_tkt, sym);
                      opened++;
                      
                      double atr100 = atr_50 * 2.0;
                      if(g_rules[r].enable_trail)
-                        RegisterPositionTracking(deal_tkt, sym, tf, atr100, bid, cur_tp, g_rules[r].trail_max_dist, g_rules[r].atr_multiplier, g_rules[r].trail_be_rem_dist_pct);
+                        RegisterPositionTracking(pos_tkt > 0 ? pos_tkt : ord_tkt, sym, tf, atr100, bid, cur_tp, g_rules[r].trail_max_dist, g_rules[r].atr_multiplier, g_rules[r].trail_be_rem_dist_pct);
                      
                      string msg = StringFormat("[SELL] %s %s (%s)\nSignal: %s\nEntry: %.5f | SL: %.5f | TP: %.5f\nOrder: #%d (%d/%d) | Lot: %.2f | RR: 1:%.2f",
                                                sym, EnumToString(sig_tf), sig_name,
                                                sig_name,
                                                bid, sl_price, cur_tp,
-                                               deal_tkt, m + 1, plan_cnt, cur_lot, g_rules[r].risk_reward_ratio);
+                                               pos_tkt > 0 ? pos_tkt : ord_tkt, m + 1, plan_cnt, cur_lot, g_rules[r].risk_reward_ratio);
                      msg += " | Signal bar: " + TimeToString(sig_bar_time);
                      if(InpEnableSoundAlerts) Alert(msg);
                      if(InpEnablePushAlerts)  SendNotification(msg);

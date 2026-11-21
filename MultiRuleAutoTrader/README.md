@@ -66,6 +66,9 @@ Menggantikan ATR lambat dengan rasio volatilitas *Relative Volatility* ($\text{R
 5. **Toleransi Modifikasi Manual:** Jika SL atau TP digeser manual di chart:
    - *SL Manual:* EA menerapkan proteksi satu arah (tidak akan memundurkan SL jika posisi SL manual sudah lebih baik/profit dari titik BE).
    - *TP Manual:* Jarak proximity dan pemicu extend otomatis mengikuti level TP baru hasil modifikasi pengguna secara live.
+6. **Resolusi Tiket Posisi & Auto-Adopt Posisi EA:**
+   - *Resolusi Tiket MT5:* Mengatasi perbedaan nomor Order Ticket vs Position Ticket di MT5 (Hedging/Market Execution) menggunakan resolver bertingkat (`order_ticket` -> `DEAL_POSITION_ID` -> active position scan) agar tiket posisi selalu valid dikawal.
+   - *Auto-Adopt Posisi Berjalan:* Jika EA ter-reload atau MT5 restart, sistem secara otomatis mengadopsi kembali posisi aktif yang ber-Magic Number EA (`InpMagicNumber`) agar pengawalan Trail BE dan TP Extend tidak terputus. Order manual (`Magic == 0`) maupun order dari EA lain 100% diabaikan dan tidak disentuh.
 
 ---
 
