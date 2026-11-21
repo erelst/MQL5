@@ -2300,15 +2300,11 @@ void OnChartEvent(const int id,
          {
             target_idx = ArraySize(g_rules);
             ArrayResize(g_rules, target_idx + 1);
-            g_rules[target_idx].active = true;
-            g_rules[target_idx].orders_opened_count = 0;
          }
-         else
-         {
-            // Edit existing: jika max orders diubah dan lebih besar dari opened, aktifkan kembali
-            if(max_ord_val > 0 && g_rules[target_idx].orders_opened_count < max_ord_val)
-               g_rules[target_idx].active = true;
-         }
+         
+         // Both adding new rule and updating existing rule activate the rule and reset order count
+         g_rules[target_idx].active              = true;
+         g_rules[target_idx].orders_opened_count = 0;
          
          g_rules[target_idx].symbol              = valid_sym;
          g_rules[target_idx].direction           = g_form_direction;
@@ -2420,8 +2416,8 @@ void OnChartEvent(const int id,
          else if(sparam == g_prefix + "BTN_TOGGLE_RULE_" + IntegerToString(i))
          {
             g_rules[i].active = !g_rules[i].active;
-            if(g_rules[i].active && g_rules[i].max_orders > 0 && g_rules[i].orders_opened_count >= g_rules[i].max_orders)
-               g_rules[i].orders_opened_count = 0; // Reset counter on manual reactivation
+            if(g_rules[i].active)
+               g_rules[i].orders_opened_count = 0; // Reset counter whenever manually reactivated
             g_selected_rule_idx = i;
             SaveStateToFile();
             UpdatePreviewTerminalBox();

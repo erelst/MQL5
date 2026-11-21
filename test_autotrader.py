@@ -298,12 +298,28 @@ def check_price_range_order():
     print("test_price_range: OK (3040-3051 == 3051-3040, bounds inclusive)")
 
 
+def check_rule_reactivation():
+    """Updating a rule or toggling ACTIVE must reset orders_opened_count to 0.
+
+    Previously, if a rule paused at max_orders and the user updated it without
+    increasing max_orders, active stayed false and orders_opened_count was not
+    reset, causing the EA to appear dead until re-attached.
+    """
+    src = open(SRC).read()
+    assert "g_rules[target_idx].active              = true;" in src
+    assert "g_rules[target_idx].orders_opened_count = 0;" in src
+    assert 'if(sparam == g_prefix + "BTN_TOGGLE_RULE_"' in src
+    assert "if(g_rules[i].active)\n               g_rules[i].orders_opened_count = 0;" in src
+    print("test_rule_reactivation: OK (edit submit & toggle reliably activate and reset orders counter)")
+
+
 if __name__ == "__main__":
     try:
         check_detector()
         check_tf_close_wiring()
         check_sequential_entry()
         check_price_range_order()
+        check_rule_reactivation()
     except Exception as exc:  # noqa: BLE001 - a test, any failure is a failure
         print("test_autotrader: FAILED -> %s" % exc)
         sys.exit(1)

@@ -218,6 +218,11 @@ Saat pengguna sedang mengisi atau mengubah kolom di form deck (misalnya simbol, 
 - **Penyebab Masalah Sebelumnya:** Penonaktifan rule (`active = false`) sebelumnya hanya diperiksa di awal loop tick, sehingga jika rule membuka order ke-$N$ (misalnya 2 dari limit 2), status rule tertunda menjadi `PAUSED` sampai seluruh posisi tersebut tertutup.
 - **Penyempurnaan:** Begitu order ke-$N$ dieksekusi di blok BUY maupun SELL dan `orders_opened_count >= max_orders`, rule **seketika langsung dinonaktifkan (`active = false`)**, status disimpan ke file bin, dan tombol pada tabel bawah seketika berubah menjadi **`[PAUSED]` (merah)**.
 - **Transparansi Tampilan Counter:** Kolom `MAX` di tabel bawah menampilkan progres riil `orders_opened_count / max_orders` (contoh: `2/2x` dengan teks merah saat limit tercapai, atau `UNL` untuk unlimited).
+- **Aktivasi Ulang Bersih (Reliable Reactivation Lifecycle):**
+  - **Akar Masalah (Bug Lama):** Jika rule sudah mencapai batas order (`orders_opened_count >= max_orders`) lalu user melakukan `EDIT` untuk memperbarui parameter tanpa menaikkan angka `Max Orders`, rule tetap tertahan dalam status `PAUSED` dan counter tidak ter-reset, sehingga EA terlihat mati suri dan menuntut re-attach EA.
+  - **Standar Solusi:**
+    1. **Saat Submit Form Edit (`BTN_SUBMIT_RULE`):** Menyimpan perubahan rule langsung mengeset `active = true` dan mereset `orders_opened_count = 0` secara mutlak, sehingga rule siap menyongsong siklus sinyal baru.
+    2. **Saat Toggle Manual Status (`BTN_TOGGLE_RULE`):** Menekan tombol untuk mengaktifkan kembali rule (`active = true`) otomatis mereset `orders_opened_count = 0` tanpa syarat, menjamin rule tidak langsung dibekukan ulang di tick pertama.
 
 ### B. Toggle M1 Khusus Timeframe M5
 - **Tampilan Dinamis:** Tombol toggle **`[M1: ON]` / `[M1: OFF]`** tampil di Row C Form Deck bersanding dengan input Timeframe **hanya jika Timeframe yang dipilih adalah M5**. Jika Timeframe selain M5 (M1, M15, M30, H1), tombol ini otomatis disembunyikan.
