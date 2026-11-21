@@ -111,9 +111,19 @@ Tersedia 3 kelompok sinyal:
   - **Dukungan Keduanya Aktif (Filosofi "Sama tapi Berbeda"):** Pengguna dapat mencentang **kedua paket aktif sekaligus**. EA akan mengeksekusi paket mana saja yang lebih dulu terbentuk valid (baik Lilin = `ENG & STOCH+HA` maupun Lilin = `HAMMER/SS & STOCH+HA`). Semua order yang keluar di mode COMBO dijamin 100% selalu terverifikasi filter Stochastic + Heikin Ashi tanpa pengecualian.
 
 ### Tampilan Dinamis Berdasarkan Arah (Direction)
-- `BUY ONLY`: Opsi sinyal hanya memunculkan sinyal Buy (*Engulfing Buy*, *Hammer*, *Stoch+HA Buy*). Opsi Shooting Star disembunyikan.
-- `SELL ONLY`: Opsi sinyal hanya memunculkan sinyal Sell (*Engulfing Sell*, *Shooting Star*, *Stoch+HA Sell*). Opsi Hammer disembunyikan.
-- `BUY & SELL`: Menampilkan kelompok terpadu `[ENG]`, `[HMR/SS]`, dan `[ST+HA]`.
+- `BUY ONLY`:
+  - Mode ANY: `[x] ENG`, `[x] HAMMER`, `[x] STOCH+HA`.
+  - Mode COMBO: `[x] ENG & STOCH+HA` dan `[x] HAMMER & STOCH+HA`. Opsi Shooting Star disembunyikan.
+- `SELL ONLY`:
+  - Mode ANY: `[x] ENG`, `[x] SHOOTING`, `[x] STOCH+HA`.
+  - Mode COMBO: `[x] ENG & STOCH+HA` dan `[x] SHOOTING & STOCH+HA`. Opsi Hammer disembunyikan.
+- `BUY & SELL` (BOTH):
+  - Mode ANY: `[x] ENG`, `[x] HMR/SS`, `[x] STOCH+HA`.
+  - Mode COMBO: Menampilkan label terpadu **`[x] HMR/SS & STOCH+HA`** bersanding dengan `[x] ENG & STOCH+HA`.
+  - **Perilaku Eksekusi Mode BOTH pada Paket COMBO Kedua:**
+    - Saat EA mengevaluasi lilin untuk sinyal **BUY**, tombol ini otomatis bertindak memvalidasi konfirmasi ganda **`HAMMER & STOCH+HA`**.
+    - Saat EA mengevaluasi lilin untuk sinyal **SELL**, tombol ini otomatis bertindak memvalidasi konfirmasi ganda **`SHOOTING & STOCH+HA`**.
+    - Pendekatan ini menjaga ukuran tombol tetap proporsional dan tidak terpotong di Form Deck tanpa mengorbankan fungsionalitas dua arah.
 
 ### Tampilan pada Tabel Daftar Rule
 Kolom sinyal pada tabel menampilkan daftar tag ringkas dan rapi:

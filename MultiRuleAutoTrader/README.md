@@ -32,8 +32,8 @@ Tersedia 3 kelompok sinyal pembalikan arah yang dapat dipilih secara fleksibel:
 - **ANY (OR) - Default:** Cukup salah satu dari sinyal yang dicentang valid untuk memicu eksekusi order.
 - **COMBO (Konfirmasi Ganda Wajib & STOCH+HA):** Sinyal candlestick wajib terverifikasi ganda oleh momentum jenuh Stochastic + Heikin Ashi. Pilihan otomatis disederhanakan menjadi 2 paket:
   1. `[x] ENG & STOCH+HA`
-  2. `[x] HAMMER & STOCH+HA` (Buy) / `[x] SHOOTING & STOCH+HA` (Sell)
-  - **Mendukung Keduanya Aktif:** Jika kedua paket dicentang, EA siap menerima paket mana saja yang lebih dulu terpicu valid (mirip fleksibilitas mode ANY, namun dengan proteksi ketat konfirmasi ganda STOCH+HA pada setiap sinyal).
+  2. `[x] HAMMER & STOCH+HA` (Buy) / `[x] SHOOTING & STOCH+HA` (Sell) / `[x] HMR/SS & STOCH+HA` (Both)
+  - **Mendukung Keduanya Aktif:** Jika kedua paket dicentang, EA siap menerima paket mana saja yang lebih dulu terpicu valid (mirip fleksibilitas mode ANY, namun dengan proteksi ketat konfirmasi ganda STOCH+HA pada setiap sinyal). Pada arah `BOTH`, paket kedua otomatis mengecek `HAMMER` saat mengevaluasi Buy dan `SHOOTING` saat mengevaluasi Sell.
 
 ---
 
