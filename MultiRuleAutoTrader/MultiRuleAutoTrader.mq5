@@ -1210,29 +1210,60 @@ void CreateDashboardUI()
    int row_b_y = upper_y + 48;
    CreateLabel("LBL_SIGS", root_x + 22, row_b_y + 3, "SIGNALS:", CLR_TEXT_PURE, 8, true);
    
-   // Checkbox 1: Engulfing
-   color eng_bg = g_form_sig_eng ? CLR_TAB_ACTIVE_BG : CLR_PANEL_BG;
-   color eng_cl = g_form_sig_eng ? CLR_CYAN_NEON : CLR_TEXT_MED;
-   CreateButton("BTN_SIG_ENG", root_x + 85, row_b_y, 75, 20, "[x] ENG", eng_bg, eng_cl, eng_cl);
-   
-   // Checkbox 2: Hammer / Shooting Star (Dinamis sesuai arah)
-   string hmr_label = "[x] HMR/SS";
-   if(g_form_direction == TRADE_DIR_BUY)  hmr_label = "[x] HAMMER";
-   if(g_form_direction == TRADE_DIR_SELL) hmr_label = "[x] SHOOTING";
-   color hmr_bg = g_form_sig_hmr ? CLR_TAB_ACTIVE_BG : CLR_PANEL_BG;
-   color hmr_cl = g_form_sig_hmr ? CLR_GOLD_NEON : CLR_TEXT_MED;
-   CreateButton("BTN_SIG_HMR", root_x + 165, row_b_y, 95, 20, hmr_label, hmr_bg, hmr_cl, hmr_cl);
-   
-   // Checkbox 3: Stoch + Heikin Ashi
-   color stoch_bg = g_form_sig_stoch ? CLR_TAB_ACTIVE_BG : CLR_PANEL_BG;
-   color stoch_cl = g_form_sig_stoch ? CLR_BULL_NEON : CLR_TEXT_MED;
-   CreateButton("BTN_SIG_STOCH", root_x + 265, row_b_y, 90, 20, "[x] STOCH+HA", stoch_bg, stoch_cl, stoch_cl);
-   
-   // Toggle Signal Mode: ANY (OR) vs COMBO (AND)
-   string sm_str = (g_form_sig_mode == SIGNAL_MODE_ANY) ? "MODE: ANY (OR)" : "MODE: COMBO (AND)";
-   color sm_bg = (g_form_sig_mode == SIGNAL_MODE_COMBO) ? CLR_TAB_ACTIVE_BG : CLR_PANEL_BG;
-   color sm_cl = (g_form_sig_mode == SIGNAL_MODE_COMBO) ? CLR_GOLD_NEON : CLR_CYAN_NEON;
-   CreateButton("BTN_TOGGLE_SIG_MODE", root_x + 365, row_b_y, 155, 20, sm_str, sm_bg, sm_cl, sm_cl);
+   // Mode ANY vs COMBO Rendering for Row B
+   if(g_form_sig_mode == SIGNAL_MODE_COMBO)
+   {
+      // Paket 1: ENG & STOCH+HA
+      color p1_bg = g_form_sig_eng ? CLR_TAB_ACTIVE_BG : CLR_PANEL_BG;
+      color p1_cl = g_form_sig_eng ? CLR_CYAN_NEON : CLR_TEXT_MED;
+      string p1_txt = g_form_sig_eng ? "[x] ENG & STOCH+HA" : "[ ] ENG & STOCH+HA";
+      CreateButton("BTN_SIG_ENG", root_x + 85, row_b_y, 130, 20, p1_txt, p1_bg, p1_cl, p1_cl);
+      
+      // Paket 2: HAMMER/SHOOTING & STOCH+HA
+      string p2_txt = "[x] HMR/SS & STOCH+HA";
+      if(g_form_direction == TRADE_DIR_BUY)  p2_txt = g_form_sig_hmr ? "[x] HAMMER & STOCH+HA" : "[ ] HAMMER & STOCH+HA";
+      else if(g_form_direction == TRADE_DIR_SELL) p2_txt = g_form_sig_hmr ? "[x] SHOOTING & STOCH+HA" : "[ ] SHOOTING & STOCH+HA";
+      else p2_txt = g_form_sig_hmr ? "[x] HMR/SS & STOCH+HA" : "[ ] HMR/SS & STOCH+HA";
+      color p2_bg = g_form_sig_hmr ? CLR_TAB_ACTIVE_BG : CLR_PANEL_BG;
+      color p2_cl = g_form_sig_hmr ? CLR_GOLD_NEON : CLR_TEXT_MED;
+      CreateButton("BTN_SIG_HMR", root_x + 220, row_b_y, 160, 20, p2_txt, p2_bg, p2_cl, p2_cl);
+      
+      // Toggle Signal Mode Button (COMBO active)
+      string sm_str = "MODE: COMBO (AND)";
+      color sm_bg = CLR_TAB_ACTIVE_BG;
+      color sm_cl = CLR_GOLD_NEON;
+      CreateButton("BTN_TOGGLE_SIG_MODE", root_x + 385, row_b_y, 135, 20, sm_str, sm_bg, sm_cl, sm_cl);
+   }
+   else
+   {
+      // Mode ANY (OR): 3 Checkboxes Standalone
+      // Checkbox 1: Engulfing
+      color eng_bg = g_form_sig_eng ? CLR_TAB_ACTIVE_BG : CLR_PANEL_BG;
+      color eng_cl = g_form_sig_eng ? CLR_CYAN_NEON : CLR_TEXT_MED;
+      string eng_label = g_form_sig_eng ? "[x] ENG" : "[ ] ENG";
+      CreateButton("BTN_SIG_ENG", root_x + 85, row_b_y, 75, 20, eng_label, eng_bg, eng_cl, eng_cl);
+      
+      // Checkbox 2: Hammer / Shooting Star (Dinamis sesuai arah)
+      string hmr_label = "[x] HMR/SS";
+      if(g_form_direction == TRADE_DIR_BUY)  hmr_label = g_form_sig_hmr ? "[x] HAMMER" : "[ ] HAMMER";
+      else if(g_form_direction == TRADE_DIR_SELL) hmr_label = g_form_sig_hmr ? "[x] SHOOTING" : "[ ] SHOOTING";
+      else hmr_label = g_form_sig_hmr ? "[x] HMR/SS" : "[ ] HMR/SS";
+      color hmr_bg = g_form_sig_hmr ? CLR_TAB_ACTIVE_BG : CLR_PANEL_BG;
+      color hmr_cl = g_form_sig_hmr ? CLR_GOLD_NEON : CLR_TEXT_MED;
+      CreateButton("BTN_SIG_HMR", root_x + 165, row_b_y, 95, 20, hmr_label, hmr_bg, hmr_cl, hmr_cl);
+      
+      // Checkbox 3: Stoch + Heikin Ashi
+      color stoch_bg = g_form_sig_stoch ? CLR_TAB_ACTIVE_BG : CLR_PANEL_BG;
+      color stoch_cl = g_form_sig_stoch ? CLR_BULL_NEON : CLR_TEXT_MED;
+      string stoch_label = g_form_sig_stoch ? "[x] STOCH+HA" : "[ ] STOCH+HA";
+      CreateButton("BTN_SIG_STOCH", root_x + 265, row_b_y, 95, 20, stoch_label, stoch_bg, stoch_cl, stoch_cl);
+      
+      // Toggle Signal Mode Button (ANY active)
+      string sm_str = "MODE: ANY (OR)";
+      color sm_bg = CLR_PANEL_BG;
+      color sm_cl = CLR_CYAN_NEON;
+      CreateButton("BTN_TOGGLE_SIG_MODE", root_x + 365, row_b_y, 155, 20, sm_str, sm_bg, sm_cl, sm_cl);
+   }
    
    // Row C: Risk Reward & Timeframe (y = upper_y + 72)
    int row_c_y = upper_y + 72;
@@ -1455,9 +1486,17 @@ void UpdatePreviewTerminalBox()
    }
    
    string sig_list = "";
-   if(prev_eng)   sig_list += (sig_list == "" ? "" : " + ") + "ENGULF";
-   if(prev_hmr)   sig_list += (sig_list == "" ? "" : " + ") + "HAMMER/SS";
-   if(prev_stoch) sig_list += (sig_list == "" ? "" : " + ") + "STOCH+HA";
+   if(prev_sm == "COMBO (AND)" || prev_sm == "MODE: COMBO")
+   {
+      if(prev_eng) sig_list += (sig_list == "" ? "" : " | ") + "ENG & STOCH+HA";
+      if(prev_hmr) sig_list += (sig_list == "" ? "" : " | ") + (prev_dir == "SELL ONLY" ? "SHOOTING & STOCH+HA" : (prev_dir == "BUY ONLY" ? "HAMMER & STOCH+HA" : "HMR/SS & STOCH+HA"));
+   }
+   else
+   {
+      if(prev_eng)   sig_list += (sig_list == "" ? "" : " + ") + "ENGULF";
+      if(prev_hmr)   sig_list += (sig_list == "" ? "" : " + ") + "HAMMER/SS";
+      if(prev_stoch) sig_list += (sig_list == "" ? "" : " + ") + "STOCH+HA";
+   }
    if(sig_list == "") sig_list = "NONE";
    
    string l1 = StringFormat("Target: %s (%s) | %s | %s", prev_sym, prev_tf, prev_dir, prev_rule_tag);
@@ -2058,8 +2097,6 @@ void OnChartEvent(const int id,
       {
          CaptureFormInputs();
          g_form_sig_eng = !g_form_sig_eng;
-         if(g_form_sig_mode == SIGNAL_MODE_COMBO && g_form_sig_eng && g_form_sig_hmr)
-            g_form_sig_hmr = false; // Mutual exclusion
          CreateDashboardUI();
          return;
       }
@@ -2067,8 +2104,6 @@ void OnChartEvent(const int id,
       {
          CaptureFormInputs();
          g_form_sig_hmr = !g_form_sig_hmr;
-         if(g_form_sig_mode == SIGNAL_MODE_COMBO && g_form_sig_hmr && g_form_sig_eng)
-            g_form_sig_eng = false;
          CreateDashboardUI();
          return;
       }
@@ -2085,8 +2120,9 @@ void OnChartEvent(const int id,
          if(g_form_sig_mode == SIGNAL_MODE_ANY)
          {
             g_form_sig_mode = SIGNAL_MODE_COMBO;
+            // Di mode COMBO, paket default aktif dua-duanya (ENG & STOCH+HA serta HMR & STOCH+HA)
             g_form_sig_eng   = true;
-            g_form_sig_hmr   = false;
+            g_form_sig_hmr   = true;
             g_form_sig_stoch = true;
          }
          else
@@ -2657,26 +2693,31 @@ void OnTick()
                   buy_stoch_valid = true;
             }
             
-            // Evaluate Execution Mode: ANY (OR) vs COMBO (AND)
+            // Evaluate Execution Mode: ANY (OR) vs COMBO (Dual Confirmation)
             bool trigger_buy = false;
             string sig_name = "";
             double chosen_sl = 0.0;
             
             if(g_rules[r].signal_mode == SIGNAL_MODE_COMBO)
             {
-               // COMBO (AND): Semua sinyal yang aktif harus terpenuhi
-               bool all_active_ok = true;
-               if(g_rules[r].sig_engulfing && !buy_eng_valid)   all_active_ok = false;
-               if(g_rules[r].sig_hammer_ss && !buy_hmr_valid)   all_active_ok = false;
-               if(g_rules[r].sig_stoch_ha  && !buy_stoch_valid) all_active_ok = false;
+               // COMBO: Konfirmasi ganda berbasis pasangan wajib dengan STOCH+HA
+               // Paket 1: ENG & STOCH+HA
+               // Paket 2: HAMMER & STOCH+HA
+               // Jika kedua paket aktif, menerima mana saja yang terbentuk duluan (or keduanya)
+               bool p1_ok = (g_rules[r].sig_engulfing && buy_eng_valid && buy_stoch_valid);
+               bool p2_ok = (g_rules[r].sig_hammer_ss && buy_hmr_valid && buy_stoch_valid);
                
-               if(all_active_ok && (g_rules[r].sig_engulfing || g_rules[r].sig_hammer_ss || g_rules[r].sig_stoch_ha))
+               if(p1_ok)
                {
                   trigger_buy = true;
-                  sig_name = "COMBO: ";
-                  if(buy_eng_valid)   { sig_name += "[ENG] "; chosen_sl = eng_sl_level; }
-                  if(buy_hmr_valid)   { sig_name += "[HAMMER] "; chosen_sl = hmr_sl_level; }
-                  if(buy_stoch_valid) { sig_name += "[STOCH+HA]"; if(chosen_sl == 0.0) chosen_sl = ask - atr_50 * 2.0; }
+                  sig_name    = "COMBO: [ENG & STOCH+HA]";
+                  chosen_sl   = eng_sl_level;
+               }
+               else if(p2_ok)
+               {
+                  trigger_buy = true;
+                  sig_name    = "COMBO: [HAMMER & STOCH+HA]";
+                  chosen_sl   = hmr_sl_level;
                }
             }
             else
@@ -2905,18 +2946,24 @@ void OnTick()
             
             if(g_rules[r].signal_mode == SIGNAL_MODE_COMBO)
             {
-               bool all_active_ok = true;
-               if(g_rules[r].sig_engulfing && !sell_eng_valid)   all_active_ok = false;
-               if(g_rules[r].sig_hammer_ss && !sell_ss_valid)    all_active_ok = false;
-               if(g_rules[r].sig_stoch_ha  && !sell_stoch_valid) all_active_ok = false;
+               // COMBO: Konfirmasi ganda berbasis pasangan wajib dengan STOCH+HA
+               // Paket 1: ENG & STOCH+HA
+               // Paket 2: SHOOTING & STOCH+HA
+               // Jika kedua paket aktif, menerima mana saja yang terbentuk duluan (or keduanya)
+               bool p1_ok = (g_rules[r].sig_engulfing && sell_eng_valid && sell_stoch_valid);
+               bool p2_ok = (g_rules[r].sig_hammer_ss && sell_ss_valid  && sell_stoch_valid);
                
-               if(all_active_ok && (g_rules[r].sig_engulfing || g_rules[r].sig_hammer_ss || g_rules[r].sig_stoch_ha))
+               if(p1_ok)
                {
                   trigger_sell = true;
-                  sig_name = "COMBO: ";
-                  if(sell_eng_valid)   { sig_name += "[ENG] "; chosen_sl = eng_sl_level; }
-                  if(sell_ss_valid)    { sig_name += "[SHOOTING STAR] "; chosen_sl = ss_sl_level; }
-                  if(sell_stoch_valid) { sig_name += "[STOCH+HA]"; if(chosen_sl == 0.0) chosen_sl = bid + atr_50 * 2.0 + spread; }
+                  sig_name     = "COMBO: [ENG & STOCH+HA]";
+                  chosen_sl    = eng_sl_level;
+               }
+               else if(p2_ok)
+               {
+                  trigger_sell = true;
+                  sig_name     = "COMBO: [SHOOTING & STOCH+HA]";
+                  chosen_sl    = ss_sl_level;
                }
             }
             else

@@ -697,10 +697,16 @@
         if (r.direction === 'SELL') dirBadge = `<span style="color:var(--bear-bright)">SELL ONLY</span>`;
 
         let sigsTxt = '';
-        if (r.sigEng) sigsTxt += '[ENG] ';
-        if (r.sigHmr) sigsTxt += '[HMR/SS] ';
-        if (r.sigStoch) sigsTxt += '[ST+HA] ';
-        sigsTxt += (r.sigMode === 'ANY') ? '[OR]' : '[AND]';
+        if (r.sigMode === 'COMBO') {
+          if (r.sigEng) sigsTxt += '[ENG & STOCH+HA] ';
+          if (r.sigHmr) sigsTxt += (r.direction === 'SELL' ? '[SHOOTING & STOCH+HA] ' : (r.direction === 'BUY' ? '[HAMMER & STOCH+HA] ' : '[HMR/SS & STOCH+HA] '));
+          sigsTxt += '[COMBO]';
+        } else {
+          if (r.sigEng) sigsTxt += '[ENG] ';
+          if (r.sigHmr) sigsTxt += '[HMR/SS] ';
+          if (r.sigStoch) sigsTxt += '[STOCH+HA] ';
+          sigsTxt += '[ANY]';
+        }
 
         let lotTxt = r.lotMode === 'FIXED' ? `${r.lotVal}L` : (r.lotMode === 'RISK' ? `${r.lotVal}%R` : `${r.lotVal}$`);
         let contBadge = r.continuation ? `<span style="color:var(--gold-bright); font-size:9px;">[CONT]</span>` : `<span style="color:var(--text-med); font-size:9px;">[SEQ]</span>`;
@@ -793,7 +799,7 @@
       if (sigMode === 'ANY') {
         sigMode = 'COMBO';
         sigEng = true;
-        sigHmr = false;
+        sigHmr = true;
         sigStoch = true;
       } else {
         sigMode = 'ANY';
@@ -811,16 +817,39 @@
       const btnStoch = document.getElementById('btn-sig-stoch');
       const btnMode = document.getElementById('btn-sig-mode');
 
-      btnEng.className = sigEng ? 'btn-toggle active-both' : 'btn-toggle';
-      btnHmr.className = sigHmr ? 'btn-toggle active-gold' : 'btn-toggle';
-      btnStoch.className = sigStoch ? 'btn-toggle active-buy' : 'btn-toggle';
-
       if (sigMode === 'COMBO') {
         btnMode.innerText = 'MODE: COMBO (AND)';
         btnMode.className = 'btn-toggle active-gold';
+        btnEng.innerText = (sigEng ? '[x]' : '[ ]') + ' ENG & STOCH+HA';
+        btnEng.style.width = '130px';
+        btnEng.className = sigEng ? 'btn-toggle active-both' : 'btn-toggle';
+
+        let hmrName = 'HMR/SS';
+        if (ruleDirection === 'BUY') hmrName = 'HAMMER';
+        if (ruleDirection === 'SELL') hmrName = 'SHOOTING';
+        btnHmr.innerText = (sigHmr ? '[x]' : '[ ]') + ` ${hmrName} & STOCH+HA`;
+        btnHmr.style.width = '150px';
+        btnHmr.className = sigHmr ? 'btn-toggle active-gold' : 'btn-toggle';
+
+        btnStoch.style.display = 'none';
       } else {
         btnMode.innerText = 'MODE: ANY (OR)';
         btnMode.className = 'btn-toggle active-both';
+        btnEng.innerText = (sigEng ? '[x]' : '[ ]') + ' ENG';
+        btnEng.style.width = '75px';
+        btnEng.className = sigEng ? 'btn-toggle active-both' : 'btn-toggle';
+
+        let hmrName = 'HMR/SS';
+        if (ruleDirection === 'BUY') hmrName = 'HAMMER';
+        if (ruleDirection === 'SELL') hmrName = 'SHOOTING';
+        btnHmr.innerText = (sigHmr ? '[x]' : '[ ]') + ` ${hmrName}`;
+        btnHmr.style.width = '95px';
+        btnHmr.className = sigHmr ? 'btn-toggle active-gold' : 'btn-toggle';
+
+        btnStoch.style.display = 'inline-block';
+        btnStoch.innerText = (sigStoch ? '[x]' : '[ ]') + ' STOCH+HA';
+        btnStoch.style.width = '90px';
+        btnStoch.className = sigStoch ? 'btn-toggle active-buy' : 'btn-toggle';
       }
     }
 

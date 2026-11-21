@@ -328,6 +328,20 @@ def check_lot_normalization():
     print("test_lot_normalization: OK (NormalizeLotSize protects Multi-TP fractions & logs trade rejections)")
 
 
+def check_combo_packages():
+    """Verify simplified dual-confirmation COMBO mode with & STOCH+HA."""
+    src = open(SRC).read()
+    assert "COMBO: [ENG & STOCH+HA]" in src
+    assert "COMBO: [HAMMER & STOCH+HA]" in src
+    assert "COMBO: [SHOOTING & STOCH+HA]" in src
+    assert "bool p1_ok = (g_rules[r].sig_engulfing && buy_eng_valid && buy_stoch_valid);" in src
+    assert "bool p2_ok = (g_rules[r].sig_hammer_ss && buy_hmr_valid && buy_stoch_valid);" in src
+    assert "bool p1_ok = (g_rules[r].sig_engulfing && sell_eng_valid && sell_stoch_valid);" in src
+    assert "bool p2_ok = (g_rules[r].sig_hammer_ss && sell_ss_valid  && sell_stoch_valid);" in src
+    assert "[x] ENG & STOCH+HA" in src
+    print("test_combo_packages: OK (COMBO dual-confirmation & STOCH+HA wired for BUY & SELL)")
+
+
 if __name__ == "__main__":
     try:
         check_detector()
@@ -336,6 +350,7 @@ if __name__ == "__main__":
         check_price_range_order()
         check_rule_reactivation()
         check_lot_normalization()
+        check_combo_packages()
     except Exception as exc:  # noqa: BLE001 - a test, any failure is a failure
         print("test_autotrader: FAILED -> %s" % exc)
         sys.exit(1)

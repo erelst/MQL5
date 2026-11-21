@@ -104,10 +104,11 @@ Tersedia 3 kelompok sinyal:
 - **Mode ANY (OR) - Default:**
   - Default: Semua opsi sinyal tercentang aktif.
   - Eksekusi terjadi jika **salah satu** dari sinyal yang dicentang valid.
-- **Mode COMBO (AND):**
-  - Default: Checkbox tidak tercentang semua (pengguna menentukan kombinasi).
-  - Eksekusi hanya terjadi jika seluruh sinyal yang dipilih valid secara simultan.
-  - **Proteksi Logika (Mutual Exclusion):** Karena sebuah candle fisik tidak dapat berbentuk *Engulfing* dan *Hammer/Shooting Star* sekaligus, UI secara otomatis me-nonaktifkan (*disable*) atau meredupkan opsi candle lain saat salah satu pola dipilih. Kombinasi yang sah berfokus pada: *(Pola Candlestick terpilih) + (Stoch + Heikin Ashi)*.
+- **Mode COMBO (Konfirmasi Ganda Wajib & STOCH+HA):**
+  - Mengeliminasi ambiguitas candle fisik yang mustahil merangkap (Engulfing sekaligus Pinbar) dengan menyederhanakan pilihan menjadi 2 paket konfirmasi ganda:
+    1. **Paket 1: `[x] ENG & STOCH+HA`** (Pola Engulfing terverifikasi filter momentum jenuh Stochastic + Heikin Ashi).
+    2. **Paket 2: `[x] HAMMER & STOCH+HA`** / **`[x] SHOOTING & STOCH+HA`** (Pola Rejection ekor panjang terverifikasi filter momentum jenuh Stochastic + Heikin Ashi).
+  - **Dukungan Keduanya Aktif (Filosofi "Sama tapi Berbeda"):** Pengguna dapat mencentang **kedua paket aktif sekaligus**. EA akan mengeksekusi paket mana saja yang lebih dulu terbentuk valid (baik Lilin = `ENG & STOCH+HA` maupun Lilin = `HAMMER/SS & STOCH+HA`). Semua order yang keluar di mode COMBO dijamin 100% selalu terverifikasi filter Stochastic + Heikin Ashi tanpa pengecualian.
 
 ### Tampilan Dinamis Berdasarkan Arah (Direction)
 - `BUY ONLY`: Opsi sinyal hanya memunculkan sinyal Buy (*Engulfing Buy*, *Hammer*, *Stoch+HA Buy*). Opsi Shooting Star disembunyikan.
