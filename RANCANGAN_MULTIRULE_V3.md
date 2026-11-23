@@ -325,3 +325,51 @@ Saat pengguna sedang mengisi atau mengubah kolom di form deck (misalnya simbol, 
     - Jika rule spesifik telah dihapus atau dipause namun ordernya masih terbuka di broker, posisi tetap dikawal menggunakan default safety trail parameter.
   - Memperbaiki bug typo perbandingan magic number di loop Multi-TP check: `m_position.Magic() == InpMagicNumber` (sebelumnya `m_position.Magic() == m_position.Magic()`).
 
+---
+
+## 8. Pembersihan State Price Bound & Kompensasi Spread pada Perhitungan Net RR
+
+### A. Reset Runtime Price Bound & Sinyal Saat Aktivasi Ulang Rule (BTN_TOGGLE_RULE)
+- **Akar Masalah:**
+  - Fitur *Price Bound Grace Period* memberi waktu toleransi 1.5x Timeframe sejak harga terakhir kali meninggalkan zona bound (`bull_bound_exit_time`).
+  - Ketika sebuah rule selesai membuka order hingga limit tercapai (misal `max_orders = 1`), rule otomatis berstatus `PAUSED`. Namun variabel runtime di RAM: `bull_bound_entered_time`, `bear_bound_entered_time`, `bull_bound_exit_time`, dan `bear_bound_exit_time` masih menyimpan timestamp dari order sebelumnya.
+  - Saat pengguna mengaktifkan kembali rule tersebut via tombol `[PAUSED] -> [ACTIVE]` di dashboard, kode lama hanya me-reset `orders_opened_count = 0` tanpa membersihkan variabel bound.
+  - Akibatnya, pada tick pertama setelah aktif, EA menganggap harga masih berada dalam Grace Period dari sentuhan bound lama, sehingga order baru langsung terbuka meskipun harga riil saat itu belum menyentuh batas harga (Price Bound).
+- **Standar Solusi:**
+  - Pada penanganan event klik `BTN_TOGGLE_RULE_`, saat status berubah menjadi aktif (`g_rules[i].active == true`), seluruh variabel runtime bound di-clear bersih ke `0`:
+    ```mql5
+    g_rules[i].bull_bound_entered_time = 0;
+    g_rules[i].bear_bound_entered_time = 0;
+    g_rules[i].bull_bound_exit_time    = 0;
+    g_rules[i].bear_bound_exit_time    = 0;
+    for(int k = 0; k < 2; k++)
+    {
+       g_rules[i].last_bull_bar[k] = 0;
+       g_rules[i].last_bear_bar[k] = 0;
+       g_rules[i].bull_last_checked_bar[k] = 0;
+       g_rules[i].bear_last_checked_bar[k] = 0;
+    }
+    ```
+  - Ini menjamin rule yang baru diaktifkan kembali wajib menunggu harga benar-benar memasuki zona price bound yang ditentukan dan lilin sinyal baru terkonfirmasi.
+
+### B. Kompensasi Spread pada Target TP untuk Keakuratan Rasio Net RR Moneter
+- **Akar Masalah (Erosi Spread saat Likuidasi Posisi):**
+  - Pada transaksi **SELL**:
+    - Order dibuka di harga **Bid**.
+    - Penutupan order (baik terkena SL maupun TP) dieksekusi di harga **Ask** ($\text{Ask} = \text{Bid} + \text{Spread}$).
+    - Stop loss diletakkan di `sl_price = High + 50% ATR + Spread`, sehingga $\text{sl\_dist} = \text{sl\_price} - \text{Bid}$. Kerugian aktual saat kena SL adalah penuh sebesar $\text{sl\_dist}$ (contoh: 52 USC).
+    - Namun jika TP diletakkan di $\text{Bid} - (\text{sl\_dist} \times \text{RR})$, order hanya akan terlikuidasi saat harga Ask menyentuh level tersebut. Pada saat itu, harga Bid broker berada di level $\text{tp\_price} - \text{Spread}$, sehingga profit moneter bersih yang diterima terpotong sebesar 1x spread ($\text{sl\_dist} \times \text{RR} - \text{Spread}$). Misalnya pada RR 1:2, kerugian SL 52 USC hanya menghasilkan profit TP 97 USC bukan 104 USC.
+  - Pada transaksi **BUY**:
+    - Order dibuka di harga **Ask** dan ditutup di harga **Bid**.
+    - Keuntungan saat menyentuh target kotor $\text{Ask} + (\text{sl\_dist} \times \text{RR})$ mengalami pemotongan serupa saat ditutup di harga Bid.
+- **Standar Solusi (Spread-Compensated TP):**
+  - Formula penentuan level Take Profit diperluas dengan memasukkan kompensasi spread live broker:
+    - **BUY TP:**
+      $$\text{tp\_price} = \text{Ask} + (\text{sl\_dist} \times \text{RR}) + \mathbf{\text{Spread}}$$
+      (Termasuk pada setiap tingkatan Multi-TP: $\text{Ask} + (\text{sl\_dist} \times \text{RR} \times t) + \mathbf{\text{Spread}}$).
+    - **SELL TP:**
+      $$\text{tp\_price} = \text{Bid} - (\text{sl\_dist} \times \text{RR}) - \mathbf{\text{Spread}}$$
+      (Termasuk pada setiap tingkatan Multi-TP: $\text{Bid} - (\text{sl\_dist} \times \text{RR} \times t) - \mathbf{\text{Spread}}$).
+  - Dengan kompensasi ini, begitu harga Bid/Ask pasar menyentuh TP dan order ditutup, profit moneter bersih yang masuk ke saldo akun tepat bernilai $1 : \text{RR}$ secara presisi (contoh: Risk 52 USC menghasilkan Reward 104 USC pada RR 1:2).
+
+

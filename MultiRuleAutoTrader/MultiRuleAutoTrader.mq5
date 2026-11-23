@@ -2893,7 +2893,11 @@ void OnTick()
             double sl_dist  = ask - sl_price;
             if(sl_dist <= 0) continue;
             
-            double tp_price = ask + (sl_dist * g_rules[r].risk_reward_ratio);
+            // Net RR Spread Compensation:
+            // Buy entry is at Ask, but closes at Bid. The gross TP target is (ask + sl_dist * RR),
+            // but upon closing, profit is (Bid - Ask) = (target - spread) - Ask = sl_dist * RR - spread.
+            // By adding +spread to the TP price, closing at Bid yields exactly sl_dist * RR net profit.
+            double tp_price = ask + (sl_dist * g_rules[r].risk_reward_ratio) + spread;
             sl_price = NormalizeDouble(sl_price, digits);
             tp_price = NormalizeDouble(tp_price, digits);
             double lots = CalculateLotSize(sym, g_rules[r].lot_mode, g_rules[r].lot_value, ask, sl_price);
@@ -2917,7 +2921,7 @@ void OnTick()
                {
                   int cnt = base_n + ((t <= rem_n) ? 1 : 0);
                   if(cnt <= 0) continue;
-                  plan_tp[plan_cnt] = NormalizeDouble(ask + (sl_dist * g_rules[r].risk_reward_ratio * (double)t), digits);
+                  plan_tp[plan_cnt] = NormalizeDouble(ask + (sl_dist * g_rules[r].risk_reward_ratio * (double)t) + spread, digits);
                   plan_lot[plan_cnt] = lots;
                   plan_ent[plan_cnt] = cnt;
                   plan_cnt++;
@@ -2929,7 +2933,7 @@ void OnTick()
                double per = NormalizeLotSize(sym, pool / (double)mtp);
                for(int t = 1; t <= mtp; t++)
                {
-                  plan_tp[plan_cnt] = NormalizeDouble(ask + (sl_dist * g_rules[r].risk_reward_ratio * (double)t), digits);
+                  plan_tp[plan_cnt] = NormalizeDouble(ask + (sl_dist * g_rules[r].risk_reward_ratio * (double)t) + spread, digits);
                   plan_lot[plan_cnt] = per;
                   plan_ent[plan_cnt] = 1;
                   plan_cnt++;
@@ -3140,7 +3144,11 @@ void OnTick()
             double sl_dist  = sl_price - bid;
             if(sl_dist <= 0) continue;
             
-            double tp_price = bid - (sl_dist * g_rules[r].risk_reward_ratio);
+            // Net RR Spread Compensation:
+            // Sell entry is at Bid, but closes at Ask. The gross TP target is (bid - sl_dist * RR),
+            // but upon closing, profit is (Bid - Ask) = Bid - (target + spread) = sl_dist * RR - spread.
+            // By subtracting -spread from the TP price, closing at Ask yields exactly sl_dist * RR net profit.
+            double tp_price = bid - (sl_dist * g_rules[r].risk_reward_ratio) - spread;
             sl_price = NormalizeDouble(sl_price, digits);
             tp_price = NormalizeDouble(tp_price, digits);
             double lots = CalculateLotSize(sym, g_rules[r].lot_mode, g_rules[r].lot_value, bid, sl_price);
@@ -3164,7 +3172,7 @@ void OnTick()
                {
                   int cnt = base_n + ((t <= rem_n) ? 1 : 0);
                   if(cnt <= 0) continue;
-                  plan_tp[plan_cnt] = NormalizeDouble(bid - (sl_dist * g_rules[r].risk_reward_ratio * (double)t), digits);
+                  plan_tp[plan_cnt] = NormalizeDouble(bid - (sl_dist * g_rules[r].risk_reward_ratio * (double)t) - spread, digits);
                   plan_lot[plan_cnt] = lots;
                   plan_ent[plan_cnt] = cnt;
                   plan_cnt++;
@@ -3176,7 +3184,7 @@ void OnTick()
                double per = NormalizeLotSize(sym, pool / (double)mtp);
                for(int t = 1; t <= mtp; t++)
                {
-                  plan_tp[plan_cnt] = NormalizeDouble(bid - (sl_dist * g_rules[r].risk_reward_ratio * (double)t), digits);
+                  plan_tp[plan_cnt] = NormalizeDouble(bid - (sl_dist * g_rules[r].risk_reward_ratio * (double)t) - spread, digits);
                   plan_lot[plan_cnt] = per;
                   plan_ent[plan_cnt] = 1;
                   plan_cnt++;

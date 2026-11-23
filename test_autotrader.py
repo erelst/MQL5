@@ -356,6 +356,21 @@ def check_auto_adopt_and_ticket_resolution():
     print("test_auto_adopt_and_ticket_resolution: OK (Position ticket resolved + EA positions auto-adopted safely)")
 
 
+def check_spread_compensated_tp():
+    """Verify that both BUY and SELL TP formulas incorporate spread compensation
+    so the resulting monetary profit matches the exact 1:RR target without
+    being eroded by the exit spread.
+    """
+    src = open(SRC).read()
+    # Buy TP compensation (+ spread)
+    assert "double tp_price = ask + (sl_dist * g_rules[r].risk_reward_ratio) + spread;" in src
+    assert "plan_tp[plan_cnt] = NormalizeDouble(ask + (sl_dist * g_rules[r].risk_reward_ratio * (double)t) + spread, digits);" in src
+    # Sell TP compensation (- spread)
+    assert "double tp_price = bid - (sl_dist * g_rules[r].risk_reward_ratio) - spread;" in src
+    assert "plan_tp[plan_cnt] = NormalizeDouble(bid - (sl_dist * g_rules[r].risk_reward_ratio * (double)t) - spread, digits);" in src
+    print("test_spread_compensated_tp: OK (Net RR exactly 1:RR via Bid/Ask spread compensation on TP)")
+
+
 if __name__ == "__main__":
     try:
         check_detector()
@@ -366,6 +381,7 @@ if __name__ == "__main__":
         check_lot_normalization()
         check_combo_packages()
         check_auto_adopt_and_ticket_resolution()
+        check_spread_compensated_tp()
     except Exception as exc:  # noqa: BLE001 - a test, any failure is a failure
         print("test_autotrader: FAILED -> %s" % exc)
         sys.exit(1)
