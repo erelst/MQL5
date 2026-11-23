@@ -299,18 +299,20 @@ def check_price_range_order():
 
 
 def check_rule_reactivation():
-    """Updating a rule or toggling ACTIVE must reset orders_opened_count to 0.
-
-    Previously, if a rule paused at max_orders and the user updated it without
-    increasing max_orders, active stayed false and orders_opened_count was not
-    reset, causing the EA to appear dead until re-attached.
+    """Updating a rule or toggling ACTIVE must reset orders_opened_count to 0
+    AND wipe clean runtime bound/signal timestamps so residual grace period
+    doesn't leak into new trade activations.
     """
     src = open(SRC).read()
     assert "g_rules[target_idx].active              = true;" in src
     assert "g_rules[target_idx].orders_opened_count = 0;" in src
-    assert 'if(sparam == g_prefix + "BTN_TOGGLE_RULE_"' in src
-    assert "if(g_rules[i].active)\n               g_rules[i].orders_opened_count = 0;" in src
-    print("test_rule_reactivation: OK (edit submit & toggle reliably activate and reset orders counter)")
+    assert 'else if(sparam == g_prefix + "BTN_TOGGLE_RULE_"' in src
+    assert "g_rules[i].orders_opened_count = 0;" in src
+    assert "g_rules[i].bull_bound_entered_time = 0;" in src
+    assert "g_rules[i].bear_bound_entered_time = 0;" in src
+    assert "g_rules[i].bull_bound_exit_time    = 0;" in src
+    assert "g_rules[i].bear_bound_exit_time    = 0;" in src
+    print("test_rule_reactivation: OK (edit submit & toggle reliably activate and reset orders counter and wipe bound grace state)")
 
 
 def check_lot_normalization():

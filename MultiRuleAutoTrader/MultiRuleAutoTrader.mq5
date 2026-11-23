@@ -2593,7 +2593,21 @@ void OnChartEvent(const int id,
          {
             g_rules[i].active = !g_rules[i].active;
             if(g_rules[i].active)
+            {
                g_rules[i].orders_opened_count = 0; // Reset counter whenever manually reactivated
+               // Clean-slate runtime bound & signal history to prevent residual grace period or old bars from triggering
+               g_rules[i].bull_bound_entered_time = 0;
+               g_rules[i].bear_bound_entered_time = 0;
+               g_rules[i].bull_bound_exit_time    = 0;
+               g_rules[i].bear_bound_exit_time    = 0;
+               for(int k = 0; k < 2; k++)
+               {
+                  g_rules[i].last_bull_bar[k] = 0;
+                  g_rules[i].last_bear_bar[k] = 0;
+                  g_rules[i].bull_last_checked_bar[k] = 0;
+                  g_rules[i].bear_last_checked_bar[k] = 0;
+               }
+            }
             g_selected_rule_idx = i;
             SaveStateToFile();
             UpdatePreviewTerminalBox();
