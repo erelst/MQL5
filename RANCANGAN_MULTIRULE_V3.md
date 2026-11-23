@@ -397,5 +397,24 @@ Saat pengguna sedang mengisi atau mengubah kolom di form deck (misalnya simbol, 
   - Menampilkan informasi tingkat tier TP per rule (misal `1x`, `2x`).
   - Preview Terminal Box tetap menampilkan rincian simulasi Multi TP secara utuh tanpa ada perubahan.
 
+---
+
+## 10. Penyempurnaan Validasi Dual-Check Trail BE & Penyeragaman Default 20%
+
+### A. Validasi Dual-Check Proximity Sisa Jarak & Gain Riil
+- **Akar Masalah:**
+  - Sebelumnya, syarat pemicu BE hanya mengecek `rem_dist <= max_rem_allowed` dan `bid > (open_p + spread)`.
+  - Jika harga sempat berbalik atau fluktuasi tanpa menempuh mayoritas target, posisi bisa secara keliru terpicu BE di awal perjalanan target.
+- **Standar Solusi:**
+  - Tetap berbasis sisa jarak ke target TP, namun kini dilengkapi dengan **Dual-Check Validasi**:
+    1. **Sisa Jarak Proximity:** `rem_dist <= base_target_dist * be_pct` (sisa $\le 20\%$).
+    2. **Keuntungan Tempuh Nyata:** `cur_gain >= base_target_dist * (1.0 - be_pct)` (harga sudah berjalan maju $\ge 80\%$ dari jarak entry ke target TP awal).
+  - Berlaku simetris untuk BUY (`bid - open_p >= min_profit_req`) dan SELL (`open_p - ask >= min_profit_req`).
+  - Diterapkan pada `MultiRuleAutoTrader.mq5` dan `TradeManagerReversalRadar.mq5`.
+
+### B. Penyeragaman Seluruh Nilai Default & Hint UI ke 20%
+- Semua sisa angka `30%` / `0.30` di komentar struct, fallback reset form, dan label hint UI di kedua EA telah diganti seragam menjadi **20%** (`0.20`).
+
+
 
 

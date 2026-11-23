@@ -404,6 +404,18 @@ def check_table_sorting_and_columns():
     print("test_table_sorting_and_columns: OK (Sortable columns, PRICE header, TP column restored)")
 
 
+def check_be_progress_verification():
+    """Verify that Trail BE requires real gain progress (cur_gain >= min_profit_req)
+    alongside remaining distance proximity, and default is 20%.
+    """
+    src = open(SRC).read()
+    assert "double min_profit_req  = base_target_dist * (1.0 - be_pct);" in src
+    assert "rem_dist <= max_rem_allowed && cur_gain >= min_profit_req" in src
+    assert "double be_dist_val = 20.0;" in src
+    assert "be_dist_val = 20.0;" in src
+    print("test_be_progress_verification: OK (BE strictly requires dual-check: proximity <= 20% & profit gain >= 80%)")
+
+
 if __name__ == "__main__":
     try:
         check_detector()
@@ -416,6 +428,7 @@ if __name__ == "__main__":
         check_auto_adopt_and_ticket_resolution()
         check_spread_compensated_tp()
         check_table_sorting_and_columns()
+        check_be_progress_verification()
     except Exception as exc:  # noqa: BLE001 - a test, any failure is a failure
         print("test_autotrader: FAILED -> %s" % exc)
         sys.exit(1)

@@ -32,7 +32,7 @@ enum ENUM_SIGNAL_MODE
 
 enum ENUM_TRAIL_BE_MODE
 {
-   TRAIL_BE_PROXIMITY, // Berbasis Sisa Jarak ke TP (<= 30% dari Target Awal)
+   TRAIL_BE_PROXIMITY, // Berbasis Sisa Jarak ke TP (<= 20% dari Target Awal)
    TRAIL_BE_PROFIT     // Berbasis Profit Berjalan (>= 1.5x EWMA TR dari Open)
 };
 
@@ -47,7 +47,7 @@ struct SPositionTracking
    int      trail_cycle;
    double   trail_max_dist;
    double   atr_multiplier;
-   double   trail_be_rem_dist_pct; // Sisa target ratio untuk BE (default 0.30)
+   double   trail_be_rem_dist_pct; // Sisa target ratio untuk BE (default 0.20)
    bool     be_applied;            // Track if BE has already been locked
    bool     active;
 };
@@ -1280,16 +1280,19 @@ void ProcessAutoTrailSLTP()
             {
                double be_pct = (g_tracking_list[i].trail_be_rem_dist_pct > 0) ? g_tracking_list[i].trail_be_rem_dist_pct : InpTrailBERemDistPct;
                double max_rem_allowed = base_target_dist * be_pct;
+               double min_profit_req  = base_target_dist * (1.0 - be_pct);
                if(ptype == POSITION_TYPE_BUY)
                {
                   double rem_dist = cur_tp - bid;
-                  if(rem_dist <= max_rem_allowed && bid > (open_p + spread))
+                  double cur_gain = bid - open_p;
+                  if(rem_dist <= max_rem_allowed && cur_gain >= min_profit_req && bid > (open_p + spread))
                      trigger_be = true;
                }
                else if(ptype == POSITION_TYPE_SELL)
                {
                   double rem_dist = ask - cur_tp;
-                  if(rem_dist <= max_rem_allowed && ask < (open_p - spread))
+                  double cur_gain = open_p - ask;
+                  if(rem_dist <= max_rem_allowed && cur_gain >= min_profit_req && ask < (open_p - spread))
                      trigger_be = true;
                }
             }
@@ -2492,7 +2495,7 @@ void CreateDashboardUI()
       
       CreateLabel("LBL_TR_BE", box_b_x + 12, deck_y + 122, "BE DIST %:", CLR_TEXT_MED, 8, true);
       CreateEdit("INP_TRAIL_BE", box_b_x + 140, deck_y + 118, 100, 22, DoubleToString(g_form_trail_be_rem_pct, 0), CLR_CANVAS_BG, CLR_GOLD_NEON);
-      CreateLabel("LBL_TR_BE_HINT", box_b_x + 250, deck_y + 122, "Sisa target lock BE (30%)", CLR_TEXT_MED, 7, false);
+      CreateLabel("LBL_TR_BE_HINT", box_b_x + 250, deck_y + 122, "Sisa target lock BE (20%)", CLR_TEXT_MED, 7, false);
       
       CreateLabel("LBL_TR_INFO", box_b_x + 12, deck_y + 152, "*Posisi AutoTrader ([AT TRAIL]) dilindungi otomatis agar tidak konflik.", CLR_CYAN_NEON, 7, false);
       

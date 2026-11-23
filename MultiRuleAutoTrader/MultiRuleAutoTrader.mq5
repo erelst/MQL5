@@ -37,7 +37,7 @@ enum ENUM_SIGNAL_MODE
 
 enum ENUM_TRAIL_BE_MODE
 {
-   TRAIL_BE_PROXIMITY, // Opsi 1 (Rekomendasi): Berbasis Sisa Jarak ke TP (<= 30% dari Target Awal)
+   TRAIL_BE_PROXIMITY, // Opsi 1 (Rekomendasi): Berbasis Sisa Jarak ke TP (<= 20% dari Target Awal)
    TRAIL_BE_PROFIT     // Opsi 2: Berbasis Profit Berjalan (>= 1.5x EWMA TR dari Open)
 };
 
@@ -69,7 +69,7 @@ struct AutoTraderRule
    bool                 enable_trail;
    double               trail_max_dist;    // Max Proximity to TP in EWMA TR units (default 1.10)
    double               atr_multiplier;    // Relative Volatility Threshold (default 1.60)
-   double               trail_be_rem_dist_pct; // Sisa jarak ke target TP untuk BE (default 0.30)
+   double               trail_be_rem_dist_pct; // Sisa jarak ke target TP untuk BE (default 0.20)
    string               bull_price_filter; // e.g. "< 1.0850", "<= 1.0820", "4040-4078", "ALL"
    string               bear_price_filter; // e.g. "> 1.0900", ">= 1.0910", "4040-4078", "ALL"
    int                  max_orders;        // 1 = 1x open then paused, 0/-1 = Unlimited
@@ -108,7 +108,7 @@ struct SPositionTracking
    int      trail_cycle;
    double   trail_max_dist;
    double   atr_multiplier;
-   double   trail_be_rem_dist_pct; // Remaining target ratio for BE lock (default 0.30)
+   double   trail_be_rem_dist_pct; // Remaining target ratio for BE lock (default 0.20)
    bool     be_applied;       // Track if BE has already been locked
    bool     active;
 };
@@ -984,16 +984,19 @@ void ProcessAutoTrailSLTP()
             {
                double be_pct = (g_tracking_list[i].trail_be_rem_dist_pct > 0) ? g_tracking_list[i].trail_be_rem_dist_pct : InpTrailBERemDistPct;
                double max_rem_allowed = base_target_dist * be_pct;
+               double min_profit_req  = base_target_dist * (1.0 - be_pct);
                if(ptype == POSITION_TYPE_BUY)
                {
                   double rem_dist = cur_tp - bid;
-                  if(rem_dist <= max_rem_allowed && bid > (open_p + spread))
+                  double cur_gain = bid - open_p;
+                  if(rem_dist <= max_rem_allowed && cur_gain >= min_profit_req && bid > (open_p + spread))
                      trigger_be = true;
                }
                else if(ptype == POSITION_TYPE_SELL)
                {
                   double rem_dist = ask - cur_tp;
-                  if(rem_dist <= max_rem_allowed && ask < (open_p - spread))
+                  double cur_gain = open_p - ask;
+                  if(rem_dist <= max_rem_allowed && cur_gain >= min_profit_req && ask < (open_p - spread))
                      trigger_be = true;
                }
             }
@@ -2637,10 +2640,10 @@ void OnChartEvent(const int id,
          double atr_mult = StringToDouble(ObjectGetString(0, g_prefix + "INP_ATR_MULT", OBJPROP_TEXT));
          if(atr_mult <= 0) atr_mult = InpRelVolThreshold;
          
-         double be_dist_val = 30.0;
+         double be_dist_val = 20.0;
          if(ObjectFind(0, g_prefix + "INP_TRAIL_BE_DIST") >= 0)
             be_dist_val = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_BE_DIST", OBJPROP_TEXT));
-         if(be_dist_val <= 0 || be_dist_val > 100) be_dist_val = 30.0;
+         if(be_dist_val <= 0 || be_dist_val > 100) be_dist_val = 20.0;
          
          int max_ord_val = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MAX_ORD", OBJPROP_TEXT));
          
@@ -2793,7 +2796,7 @@ void OnChartEvent(const int id,
             g_form_trail_on     = g_rules[i].enable_trail;
             g_form_trail_dist   = g_rules[i].trail_max_dist;
             g_form_atr_mult     = g_rules[i].atr_multiplier;
-            g_form_be_dist_pct  = (g_rules[i].trail_be_rem_dist_pct > 0) ? g_rules[i].trail_be_rem_dist_pct * 100.0 : 30.0;
+            g_form_be_dist_pct  = (g_rules[i].trail_be_rem_dist_pct > 0) ? g_rules[i].trail_be_rem_dist_pct * 100.0 : 20.0;
             g_form_m1_fallback  = g_rules[i].allow_m1_fallback;
             g_form_entry_mult   = g_rules[i].entry_multiplier;
             g_form_multi_tp    = g_rules[i].multi_tp;
