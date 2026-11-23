@@ -415,6 +415,99 @@ Saat pengguna sedang mengisi atau mengubah kolom di form deck (misalnya simbol, 
 ### B. Penyeragaman Seluruh Nilai Default & Hint UI ke 20%
 - Semua sisa angka `30%` / `0.30` di komentar struct, fallback reset form, dan label hint UI di kedua EA telah diganti seragam menjadi **20%** (`0.20`).
 
+---
+
+## 11. Pemisahan Independen EXT DIST% & Dual-Layer Proximity Gate pada TP Extension
+
+### A. Latar Belakang & Akar Masalah Blind Spot ATR Tunggal
+1. **Mekanisme Awal TP Extension:**
+   - Sebelumnya, pengecekan kedekatan harga ke Take Profit pada modul TP Extension murni hanya mengandalkan rasio lilin EWMA TR dinamis:
+     $$\text{dist\_to\_tp} = \frac{|\text{cur\_tp} - \text{Price}|}{\text{EWMA TR}} \le \text{InpMaxDistATR} \quad (\text{default: } 1.10\times\text{TR})$$
+   - Disertai konfirmasi lonjakan volume lilin: $\text{RelVol} \ge \text{InpRelVolThreshold}$ (default $1.60\times$).
+2. **Blind Spot pada Scalping / TP Jarak Pendek (RR 1:1):**
+   - Jika trader mengambil posisi scalping dengan target TP sebesar $1.0\times\text{ATR}$ (atau $1.2\times\text{ATR}$):
+     - Begitu order baru dieksekusi 1 detik: jarak harga berjalan ke TP adalah $1.0\times\text{ATR}$.
+     - Pengecekan kode: `dist_to_tp <= 1.10 ATR` $\rightarrow$ **Langsung lolos bernilai TRUE sejak detik pertama pembukaan!**
+     - Apabila candle saat itu bervolume tinggi, TP langsung diperpanjang (*extended*) seketika di dekat titik Open dan Stop Loss langsung ditarik ke Break-Even, padahal harga belum menempuh perjalanan targetnya. Fluktuasi normal 1-2 tick langsung memicu likuidasi di BE dan mematikan potensi trade.
+3. **Penyebab Mengapa Terjadi Dilema Variabel:**
+   - Jika TP Extension ikut mencatut variabel `BE DIST%`, penamaan di UI menjadi keliru dan menyesatkan karena label Break-Even dipakai untuk mengontrol perpanjangan Take Profit.
+   - Diperlukan kontrol mandiri yang memisahkan ambang toleransi BE dengan ambang toleransi Extend TP secara independen, transparan, dan tidak saling tumpang-tindih.
+
+---
+
+### B. Solusi Arsitektur: Kontrol Mandiri `EXT DIST%`
+- Menambahkan parameter input dan variabel kontrol tersendiri:
+  - **`InpTrailExtRemDistPct = 0.20`** (Default: 20% sisa jarak).
+  - Struct `AutoTraderRule`: `double trail_ext_rem_dist_pct`.
+  - Struct `SPositionTracking`: `double trail_ext_rem_dist_pct`.
+  - UI Input Edit Box: **`EXT%:`** pada MultiRuleAutoTrader dan **`EXT DIST %:`** pada TradeManager.
+- Penamaan **`BE DIST%`** tetap murni dan 100% akurat hanya untuk mengontrol pergeseran Stop Loss ke Break-Even, sementara **`EXT DIST%`** murni mengontrol batas toleransi sebelum Take Profit diizinkan extend.
+
+---
+
+### C. Mekanisme Dual-Layer Proximity Gate (Harmonisasi 2 Lapis)
+Syarat kedekatan harga sebelum memperpanjang TP kini diwajibkan melewati **2 Lapisan Pengaman Sekaligus (`AND`)**:
+
+$$\text{Proximity Allowed} = \mathbf{\text{Layer 1 (Progres \% Target)}} \ \land \ \mathbf{\text{Layer 2 (Dinamika Lilin ATR)}}$$
+
+#### 1. Lapis 1: Pagar Pengaman Progres (% Target TP)
+- Memastikan harga secara riil telah menempuh mayoritas perjalanan target awal:
+  - **Sisa Jarak:** $\text{rem\_dist} \le \text{base\_target\_dist} \times \text{ext\_pct}$ (sisa $\le 20\%$).
+  - **Jarak Tempuh Keuntungan Nyata:** $\text{cur\_gain} \ge \text{base\_target\_dist} \times (1.0 - \text{ext\_pct})$ (harga sudah berjalan maju $\ge 80\%$).
+- **Fungsi Proteksi:** Menjadi tembok penghalang mutlak pada TP pendek / scalping. Berapa pun besarnya ATR pasar saat itu, **TP Extension DILARANG keras aktif jika harga belum mencapai minimal 80% target**.
+
+#### 2. Lapis 2: Dinamika Lilin Pasar (EWMA TR & Volume Spike)
+- Hanya dievaluasi ketika Lapis 1 sudah terpenuhi (harga sudah berada di zona $\ge 80\%$):
+  - Kedekatan dalam satuan lilin: $\text{dist\_to\_tp} \le \text{MaxDistATR}$ ($\le 1.10\times\text{TR}$).
+  - Ledakan volume: $\text{RelVol} \ge \text{RelVolThreshold}$ ($\ge 1.60\times$).
+- **Fungsi Dinamis:** Pada trade swing / TP jauh (misal target TP 100 pip, ATR 10 pip):
+  - Saat harga menempuh 80% (sisa 20 pip), Lapis 1 lolos, tetapi **Lapis 2 menahan** karena 20 pip masih di luar jangkauan 1 lilin ATR (11 pip).
+  - TP baru di-extend saat harga sudah benar-benar berada dalam radius sambaran 1 lilin ($\le 11$ pip) tepat di bibir target TP.
+
+---
+
+### D. Simulasi Perilaku: Scalping vs Swing
+
+| Skenario | Target TP | EWMA TR | Lapis 1 (`EXT% = 20%`) | Lapis 2 (`MAX TR = 1.1x`) | Hasil Eksekusi Dual-Layer |
+|---|---|---|---|---|---|
+| **Scalping (Baru Open)** | 15 pip | 20 pip | ❌ Blokir (gain = 0, rem = 15 pip) | ✅ Lolos (15 $\le$ 22 pip) | **DIBLOKIR (Aman dari prematur!)** |
+| **Scalping (Dekat TP)** | 15 pip | 20 pip | ✅ Lolos (gain = 13, rem = 2 pip) | ✅ Lolos (2 $\le$ 22 pip) | **LOLOS (Extend jika RelVol $\ge$ 1.6x)** |
+| **Swing (Baru Masuk 80%)**| 100 pip| 10 pip | ✅ Lolos (gain = 80, rem = 20 pip)| ❌ Tahan (20 > 11 pip) | **DITAHAN (Tunggu lebih dekat ke TP)** |
+| **Swing (Dekat TP)** | 100 pip| 10 pip | ✅ Lolos (gain = 90, rem = 10 pip)| ✅ Lolos (10 $\le$ 11 pip) | **LOLOS (Extend di bibir target)** |
+
+---
+
+### E. Hubungan Kerja Antara Trail BE dan TP Extended
+Keduanya bekerja saling melengkapi tanpa ada konflik maupun hambatan:
+1. **Kondisi Pasar Normal (Volume Biasa):**
+   - Saat harga masuk sisa 20%, **BE terpicu** $\rightarrow$ Stop Loss digeser mengunci modal (`Open ± Spread`).
+   - Karena volume tidak meledak, TP **tidak di-extend**. Order selesai menyentuh TP asli dengan profit maksimal.
+2. **Kondisi Pasar Tren Kuat (Volume Meledak):**
+   - Saat harga masuk sisa 20%, **BE terpicu** $\rightarrow$ Stop Loss digeser mengunci modal.
+   - Di saat yang sama, Lapis 2 mendeteksi lonjakan volume $\rightarrow$ **TP di-extend** lebih jauh untuk menangkap gelombang tren besar (*runner*).
+   - Pada siklus extend berikutnya, Stop Loss secara bertahap ditarik mengunci level TP sebelumnya (`prev_tp_level`).
+
+---
+
+### F. Pembaruan UI, Format Storage Binary (v7), dan Test Suite
+1. **MultiRuleAutoTrader UI:**
+   - **Form Deck Row E:**
+     - `BE%:` (kotak edit `INP_TRAIL_BE_DIST`, default `20`).
+     - `EXT%:` (kotak edit `INP_TRAIL_EXT_DIST`, default `20`).
+     - `MAX TR:` (kotak edit `INP_TRAIL_DIST`, default `1.1`).
+     - `RELVOL:` (kotak edit `INP_ATR_MULT`, default `1.6`).
+   - **Preview Terminal Box:** Merinci target: `Trail TP Extend: Sisa <= 20% & <= 1.1TR & RelVol >= 1.60x`.
+   - **Tabel Rules List:** Kolom `TRAIL` menampilkan status ringkas: `BE:20%|EX:20%|D:1.1`.
+2. **TradeManager UI:**
+   - **Card Trail (Order Manager):** Menampilkan baris mandiri `EXT DIST %:` (kotak edit `INP_TRAIL_EXT`, default `20%`) dengan hint label `Sisa target extend TP (20%)`.
+3. **Format Binary Persistence (v7):**
+   - Format file storage `.bin` AutoTrader ditingkatkan ke versi **v7** untuk menyimpan `trail_ext_rem_dist_pct` per rule dan `g_form_ext_dist_pct` pada form state.
+   - Mendukung backward compatibility penuh membaca file format versi v6, v5, dan v4 lama.
+4. **Unit Test Suite:**
+   - Menambahkan fungsi uji `check_tp_extension_dual_layer_and_ext_dist()` di `test_autotrader.py`.
+   - Memvalidasi seluruh deklarasi variabel, parsing UI, serialisasi storage, dan simulasi matematis proteksi scalping vs swing (12/12 test lolos 100%).
+
+
 
 
 

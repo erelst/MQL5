@@ -48,6 +48,7 @@ struct SPositionTracking
    double   trail_max_dist;
    double   atr_multiplier;
    double   trail_be_rem_dist_pct; // Sisa target ratio untuk BE (default 0.20)
+   double   trail_ext_rem_dist_pct;// Sisa target ratio untuk TP Extension (default 0.20)
    bool     be_applied;            // Track if BE has already been locked
    bool     active;
 };
@@ -110,6 +111,7 @@ input group "=== AUTO TRAIL SL & TP (EWMA TR ENGINE) ==="
 input bool                 InpEnableTrail      = true;               // Default Enable Trail SL & TP
 input ENUM_TRAIL_BE_MODE   InpTrailBEMode      = TRAIL_BE_PROXIMITY; // Default Trail BE Mode
 input double               InpTrailBERemDistPct= 0.20;               // Default Trail BE Remaining TP Distance (0.20 = 20%)
+input double               InpTrailExtRemDistPct= 0.20;              // Default TP Extension Remaining TP Distance (0.20 = 20%)
 input double               InpMaxDistATR       = 1.10;               // Default Max Proximity to TP (in EWMA TR units)
 input double               InpRelVolThreshold  = 1.60;               // Default RelVol Threshold (>= 1.60x)
 input double               InpEWMALambda       = 0.90;               // EWMA TR Lambda Decay (0.88 - 0.92)
@@ -166,6 +168,7 @@ double            g_be_fixed_price = 0.0; // Fixed SL price for BE_OFFSET_CUSTOM
 double            g_form_trail_max_dist   = 1.10; // Max Dist TR
 double            g_form_trail_atr_mult   = 1.60; // RelVol Thresh
 double            g_form_trail_be_rem_pct = 20.0; // BE Dist % (default 20%)
+double            g_form_trail_ext_rem_pct= 20.0; // EXT Dist % (default 20%)
 string            g_form_trail_tf         = "5";  // TF acuan (default M5)
 
 const int         MAX_ROWS_PER_PAGE = 8;
@@ -430,6 +433,11 @@ void CaptureOrdersFormInputs()
       double b = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_BE", OBJPROP_TEXT));
       if(b >= 0 && b <= 100) g_form_trail_be_rem_pct = b;
    }
+   if(ObjectFind(0, g_prefix + "INP_TRAIL_EXT") >= 0)
+   {
+      double e = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_EXT", OBJPROP_TEXT));
+      if(e >= 0 && e <= 100) g_form_trail_ext_rem_pct = e;
+   }
    if(ObjectFind(0, g_prefix + "INP_TRAIL_TF") >= 0)
    {
       string tf_s = ObjectGetString(0, g_prefix + "INP_TRAIL_TF", OBJPROP_TEXT);
@@ -560,7 +568,7 @@ void OnChartEvent(const int id,
          else if(tf_val == 240) trail_tf = PERIOD_H4;
          else if(tf_val == 1440) trail_tf = PERIOD_D1;
          
-         ActivateBulkAutoTrail(g_form_trail_max_dist, g_form_trail_atr_mult, g_form_trail_be_rem_pct, trail_tf);
+         ActivateBulkAutoTrail(g_form_trail_max_dist, g_form_trail_atr_mult, g_form_trail_be_rem_pct, g_form_trail_ext_rem_pct, trail_tf);
          UpdateDashboardUI();
          return;
       }
@@ -1181,9 +1189,10 @@ double GetEWMA_TR(const string sym, const ENUM_TIMEFRAMES tf, int barsToUse = 30
 //+------------------------------------------------------------------+
 //| POSITION TRACKING MANAGEMENT (AUTO TRAIL SL & TRAIL TP)          |
 //+------------------------------------------------------------------+
-void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, double atr100, double open_p, double tp_p, double trail_dist, double atr_mult, double be_rem_dist_pct)
+void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, double atr100, double open_p, double tp_p, double trail_dist, double atr_mult, double be_rem_dist_pct, double ext_rem_dist_pct)
 {
    double rem_pct = (be_rem_dist_pct > 0) ? (be_rem_dist_pct > 1.0 ? be_rem_dist_pct / 100.0 : be_rem_dist_pct) : InpTrailBERemDistPct;
+   double ext_pct = (ext_rem_dist_pct > 0) ? (ext_rem_dist_pct > 1.0 ? ext_rem_dist_pct / 100.0 : ext_rem_dist_pct) : InpTrailExtRemDistPct;
    int size = ArraySize(g_tracking_list);
    for(int i = 0; i < size; i++)
    {
@@ -1197,7 +1206,8 @@ void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, doub
          g_tracking_list[i].trail_cycle       = 0;
          g_tracking_list[i].trail_max_dist    = (trail_dist > 0) ? trail_dist : InpMaxDistATR;
          g_tracking_list[i].atr_multiplier    = (atr_mult > 0)   ? atr_mult   : InpRelVolThreshold;
-         g_tracking_list[i].trail_be_rem_dist_pct = rem_pct;
+         g_tracking_list[i].trail_be_rem_dist_pct  = rem_pct;
+         g_tracking_list[i].trail_ext_rem_dist_pct = ext_pct;
          g_tracking_list[i].be_applied        = false;
          g_tracking_list[i].active            = true;
          return;
@@ -1214,7 +1224,8 @@ void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, doub
    g_tracking_list[size].trail_cycle       = 0;
    g_tracking_list[size].trail_max_dist    = (trail_dist > 0) ? trail_dist : InpMaxDistATR;
    g_tracking_list[size].atr_multiplier    = (atr_mult > 0)   ? atr_mult   : InpRelVolThreshold;
-   g_tracking_list[size].trail_be_rem_dist_pct = rem_pct;
+   g_tracking_list[size].trail_be_rem_dist_pct  = rem_pct;
+   g_tracking_list[size].trail_ext_rem_dist_pct = ext_pct;
    g_tracking_list[size].be_applied        = false;
    g_tracking_list[size].active            = true;
 }
@@ -1359,6 +1370,34 @@ void ProcessAutoTrailSLTP()
       }
       if(!m_position.SelectByTicket(tkt)) continue;
 
+      // -------------------------------------------------------------------
+      // DUAL-LAYER PROXIMITY GATE:
+      // Lapis 1: Progres % Target TP (harga WAJIB sudah berjalan maju >= 80%,
+      //          sisa <= EXT DIST%, mencegah trigger prematur pada scalping/TP pendek)
+      // Lapis 2: Dinamika EWMA TR & Ledakan RelVol (momentum lilin market)
+      // -------------------------------------------------------------------
+      double base_target_dist = g_tracking_list[i].initial_tp_dist;
+      if(base_target_dist <= 0) base_target_dist = MathAbs(cur_tp - open_p);
+
+      double ext_pct = (g_tracking_list[i].trail_ext_rem_dist_pct > 0) ? g_tracking_list[i].trail_ext_rem_dist_pct : InpTrailExtRemDistPct;
+      double max_ext_rem_allowed = base_target_dist * ext_pct;
+      double min_ext_gain_req    = base_target_dist * (1.0 - ext_pct);
+
+      double ext_rem_dist = 0.0;
+      double ext_cur_gain = 0.0;
+      if(ptype == POSITION_TYPE_BUY)
+      {
+         ext_rem_dist = cur_tp - bid;
+         ext_cur_gain = bid - open_p;
+      }
+      else if(ptype == POSITION_TYPE_SELL)
+      {
+         ext_rem_dist = ask - cur_tp;
+         ext_cur_gain = open_p - ask;
+      }
+
+      bool progress_ok = (base_target_dist > 0) ? (ext_rem_dist <= max_ext_rem_allowed && ext_cur_gain >= min_ext_gain_req) : true;
+
       double dist_to_tp = 0.0;
       if(ptype == POSITION_TYPE_BUY)  dist_to_tp = MathAbs(cur_tp - bid) / ewma_tr;
       if(ptype == POSITION_TYPE_SELL) dist_to_tp = MathAbs(cur_tp - ask) / ewma_tr;
@@ -1366,7 +1405,7 @@ void ProcessAutoTrailSLTP()
       double max_dist_allowed = (g_tracking_list[i].trail_max_dist > 0) ? g_tracking_list[i].trail_max_dist : InpMaxDistATR;
       double relvol_threshold = (g_tracking_list[i].atr_multiplier > 0)  ? g_tracking_list[i].atr_multiplier : InpRelVolThreshold;
       
-      bool proximity_ok  = (dist_to_tp <= max_dist_allowed);
+      bool proximity_ok  = progress_ok && (dist_to_tp <= max_dist_allowed);
       bool volatility_ok = (rel_vol >= relvol_threshold);
       
       if(is_eligible_tp_runner && proximity_ok && volatility_ok)
@@ -1485,7 +1524,7 @@ void ProcessAutoTrailSLTP()
    }
 }
 
-void ActivateBulkAutoTrail(double max_dist, double relvol_th, double be_rem_pct, ENUM_TIMEFRAMES tf)
+void ActivateBulkAutoTrail(double max_dist, double relvol_th, double be_rem_pct, double ext_rem_pct, ENUM_TIMEFRAMES tf)
 {
    int activated = 0;
    int skipped_autotrader = 0;
@@ -1511,7 +1550,7 @@ void ActivateBulkAutoTrail(double max_dist, double relvol_th, double be_rem_pct,
             if(tp_p <= 0) continue; // Butuh target TP awal
             
             double atr100 = CalculateATR100(sym, AtrBaseTF(tf), InpDefaultATRPeriod);
-            RegisterPositionTracking(tkt, sym, tf, atr100, open_p, tp_p, max_dist, relvol_th, be_rem_pct);
+            RegisterPositionTracking(tkt, sym, tf, atr100, open_p, tp_p, max_dist, relvol_th, be_rem_pct, ext_rem_pct);
             activated++;
          }
       }
@@ -2431,7 +2470,7 @@ void CreateDashboardUI()
       int box_w  = (win_w - 32 - gap) / 2; // (960 - 32 - 16)/2 = 456
       
       // Box A: Bulk SL/TP & Break-Even
-      CreateRect("CARD_SLTP_BE", root_x + 16, deck_y, box_w, 230, CLR_CARD_BG, CLR_BORDER_HARD);
+      CreateRect("CARD_SLTP_BE", root_x + 16, deck_y, box_w, 245, CLR_CARD_BG, CLR_BORDER_HARD);
       CreateLabel("LBL_SLTP", root_x + 28, deck_y + 10, "PRICE MODIFIER & BREAK-EVEN", CLR_CYAN_NEON, 9, true);
       
       // SL / TP Rows
@@ -2478,29 +2517,33 @@ void CreateDashboardUI()
       
       // Box B: Auto Trail Engine (EWMA TR)
       int box_b_x = root_x + 16 + box_w + gap;
-      CreateRect("CARD_TRAIL", box_b_x, deck_y, box_w, 230, CLR_CARD_BG, CLR_BORDER_HARD);
+      CreateRect("CARD_TRAIL", box_b_x, deck_y, box_w, 245, CLR_CARD_BG, CLR_BORDER_HARD);
       CreateLabel("LBL_TRAIL_TITLE", box_b_x + 12, deck_y + 10, "AUTO TRAIL ENGINE (EWMA TR)", CLR_CYAN_NEON, 9, true);
       
-      CreateLabel("LBL_TR_TF", box_b_x + 12, deck_y + 36, "BASE TF (MIN):", CLR_TEXT_MED, 8, true);
-      CreateEdit("INP_TRAIL_TF", box_b_x + 140, deck_y + 32, 100, 22, g_form_trail_tf, CLR_CANVAS_BG, CLR_TEXT_PURE);
-      CreateLabel("LBL_TR_TF_HINT", box_b_x + 250, deck_y + 36, "(1, 5, 15, 60m...)", CLR_TEXT_MED, 7, false);
+      CreateLabel("LBL_TR_TF", box_b_x + 12, deck_y + 34, "BASE TF (MIN):", CLR_TEXT_MED, 8, true);
+      CreateEdit("INP_TRAIL_TF", box_b_x + 140, deck_y + 30, 100, 22, g_form_trail_tf, CLR_CANVAS_BG, CLR_TEXT_PURE);
+      CreateLabel("LBL_TR_TF_HINT", box_b_x + 250, deck_y + 34, "(1, 5, 15, 60m...)", CLR_TEXT_MED, 7, false);
       
-      CreateLabel("LBL_TR_DIST", box_b_x + 12, deck_y + 64, "MAX DIST TR:", CLR_TEXT_MED, 8, true);
-      CreateEdit("INP_TRAIL_DIST", box_b_x + 140, deck_y + 60, 100, 22, DoubleToString(g_form_trail_max_dist, 2), CLR_CANVAS_BG, CLR_TEXT_PURE);
-      CreateLabel("LBL_TR_DIST_HINT", box_b_x + 250, deck_y + 64, "Proximity ke TP (1.10x)", CLR_TEXT_MED, 7, false);
+      CreateLabel("LBL_TR_DIST", box_b_x + 12, deck_y + 60, "MAX DIST TR:", CLR_TEXT_MED, 8, true);
+      CreateEdit("INP_TRAIL_DIST", box_b_x + 140, deck_y + 56, 100, 22, DoubleToString(g_form_trail_max_dist, 2), CLR_CANVAS_BG, CLR_TEXT_PURE);
+      CreateLabel("LBL_TR_DIST_HINT", box_b_x + 250, deck_y + 60, "Proximity ke TP (1.10x)", CLR_TEXT_MED, 7, false);
       
-      CreateLabel("LBL_TR_MULT", box_b_x + 12, deck_y + 94, "RELVOL THRESH:", CLR_TEXT_MED, 8, true);
-      CreateEdit("INP_TRAIL_MULT", box_b_x + 140, deck_y + 90, 100, 22, DoubleToString(g_form_trail_atr_mult, 2), CLR_CANVAS_BG, CLR_TEXT_PURE);
-      CreateLabel("LBL_TR_MULT_HINT", box_b_x + 250, deck_y + 94, "Lonjakan vol (>=1.60x)", CLR_TEXT_MED, 7, false);
+      CreateLabel("LBL_TR_MULT", box_b_x + 12, deck_y + 86, "RELVOL THRESH:", CLR_TEXT_MED, 8, true);
+      CreateEdit("INP_TRAIL_MULT", box_b_x + 140, deck_y + 82, 100, 22, DoubleToString(g_form_trail_atr_mult, 2), CLR_CANVAS_BG, CLR_TEXT_PURE);
+      CreateLabel("LBL_TR_MULT_HINT", box_b_x + 250, deck_y + 86, "Lonjakan vol (>=1.60x)", CLR_TEXT_MED, 7, false);
       
-      CreateLabel("LBL_TR_BE", box_b_x + 12, deck_y + 122, "BE DIST %:", CLR_TEXT_MED, 8, true);
-      CreateEdit("INP_TRAIL_BE", box_b_x + 140, deck_y + 118, 100, 22, DoubleToString(g_form_trail_be_rem_pct, 0), CLR_CANVAS_BG, CLR_GOLD_NEON);
-      CreateLabel("LBL_TR_BE_HINT", box_b_x + 250, deck_y + 122, "Sisa target lock BE (20%)", CLR_TEXT_MED, 7, false);
+      CreateLabel("LBL_TR_BE", box_b_x + 12, deck_y + 112, "BE DIST %:", CLR_TEXT_MED, 8, true);
+      CreateEdit("INP_TRAIL_BE", box_b_x + 140, deck_y + 108, 100, 22, DoubleToString(g_form_trail_be_rem_pct, 0), CLR_CANVAS_BG, CLR_GOLD_NEON);
+      CreateLabel("LBL_TR_BE_HINT", box_b_x + 250, deck_y + 112, "Sisa target lock BE (20%)", CLR_TEXT_MED, 7, false);
       
-      CreateLabel("LBL_TR_INFO", box_b_x + 12, deck_y + 152, "*Posisi AutoTrader ([AT TRAIL]) dilindungi otomatis agar tidak konflik.", CLR_CYAN_NEON, 7, false);
+      CreateLabel("LBL_TR_EXT", box_b_x + 12, deck_y + 138, "EXT DIST %:", CLR_TEXT_MED, 8, true);
+      CreateEdit("INP_TRAIL_EXT", box_b_x + 140, deck_y + 134, 100, 22, DoubleToString(g_form_trail_ext_rem_pct, 0), CLR_CANVAS_BG, CLR_GOLD_NEON);
+      CreateLabel("LBL_TR_EXT_HINT", box_b_x + 250, deck_y + 138, "Sisa target extend TP (20%)", CLR_TEXT_MED, 7, false);
+
+      CreateLabel("LBL_TR_INFO", box_b_x + 12, deck_y + 166, "*Posisi AutoTrader ([AT TRAIL]) dilindungi otomatis agar tidak konflik.", CLR_CYAN_NEON, 7, false);
       
-      CreateButton("BTN_APPLY_TRAIL", box_b_x + 12, deck_y + 184, 250, 26, "ACTIVATE AUTO TRAIL", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
-      CreateButton("BTN_CANCEL_TRAIL", box_b_x + 270, deck_y + 184, 160, 26, "STOP TRAIL", CLR_PANEL_BG, CLR_BEAR_NEON, CLR_BORDER_HARD);
+      CreateButton("BTN_APPLY_TRAIL", box_b_x + 12, deck_y + 196, 250, 26, "ACTIVATE AUTO TRAIL", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
+      CreateButton("BTN_CANCEL_TRAIL", box_b_x + 270, deck_y + 196, 160, 26, "STOP TRAIL", CLR_PANEL_BG, CLR_BEAR_NEON, CLR_BORDER_HARD);
    }
    else if(g_active_tab == 2)
    {

@@ -70,6 +70,7 @@ struct AutoTraderRule
    double               trail_max_dist;    // Max Proximity to TP in EWMA TR units (default 1.10)
    double               atr_multiplier;    // Relative Volatility Threshold (default 1.60)
    double               trail_be_rem_dist_pct; // Sisa jarak ke target TP untuk BE (default 0.20)
+   double               trail_ext_rem_dist_pct;// Sisa jarak ke target TP untuk TP Extend (default 0.20)
    string               bull_price_filter; // e.g. "< 1.0850", "<= 1.0820", "4040-4078", "ALL"
    string               bear_price_filter; // e.g. "> 1.0900", ">= 1.0910", "4040-4078", "ALL"
    int                  max_orders;        // 1 = 1x open then paused, 0/-1 = Unlimited
@@ -109,6 +110,7 @@ struct SPositionTracking
    double   trail_max_dist;
    double   atr_multiplier;
    double   trail_be_rem_dist_pct; // Remaining target ratio for BE lock (default 0.20)
+   double   trail_ext_rem_dist_pct;// Remaining target ratio for TP Extend (default 0.20)
    bool     be_applied;       // Track if BE has already been locked
    bool     active;
 };
@@ -138,6 +140,7 @@ input group "=== AUTO TRAIL SL & TP (EWMA TR ENGINE) ==="
 input bool                 InpEnableTrail      = true;           // Default Enable Trail SL & TP
 input ENUM_TRAIL_BE_MODE   InpTrailBEMode      = TRAIL_BE_PROXIMITY; // Default Trail BE Mode
 input double               InpTrailBERemDistPct= 0.20;           // Default Trail BE Remaining TP Distance Ratio (0.20 = 20%)
+input double               InpTrailExtRemDistPct= 0.20;          // Default TP Extension Remaining TP Distance Ratio (0.20 = 20%)
 input double               InpMaxDistATR       = 1.10;           // Default Max Proximity to TP (in EWMA TR units)
 input double               InpRelVolThreshold  = 1.60;           // Default RelVol Threshold (>= 1.60x)
 input double               InpEWMALambda       = 0.90;           // EWMA TR Lambda Decay (0.88 - 0.92)
@@ -206,6 +209,7 @@ bool                 g_form_trail_on    = true;
 double               g_form_trail_dist  = 1.10; // Max Proximity in EWMA TR units
 double               g_form_atr_mult    = 1.6;  // RelVol Threshold
 double               g_form_be_dist_pct = 20.0; // Sisa Jarak TP % untuk BE (default 20%)
+double               g_form_ext_dist_pct= 20.0; // Sisa Jarak TP % untuk TP Extend (default 20%)
 bool                 g_form_m1_fallback = true; // M1 fallback for M5 timeframe rules
 int                  g_form_max_orders  = 1;
 int                  g_form_entry_mult  = 1;
@@ -242,7 +246,7 @@ int  CompareRules(int a, int b);
 void SaveStateToFile();
 void LoadStateFromFile();
 void ProcessAutoTrailSLTP();
-void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, double atr100, double open_p, double tp_p, double trail_dist, double atr_mult, double be_rem_dist_pct);
+void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, double atr100, double open_p, double tp_p, double trail_dist, double atr_mult, double be_rem_dist_pct, double ext_rem_dist_pct);
 ulong ResolvePositionTicket(ulong order_ticket, ulong deal_ticket, string sym);
 void AdoptOpenEAPositions();
 string FindExactOrMarketWatchSymbol(string input_sym);
@@ -856,6 +860,7 @@ void AdoptOpenEAPositions()
                trail_dist    = g_rules[r].trail_max_dist;
                atr_mult      = g_rules[r].atr_multiplier;
                be_rem_pct    = g_rules[r].trail_be_rem_dist_pct;
+               double ext_rem_pct= g_rules[r].trail_ext_rem_dist_pct;
                trail_enabled = g_rules[r].enable_trail;
                found_rule    = true;
                break;
@@ -873,18 +878,24 @@ void AdoptOpenEAPositions()
       if(!trail_enabled) continue;
       
       double atr100 = CalculateATR100(sym, AtrBaseTF(adopted_tf), InpATRPeriod);
-      RegisterPositionTracking(tkt, sym, adopted_tf, atr100, open_p, tp_p, trail_dist, atr_mult, be_rem_pct);
-      PrintFormat("[AUTO-ADOPT] Position #%I64u on %s (Magic: %I64u) adopted by Auto Trail (TF: %s | BE Rem: %.0f%% | D: %.1f | RV: %.1f)",
-                  tkt, sym, (ulong)m_position.Magic(), EnumToString(adopted_tf), be_rem_pct * 100.0, trail_dist, atr_mult);
+      double ext_rem_pct = InpTrailExtRemDistPct;
+      for(int r = 0; r < total_rules; r++)
+      {
+         if(g_rules[r].symbol == sym) { ext_rem_pct = g_rules[r].trail_ext_rem_dist_pct; break; }
+      }
+      RegisterPositionTracking(tkt, sym, adopted_tf, atr100, open_p, tp_p, trail_dist, atr_mult, be_rem_pct, ext_rem_pct);
+      PrintFormat("[AUTO-ADOPT] Position #%I64u on %s (Magic: %I64u) adopted by Auto Trail (TF: %s | BE Rem: %.0f%% | EXT Rem: %.0f%% | D: %.1f | RV: %.1f)",
+                  tkt, sym, (ulong)m_position.Magic(), EnumToString(adopted_tf), be_rem_pct * 100.0, ext_rem_pct * 100.0, trail_dist, atr_mult);
    }
 }
 
 //+------------------------------------------------------------------+
 //| POSITION TRACKING MANAGEMENT (AUTO TRAIL SL & TRAIL TP)          |
 //+------------------------------------------------------------------+
-void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, double atr100, double open_p, double tp_p, double trail_dist, double atr_mult, double be_rem_dist_pct)
+void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, double atr100, double open_p, double tp_p, double trail_dist, double atr_mult, double be_rem_dist_pct, double ext_rem_dist_pct)
 {
    double rem_pct = (be_rem_dist_pct > 0) ? (be_rem_dist_pct > 1.0 ? be_rem_dist_pct / 100.0 : be_rem_dist_pct) : InpTrailBERemDistPct;
+   double ext_pct = (ext_rem_dist_pct > 0) ? (ext_rem_dist_pct > 1.0 ? ext_rem_dist_pct / 100.0 : ext_rem_dist_pct) : InpTrailExtRemDistPct;
    int size = ArraySize(g_tracking_list);
    for(int i = 0; i < size; i++)
    {
@@ -898,7 +909,8 @@ void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, doub
          g_tracking_list[i].trail_cycle       = 0;
          g_tracking_list[i].trail_max_dist    = (trail_dist > 0) ? trail_dist : InpMaxDistATR;
          g_tracking_list[i].atr_multiplier    = (atr_mult > 0)   ? atr_mult   : InpRelVolThreshold;
-         g_tracking_list[i].trail_be_rem_dist_pct = rem_pct;
+         g_tracking_list[i].trail_be_rem_dist_pct  = rem_pct;
+         g_tracking_list[i].trail_ext_rem_dist_pct = ext_pct;
          g_tracking_list[i].be_applied        = false;
          g_tracking_list[i].active            = true;
          return;
@@ -915,7 +927,8 @@ void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, doub
    g_tracking_list[size].trail_cycle       = 0;
    g_tracking_list[size].trail_max_dist    = (trail_dist > 0) ? trail_dist : InpMaxDistATR;
    g_tracking_list[size].atr_multiplier    = (atr_mult > 0)   ? atr_mult   : InpRelVolThreshold;
-   g_tracking_list[size].trail_be_rem_dist_pct = rem_pct;
+   g_tracking_list[size].trail_be_rem_dist_pct  = rem_pct;
+   g_tracking_list[size].trail_ext_rem_dist_pct = ext_pct;
    g_tracking_list[size].be_applied        = false;
    g_tracking_list[size].active            = true;
 }
@@ -1066,6 +1079,34 @@ void ProcessAutoTrailSLTP()
       // Re-select posisi tkt yang sedang diproses
       if(!m_position.SelectByTicket(tkt)) continue;
 
+      // -------------------------------------------------------------------
+      // DUAL-LAYER PROXIMITY GATE:
+      // Lapis 1: Progres % Target TP (harga WAJIB sudah berjalan maju >= 80%,
+      //          sisa <= EXT DIST%, mencegah trigger prematur pada scalping/TP pendek)
+      // Lapis 2: Dinamika EWMA TR & Ledakan RelVol (momentum lilin market)
+      // -------------------------------------------------------------------
+      double base_target_dist = g_tracking_list[i].initial_tp_dist;
+      if(base_target_dist <= 0) base_target_dist = MathAbs(cur_tp - open_p);
+
+      double ext_pct = (g_tracking_list[i].trail_ext_rem_dist_pct > 0) ? g_tracking_list[i].trail_ext_rem_dist_pct : InpTrailExtRemDistPct;
+      double max_ext_rem_allowed = base_target_dist * ext_pct;
+      double min_ext_gain_req    = base_target_dist * (1.0 - ext_pct);
+
+      double ext_rem_dist = 0.0;
+      double ext_cur_gain = 0.0;
+      if(ptype == POSITION_TYPE_BUY)
+      {
+         ext_rem_dist = cur_tp - bid;
+         ext_cur_gain = bid - open_p;
+      }
+      else if(ptype == POSITION_TYPE_SELL)
+      {
+         ext_rem_dist = ask - cur_tp;
+         ext_cur_gain = open_p - ask;
+      }
+
+      bool progress_ok = (base_target_dist > 0) ? (ext_rem_dist <= max_ext_rem_allowed && ext_cur_gain >= min_ext_gain_req) : true;
+
       double dist_to_tp = 0.0;
       if(ptype == POSITION_TYPE_BUY)  dist_to_tp = MathAbs(cur_tp - bid) / ewma_tr;
       if(ptype == POSITION_TYPE_SELL) dist_to_tp = MathAbs(cur_tp - ask) / ewma_tr;
@@ -1073,7 +1114,7 @@ void ProcessAutoTrailSLTP()
       double max_dist_allowed = (g_tracking_list[i].trail_max_dist > 0) ? g_tracking_list[i].trail_max_dist : InpMaxDistATR;
       double relvol_threshold = (g_tracking_list[i].atr_multiplier > 0)  ? g_tracking_list[i].atr_multiplier : InpRelVolThreshold;
       
-      bool proximity_ok  = (dist_to_tp <= max_dist_allowed);
+      bool proximity_ok  = progress_ok && (dist_to_tp <= max_dist_allowed);
       bool volatility_ok = (rel_vol >= relvol_threshold);
       
       if(is_eligible_tp_runner && proximity_ok && volatility_ok)
@@ -1631,14 +1672,17 @@ void CreateDashboardUI()
    color trail_mode_clr = g_form_trail_on ? CLR_GOLD_NEON : CLR_TEXT_MED;
    CreateButton("BTN_TOGGLE_TRAIL", root_x + 95, row_e_y, 40, 20, trail_mode_str, CLR_CANVAS_BG, trail_mode_clr, CLR_BORDER_HARD);
    
-   CreateLabel("LBL_BE_DIST", root_x + 142, row_e_y + 3, "BE DIST%:", CLR_TEXT_MED, 7, true);
-   CreateEdit("INP_TRAIL_BE_DIST", root_x + 195, row_e_y, 35, 20, IntegerToString((int)MathRound(g_form_be_dist_pct)), CLR_CANVAS_BG, CLR_GOLD_NEON);
+   CreateLabel("LBL_BE_DIST", root_x + 138, row_e_y + 3, "BE%:", CLR_TEXT_MED, 7, true);
+   CreateEdit("INP_TRAIL_BE_DIST", root_x + 165, row_e_y, 30, 20, IntegerToString((int)MathRound(g_form_be_dist_pct)), CLR_CANVAS_BG, CLR_GOLD_NEON);
    
-   CreateLabel("LBL_TRAIL_DIST", root_x + 238, row_e_y + 3, "MAX DIST TR:", CLR_TEXT_MED, 7, true);
-   CreateEdit("INP_TRAIL_DIST", root_x + 310, row_e_y, 40, 20, DoubleToString(g_form_trail_dist, 1), CLR_CANVAS_BG, CLR_GOLD_NEON);
+   CreateLabel("LBL_EXT_DIST", root_x + 202, row_e_y + 3, "EXT%:", CLR_TEXT_MED, 7, true);
+   CreateEdit("INP_TRAIL_EXT_DIST", root_x + 235, row_e_y, 30, 20, IntegerToString((int)MathRound(g_form_ext_dist_pct)), CLR_CANVAS_BG, CLR_GOLD_NEON);
    
-   CreateLabel("LBL_ATR_MULT_LBL", root_x + 358, row_e_y + 3, "RELVOL THR:", CLR_TEXT_MED, 7, true);
-   CreateEdit("INP_ATR_MULT", root_x + 430, row_e_y, 40, 20, DoubleToString(g_form_atr_mult, 1), CLR_CANVAS_BG, CLR_CYAN_NEON);
+   CreateLabel("LBL_TRAIL_DIST", root_x + 273, row_e_y + 3, "MAX TR:", CLR_TEXT_MED, 7, true);
+   CreateEdit("INP_TRAIL_DIST", root_x + 323, row_e_y, 38, 20, DoubleToString(g_form_trail_dist, 1), CLR_CANVAS_BG, CLR_GOLD_NEON);
+   
+   CreateLabel("LBL_ATR_MULT_LBL", root_x + 368, row_e_y + 3, "RELVOL:", CLR_TEXT_MED, 7, true);
+   CreateEdit("INP_ATR_MULT", root_x + 420, row_e_y, 38, 20, DoubleToString(g_form_atr_mult, 1), CLR_CANVAS_BG, CLR_CYAN_NEON);
    
    // Row F: % TF Progress Delay vs TF Close (y = upper_y + 144)
    int row_f_y = upper_y + 144;
@@ -1777,6 +1821,7 @@ void UpdatePreviewTerminalBox()
    bool   prev_hmr   = g_form_sig_hmr;
    bool   prev_stoch = g_form_sig_stoch;
    double prev_be_pct = g_form_be_dist_pct;
+   double prev_ext_pct= g_form_ext_dist_pct;
    string prev_rule_tag = (g_editing_rule_idx >= 0) ? StringFormat("[RULE #%d EDIT]", g_editing_rule_idx + 1) : "[FORM INPUT]";
    
    int total_rules = ArraySize(g_rules);
@@ -1795,6 +1840,7 @@ void UpdatePreviewTerminalBox()
       prev_dist  = g_rules[idx].trail_max_dist;
       prev_atr_m = g_rules[idx].atr_multiplier;
       prev_be_pct= g_rules[idx].trail_be_rem_dist_pct * 100.0;
+      prev_ext_pct= g_rules[idx].trail_ext_rem_dist_pct * 100.0;
       prev_mult  = g_rules[idx].entry_multiplier;
       prev_mtp   = g_rules[idx].multi_tp;
       prev_sm    = (g_rules[idx].signal_mode == SIGNAL_MODE_ANY) ? "ANY (OR)" : "COMBO (AND)";
@@ -1835,7 +1881,7 @@ void UpdatePreviewTerminalBox()
    if(prev_trail)
    {
       string l6 = StringFormat("Auto Trail BE: Sisa Target <= %.0f%% -> Kunci BE", prev_be_pct);
-      string l7 = StringFormat("Trail TP Extend: Sisa <= %.1fTR & RelVol >= %.2fx -> TP Extend", prev_dist, prev_atr_m);
+      string l7 = StringFormat("Trail TP Extend: Sisa <= %.0f%% & <= %.1fTR & RelVol >= %.2fx", prev_ext_pct, prev_dist, prev_atr_m);
       string l8 = StringFormat("Trail SL Lock: Sisa <= %.1fTR ke TP baru -> Kunci ke Prev TP", prev_dist);
       
       CreateLabel("SIM_L6", prev_x + 10, line_y + 86,  l6, CLR_GOLD_NEON, 8, true);
@@ -1947,7 +1993,7 @@ void UpdateDashboardUI()
       }
       CreateLabel(r_pfx + "FLT", root_x + 568, cur_y + 9, f_str, CLR_TEXT_MED, 7, false);
       
-      string trail_str = g_rules[i].enable_trail ? StringFormat("BE:%.0f%%|D:%.1f|RV:%.1f", g_rules[i].trail_be_rem_dist_pct * 100.0, g_rules[i].trail_max_dist, g_rules[i].atr_multiplier) : "OFF";
+      string trail_str = g_rules[i].enable_trail ? StringFormat("BE:%.0f%%|EX:%.0f%%|D:%.1f", g_rules[i].trail_be_rem_dist_pct * 100.0, g_rules[i].trail_ext_rem_dist_pct * 100.0, g_rules[i].trail_max_dist) : "OFF";
       CreateLabel(r_pfx + "TRL", root_x + 685, cur_y + 9, trail_str, g_rules[i].enable_trail ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, false);
       
       string r_status_txt = g_rules[i].active ? "ACTIVE" : "PAUSED";
@@ -1987,7 +2033,7 @@ void SaveStateToFile()
    if(handle != INVALID_HANDLE)
    {
       FileWriteInteger(handle, g_master_power_enabled ? 1 : 0);
-      FileWriteInteger(handle, 6); // v6 = v5 plus continuation_mode
+      FileWriteInteger(handle, 7); // v7 = v6 plus trail_ext_rem_dist_pct
       
       int total_rules = ArraySize(g_rules);
       FileWriteInteger(handle, total_rules);
@@ -2033,6 +2079,9 @@ void SaveStateToFile()
 
          // V6 additions per rule
          FileWriteInteger(handle, g_rules[i].continuation_mode ? 1 : 0);
+
+         // V7 additions per rule
+         FileWriteDouble(handle, g_rules[i].trail_ext_rem_dist_pct);
       }
 
       // 3. Persistent Add/Edit form state (so re-attach keeps last typed values)
@@ -2076,6 +2125,9 @@ void SaveStateToFile()
       // V6 additions for form state
       FileWriteInteger(handle, g_form_continuation ? 1 : 0);
 
+      // V7 additions for form state
+      FileWriteDouble(handle, g_form_ext_dist_pct);
+
       FileClose(handle);
    }
 }
@@ -2109,6 +2161,7 @@ void LoadStateFromFile()
       g_rules[0].sig_stoch_ha      = InpDefaultSigStochHA;
       g_rules[0].signal_mode       = InpDefaultSigMode;
       g_rules[0].trail_be_rem_dist_pct = InpTrailBERemDistPct;
+      g_rules[0].trail_ext_rem_dist_pct = InpTrailExtRemDistPct;
       g_rules[0].allow_m1_fallback = true;
       g_rules[0].bull_bound_entered_time = 0;
       g_rules[0].bear_bound_entered_time = 0;
@@ -2170,7 +2223,7 @@ void LoadStateFromFile()
          g_rules[i].orders_opened_count = FileReadInteger(handle);
          g_rules[i].active            = (FileReadInteger(handle) == 1);
          
-         if(state_ver >= 6)
+         if(state_ver >= 7)
          {
             g_rules[i].sig_engulfing = (FileReadInteger(handle) == 1);
             g_rules[i].sig_hammer_ss = (FileReadInteger(handle) == 1);
@@ -2179,6 +2232,18 @@ void LoadStateFromFile()
             g_rules[i].trail_be_rem_dist_pct = FileReadDouble(handle);
             g_rules[i].allow_m1_fallback = (FileReadInteger(handle) == 1);
             g_rules[i].continuation_mode = (FileReadInteger(handle) == 1);
+            g_rules[i].trail_ext_rem_dist_pct = FileReadDouble(handle);
+         }
+         else if(state_ver >= 6)
+         {
+            g_rules[i].sig_engulfing = (FileReadInteger(handle) == 1);
+            g_rules[i].sig_hammer_ss = (FileReadInteger(handle) == 1);
+            g_rules[i].sig_stoch_ha  = (FileReadInteger(handle) == 1);
+            g_rules[i].signal_mode   = (ENUM_SIGNAL_MODE)FileReadInteger(handle);
+            g_rules[i].trail_be_rem_dist_pct = FileReadDouble(handle);
+            g_rules[i].allow_m1_fallback = (FileReadInteger(handle) == 1);
+            g_rules[i].continuation_mode = (FileReadInteger(handle) == 1);
+            g_rules[i].trail_ext_rem_dist_pct = InpTrailExtRemDistPct;
          }
          else if(state_ver >= 5)
          {
@@ -2262,7 +2327,7 @@ void LoadStateFromFile()
          g_form_trail_dist  = FileReadDouble(handle);
          g_form_atr_mult    = FileReadDouble(handle);
          
-         if(state_ver >= 6 && FileIsEnding(handle) == false)
+         if(state_ver >= 7 && FileIsEnding(handle) == false)
          {
             g_form_sig_eng   = (FileReadInteger(handle) == 1);
             g_form_sig_hmr   = (FileReadInteger(handle) == 1);
@@ -2271,6 +2336,18 @@ void LoadStateFromFile()
             g_form_be_dist_pct = FileReadDouble(handle);
             g_form_m1_fallback = (FileReadInteger(handle) == 1);
             g_form_continuation= (FileReadInteger(handle) == 1);
+            g_form_ext_dist_pct= FileReadDouble(handle);
+         }
+         else if(state_ver >= 6 && FileIsEnding(handle) == false)
+         {
+            g_form_sig_eng   = (FileReadInteger(handle) == 1);
+            g_form_sig_hmr   = (FileReadInteger(handle) == 1);
+            g_form_sig_stoch = (FileReadInteger(handle) == 1);
+            g_form_sig_mode  = (ENUM_SIGNAL_MODE)FileReadInteger(handle);
+            g_form_be_dist_pct = FileReadDouble(handle);
+            g_form_m1_fallback = (FileReadInteger(handle) == 1);
+            g_form_continuation= (FileReadInteger(handle) == 1);
+            g_form_ext_dist_pct= InpTrailExtRemDistPct * 100.0;
          }
          else if(state_ver >= 5 && FileIsEnding(handle) == false)
          {
@@ -2359,6 +2436,11 @@ void CaptureFormInputs()
    {
       double cur_be_dist = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_BE_DIST", OBJPROP_TEXT));
       if(cur_be_dist > 0 && cur_be_dist <= 100) g_form_be_dist_pct = cur_be_dist;
+   }
+   if(ObjectFind(0, g_prefix + "INP_TRAIL_EXT_DIST") >= 0)
+   {
+      double cur_ext_dist = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_EXT_DIST", OBJPROP_TEXT));
+      if(cur_ext_dist > 0 && cur_ext_dist <= 100) g_form_ext_dist_pct = cur_ext_dist;
    }
    
    string mord_str = ObjectGetString(0, g_prefix + "INP_MAX_ORD", OBJPROP_TEXT);
@@ -2540,6 +2622,7 @@ void OnChartEvent(const int id,
          g_form_trail_dist = InpMaxDistATR;
          g_form_atr_mult   = InpRelVolThreshold;
          g_form_be_dist_pct= 20.0;
+         g_form_ext_dist_pct= 20.0;
          g_form_m1_fallback= true;
          g_form_max_orders = InpMaxOrders;
          g_form_entry_mult = InpEntryMultiplier;
@@ -2644,6 +2727,11 @@ void OnChartEvent(const int id,
          if(ObjectFind(0, g_prefix + "INP_TRAIL_BE_DIST") >= 0)
             be_dist_val = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_BE_DIST", OBJPROP_TEXT));
          if(be_dist_val <= 0 || be_dist_val > 100) be_dist_val = 20.0;
+
+         double ext_dist_val = 20.0;
+         if(ObjectFind(0, g_prefix + "INP_TRAIL_EXT_DIST") >= 0)
+            ext_dist_val = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_EXT_DIST", OBJPROP_TEXT));
+         if(ext_dist_val <= 0 || ext_dist_val > 100) ext_dist_val = 20.0;
          
          int max_ord_val = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MAX_ORD", OBJPROP_TEXT));
          
@@ -2705,6 +2793,7 @@ void OnChartEvent(const int id,
          g_form_trail_dist = trail_dist;
          g_form_atr_mult  = atr_mult;
          g_form_be_dist_pct = be_dist_val;
+         g_form_ext_dist_pct= ext_dist_val;
          g_form_entry_mult= mult_val;
          g_form_multi_tp = multi_tp_val;
          g_form_delay_pct = delay_pct_val;
@@ -2733,6 +2822,7 @@ void OnChartEvent(const int id,
          g_rules[target_idx].trail_max_dist      = trail_dist;
          g_rules[target_idx].atr_multiplier      = atr_mult;
          g_rules[target_idx].trail_be_rem_dist_pct = be_dist_val / 100.0;
+         g_rules[target_idx].trail_ext_rem_dist_pct = ext_dist_val / 100.0;
          g_rules[target_idx].allow_m1_fallback   = g_form_m1_fallback;
          g_rules[target_idx].bull_price_filter   = b_filter;
          g_rules[target_idx].bear_price_filter   = s_filter;
@@ -2797,6 +2887,7 @@ void OnChartEvent(const int id,
             g_form_trail_dist   = g_rules[i].trail_max_dist;
             g_form_atr_mult     = g_rules[i].atr_multiplier;
             g_form_be_dist_pct  = (g_rules[i].trail_be_rem_dist_pct > 0) ? g_rules[i].trail_be_rem_dist_pct * 100.0 : 20.0;
+            g_form_ext_dist_pct = (g_rules[i].trail_ext_rem_dist_pct > 0) ? g_rules[i].trail_ext_rem_dist_pct * 100.0 : 20.0;
             g_form_m1_fallback  = g_rules[i].allow_m1_fallback;
             g_form_entry_mult   = g_rules[i].entry_multiplier;
             g_form_multi_tp    = g_rules[i].multi_tp;
@@ -3207,7 +3298,7 @@ void OnTick()
                      
                      double atr100 = atr_50 * 2.0;
                      if(g_rules[r].enable_trail)
-                        RegisterPositionTracking(pos_tkt > 0 ? pos_tkt : ord_tkt, sym, tf, atr100, ask, cur_tp, g_rules[r].trail_max_dist, g_rules[r].atr_multiplier, g_rules[r].trail_be_rem_dist_pct);
+                        RegisterPositionTracking(pos_tkt > 0 ? pos_tkt : ord_tkt, sym, tf, atr100, ask, cur_tp, g_rules[r].trail_max_dist, g_rules[r].atr_multiplier, g_rules[r].trail_be_rem_dist_pct, g_rules[r].trail_ext_rem_dist_pct);
                      
                      string msg = StringFormat("[BUY] %s %s (%s)\nSignal: %s\nEntry: %.5f | SL: %.5f | TP: %.5f\nOrder: #%d (%d/%d) | Lot: %.2f | RR: 1:%.2f",
                                                sym, EnumToString(sig_tf), sig_name,
@@ -3458,7 +3549,7 @@ void OnTick()
                      
                      double atr100 = atr_50 * 2.0;
                      if(g_rules[r].enable_trail)
-                        RegisterPositionTracking(pos_tkt > 0 ? pos_tkt : ord_tkt, sym, tf, atr100, bid, cur_tp, g_rules[r].trail_max_dist, g_rules[r].atr_multiplier, g_rules[r].trail_be_rem_dist_pct);
+                        RegisterPositionTracking(pos_tkt > 0 ? pos_tkt : ord_tkt, sym, tf, atr100, bid, cur_tp, g_rules[r].trail_max_dist, g_rules[r].atr_multiplier, g_rules[r].trail_be_rem_dist_pct, g_rules[r].trail_ext_rem_dist_pct);
                      
                      string msg = StringFormat("[SELL] %s %s (%s)\nSignal: %s\nEntry: %.5f | SL: %.5f | TP: %.5f\nOrder: #%d (%d/%d) | Lot: %.2f | RR: 1:%.2f",
                                                sym, EnumToString(sig_tf), sig_name,

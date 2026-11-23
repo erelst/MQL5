@@ -416,6 +416,78 @@ def check_be_progress_verification():
     print("test_be_progress_verification: OK (BE strictly requires dual-check: proximity <= 20% & profit gain >= 80%)")
 
 
+def check_tp_extension_dual_layer_and_ext_dist():
+    """Verify that TP Extension uses an independent EXT DIST% input (default 20%),
+    and enforces a dual-layer proximity gate:
+    1. Layer 1: Target progress (remaining <= EXT DIST% AND gain >= (100 - EXT DIST)%)
+    2. Layer 2: Dynamic ATR proximity (dist_to_tp <= max_dist_allowed) AND volume spike.
+    """
+    src_at = open(SRC).read()
+    src_tm = open(os.path.join(os.path.dirname(os.path.dirname(SRC)), "TradeManagerReversalRadar", "TradeManagerReversalRadar.mq5")).read()
+
+    # 1. AutoTrader checks
+    assert "input double               InpTrailExtRemDistPct= 0.20;" in src_at
+    assert "double ext_pct = (g_tracking_list[i].trail_ext_rem_dist_pct > 0) ? g_tracking_list[i].trail_ext_rem_dist_pct : InpTrailExtRemDistPct;" in src_at
+    assert "ext_rem_dist <= max_ext_rem_allowed && ext_cur_gain >= min_ext_gain_req" in src_at
+    assert "bool proximity_ok  = progress_ok && (dist_to_tp <= max_dist_allowed);" in src_at
+    assert "INP_TRAIL_EXT_DIST" in src_at
+    assert "FileWriteInteger(handle, 7);" in src_at
+    assert "state_ver >= 7" in src_at
+
+    # 2. TradeManager checks
+    assert "input double               InpTrailExtRemDistPct= 0.20;" in src_tm
+    assert "double ext_pct = (g_tracking_list[i].trail_ext_rem_dist_pct > 0) ? g_tracking_list[i].trail_ext_rem_dist_pct : InpTrailExtRemDistPct;" in src_tm
+    assert "ext_rem_dist <= max_ext_rem_allowed && ext_cur_gain >= min_ext_gain_req" in src_tm
+    assert "INP_TRAIL_EXT" in src_tm
+    assert "ActivateBulkAutoTrail(double max_dist, double relvol_th, double be_rem_pct, double ext_rem_pct, ENUM_TIMEFRAMES tf)" in src_tm
+
+    # 3. Mathematical validation of dual-layer gate (Scalping vs Swing)
+    # Scenario A: Scalping (TP target = 15 pts, ATR = 20 pts, EXT% = 20%, MAX TR = 1.1)
+    target_dist_scalp = 15.0
+    atr_scalp = 20.0
+    max_dist_allowed_pts = 1.1 * atr_scalp  # 22.0 pts
+    ext_pct_val = 0.20
+
+    # At bar 0 (just opened): gain = 0, rem = 15.0
+    rem_0 = 15.0
+    gain_0 = 0.0
+    layer1_0 = (rem_0 <= target_dist_scalp * ext_pct_val) and (gain_0 >= target_dist_scalp * (1.0 - ext_pct_val))
+    layer2_0 = (rem_0 <= max_dist_allowed_pts)
+    assert not layer1_0, "Layer 1 MUST block immediate trigger at open"
+    assert layer2_0, "Layer 2 alone would have prematurely triggered without Layer 1!"
+    assert not (layer1_0 and layer2_0), "Dual-layer gate must block premature trigger!"
+
+    # Near TP (gain = 13.0, rem = 2.0 pts)
+    rem_near = 2.0
+    gain_near = 13.0
+    layer1_near = (rem_near <= target_dist_scalp * ext_pct_val) and (gain_near >= target_dist_scalp * (1.0 - ext_pct_val))
+    layer2_near = (rem_near <= max_dist_allowed_pts)
+    assert layer1_near and layer2_near, "Dual-layer gate must trigger when both layers are satisfied"
+
+    # Scenario B: Swing (TP target = 100 pts, ATR = 10 pts, EXT% = 20%, MAX TR = 1.1)
+    target_dist_swing = 100.0
+    atr_swing = 10.0
+    max_dist_allowed_swing = 1.1 * atr_swing  # 11.0 pts
+
+    # Price at 80% progress (gain = 80.0, rem = 20.0 pts)
+    rem_80 = 20.0
+    gain_80 = 80.0
+    layer1_80 = (rem_80 <= target_dist_swing * ext_pct_val) and (gain_80 >= target_dist_swing * (1.0 - ext_pct_val))
+    layer2_80 = (rem_80 <= max_dist_allowed_swing)
+    assert layer1_80, "Layer 1 passes at 80% progress"
+    assert not layer2_80, "Layer 2 keeps holding until price is strictly within ATR proximity (11 pts)"
+    assert not (layer1_80 and layer2_80), "Dual-layer gate ensures swing positions aren't extended too early!"
+
+    # Price within ATR of TP (gain = 90.0, rem = 10.0 pts)
+    rem_swing_close = 10.0
+    gain_swing_close = 90.0
+    layer1_close = (rem_swing_close <= target_dist_swing * ext_pct_val) and (gain_swing_close >= target_dist_swing * (1.0 - ext_pct_val))
+    layer2_close = (rem_swing_close <= max_dist_allowed_swing)
+    assert layer1_close and layer2_close, "Both layers pass and cleanly trigger extension!"
+
+    print("test_tp_extension_dual_layer_and_ext_dist: OK (independent EXT DIST% + dual-layer gate protects scalping & swing)")
+
+
 if __name__ == "__main__":
     try:
         check_detector()
@@ -429,6 +501,7 @@ if __name__ == "__main__":
         check_spread_compensated_tp()
         check_table_sorting_and_columns()
         check_be_progress_verification()
+        check_tp_extension_dual_layer_and_ext_dist()
     except Exception as exc:  # noqa: BLE001 - a test, any failure is a failure
         print("test_autotrader: FAILED -> %s" % exc)
         sys.exit(1)

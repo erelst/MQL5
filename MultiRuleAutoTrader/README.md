@@ -98,6 +98,8 @@ Menggantikan ATR lambat dengan rasio volatilitas *Relative Volatility* ($\text{R
 | `InpDefaultSigMode` | `SIGNAL_MODE_ANY` | Default mode sinyal: `ANY (OR)` atau `COMBO (AND)` |
 | `InpEnableTrail` | `true` | Default aktifkan Trailing Engine EWMA TR |
 | `InpTrailBEMode` | `TRAIL_BE_PROXIMITY` | Mode Trail BE: Proximity TP atau Running Profit |
+| `InpTrailBERemDistPct` | `0.20` | Ambang sisa jarak TP untuk memicu BE (0.20 = 20%) |
+| `InpTrailExtRemDistPct` | `0.20` | Ambang sisa jarak TP untuk memicu TP Extension (0.20 = 20%) |
 | `InpRelVolThreshold` | `1.60` | Ambang batas lonjakan volatilitas untuk TP Extend ($\ge 1.60\times$) |
 | `InpMaxDistATR` | `1.10` | Jarak kedekatan ke TP untuk pemicu trailing (satuan EWMA TR) |
 | `InpExtendFactor` | `0.70` | Faktor pengali perpanjangan TP |
