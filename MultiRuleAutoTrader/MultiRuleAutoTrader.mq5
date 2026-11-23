@@ -1902,6 +1902,8 @@ void UpdateDashboardUI()
    int table_y = upper_y + 285;
    int start_y = table_y + 28;
    
+   RenderTableHeaders(root_x, table_y);
+   
    ObjectsDeleteAll(0, g_prefix + "ROW_");
    ObjectsDeleteAll(0, g_prefix + "BTN_EDIT_RULE_");
    ObjectsDeleteAll(0, g_prefix + "BTN_DEL_RULE_");
@@ -2682,8 +2684,6 @@ void OnChartEvent(const int id,
          }
          
          g_rules_page = 0; // Return to first page on sort change
-         int table_y = root_y + 44 + 285;
-         RenderTableHeaders(root_x, table_y);
          UpdateDashboardUI();
          return;
       }
