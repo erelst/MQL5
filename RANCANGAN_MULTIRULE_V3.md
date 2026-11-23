@@ -372,4 +372,30 @@ Saat pengguna sedang mengisi atau mengubah kolom di form deck (misalnya simbol, 
       (Termasuk pada setiap tingkatan Multi-TP: $\text{Bid} - (\text{sl\_dist} \times \text{RR} \times t) - \mathbf{\text{Spread}}$).
   - Dengan kompensasi ini, begitu harga Bid/Ask pasar menyentuh TP dan order ditutup, profit moneter bersih yang masuk ke saldo akun tepat bernilai $1 : \text{RR}$ secara presisi (contoh: Risk 52 USC menghasilkan Reward 104 USC pada RR 1:2).
 
+---
+
+## 9. Sistem Pengurutan Kolom Tabel List & Penyempurnaan Kolom Header (Price & TP)
+
+### A. Fitur Interaktif Sortir Kolom Tabel Rules List
+- **Mekanisme Kerja:**
+  - Header tabel pada daftar aturan diubah dari label teks biasa menjadi tombol interaktif klik (`BTN_TH_NO`, `BTN_TH_SYM`, `BTN_TH_DIR`, `BTN_TH_LOT`, `BTN_TH_RR`, `BTN_TH_TF`, `BTN_TH_MAX`, `BTN_TH_MULT`, `BTN_TH_TP`, `BTN_TH_DELAY`, `BTN_TH_PRICE`, `BTN_TH_TRAIL`, `BTN_TH_STATUS`).
+  - **Status Default:** Default pengurutan adalah berdasarkan kolom **NO** (urutan indeks alami pembuatan aturan `#1, #2, #3, ...`).
+  - **Perilaku Toggle:**
+    - Mengklik kolom baru akan mengurutkan data secara **Ascending (▲)**.
+    - Mengklik kolom yang sama akan membalik urutan menjadi **Descending (▼)**.
+    - Mengklik kolom **NO** mengembalikan urutan ke nomor indeks default.
+  - **Prinsip Keamanan Eksekusi (Index Mapping Indirection):**
+    - Pengurutan murni dilakukan di lapisan presentasi UI (`GetSortedRuleIndices()`) menggunakan pemetaan indeks *virtual* (`int sorted_indices[]`).
+    - Array data asli di disk dan memori (`g_rules[]`) **tidak pernah diubah urutannya**, sehingga siklus loop scanning tick dan eksekusi order pada engine trading tetap 100% stabil, deterministik, dan terisolasi.
+
+### B. Penyempurnaan Kolom Header: Singkatan PRICE & Pemulihan Kolom TP
+- **Kolom Price Bound:**
+  - Header pada tabel list diubah dan disingkat menjadi cukup **`PRICE`** (`s_price = "PRICE"`).
+  - Teks di Form Deck (`PRICE BOUNDS:`), preview terminal box, dan log sistem tetap mempertahankan penamaan lengkap *Price Bound* / *Price Bounds*.
+- **Kolom Multi TP:**
+  - Menampilkan kembali kolom terpisah untuk **Multi TP** di tabel list dengan teks header cukup **`TP`** bersanding di sebelah `MULT`.
+  - Menampilkan informasi tingkat tier TP per rule (misal `1x`, `2x`).
+  - Preview Terminal Box tetap menampilkan rincian simulasi Multi TP secara utuh tanpa ada perubahan.
+
+
 

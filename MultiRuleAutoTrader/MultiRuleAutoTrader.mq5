@@ -41,6 +41,23 @@ enum ENUM_TRAIL_BE_MODE
    TRAIL_BE_PROFIT     // Opsi 2: Berbasis Profit Berjalan (>= 1.5x EWMA TR dari Open)
 };
 
+enum ENUM_RULE_SORT_COL
+{
+   RULE_SORT_NO,
+   RULE_SORT_SYM,
+   RULE_SORT_DIR,
+   RULE_SORT_LOT,
+   RULE_SORT_RR,
+   RULE_SORT_TF,
+   RULE_SORT_MAX,
+   RULE_SORT_MULT,
+   RULE_SORT_TP,
+   RULE_SORT_DELAY,
+   RULE_SORT_PRICE,
+   RULE_SORT_TRAIL,
+   RULE_SORT_STATUS
+};
+
 struct AutoTraderRule
 {
    string               symbol;
@@ -208,6 +225,9 @@ int                  g_editing_rule_idx  = -1; // -1 = Add mode, >=0 = Edit mode
 int                  g_rules_page        = 0;
 const int            RULES_PER_PAGE      = 5;
 
+ENUM_RULE_SORT_COL   g_sort_col          = RULE_SORT_NO;
+bool                 g_sort_asc          = true;
+
 AutoTraderRule       g_rules[];
 SPositionTracking    g_tracking_list[];
 
@@ -216,6 +236,9 @@ void CreateDashboardUI();
 void UpdateDashboardUI();
 void UpdatePreviewTerminalBox();
 void DestroyDashboardUI();
+void RenderTableHeaders(int root_x, int table_y);
+void GetSortedRuleIndices(int &indices[]);
+int  CompareRules(int a, int b);
 void SaveStateToFile();
 void LoadStateFromFile();
 void ProcessAutoTrailSLTP();
@@ -1194,6 +1217,156 @@ string FindExactOrMarketWatchSymbol(string input_sym)
 }
 
 //+------------------------------------------------------------------+
+//| TABLE SORTING LOGIC FOR RULES LIST                               |
+//+------------------------------------------------------------------+
+int CompareRules(int a, int b)
+{
+   if(g_sort_col == RULE_SORT_NO)
+   {
+      if(a < b) return g_sort_asc ? -1 : 1;
+      if(a > b) return g_sort_asc ? 1 : -1;
+      return 0;
+   }
+   
+   int res = 0;
+   switch(g_sort_col)
+   {
+      case RULE_SORT_SYM:
+      {
+         string sa = g_rules[a].symbol;
+         string sb = g_rules[b].symbol;
+         if(sa < sb) res = -1;
+         else if(sa > sb) res = 1;
+         break;
+      }
+      case RULE_SORT_DIR:
+      {
+         int da = (int)g_rules[a].direction;
+         int db = (int)g_rules[b].direction;
+         if(da < db) res = -1;
+         else if(da > db) res = 1;
+         break;
+      }
+      case RULE_SORT_LOT:
+      {
+         double la = g_rules[a].lot_value;
+         double lb = g_rules[b].lot_value;
+         if(la < lb) res = -1;
+         else if(la > lb) res = 1;
+         break;
+      }
+      case RULE_SORT_RR:
+      {
+         double rra = g_rules[a].risk_reward_ratio;
+         double rrb = g_rules[b].risk_reward_ratio;
+         if(rra < rrb) res = -1;
+         else if(rra > rrb) res = 1;
+         break;
+      }
+      case RULE_SORT_TF:
+      {
+         int tfa = PeriodSeconds(g_rules[a].timeframe);
+         int tfb = PeriodSeconds(g_rules[b].timeframe);
+         if(tfa < tfb) res = -1;
+         else if(tfa > tfb) res = 1;
+         break;
+      }
+      case RULE_SORT_MAX:
+      {
+         int ma = g_rules[a].max_orders;
+         int mb = g_rules[b].max_orders;
+         if(ma < mb) res = -1;
+         else if(ma > mb) res = 1;
+         break;
+      }
+      case RULE_SORT_MULT:
+      {
+         int mua = g_rules[a].entry_multiplier;
+         int mub = g_rules[b].entry_multiplier;
+         if(mua < mub) res = -1;
+         else if(mua > mub) res = 1;
+         break;
+      }
+      case RULE_SORT_TP:
+      {
+         int tpa = g_rules[a].multi_tp;
+         int tpb = g_rules[b].multi_tp;
+         if(tpa < tpb) res = -1;
+         else if(tpa > tpb) res = 1;
+         break;
+      }
+      case RULE_SORT_DELAY:
+      {
+         int da = g_rules[a].delay_is_tf_close ? 100 : g_rules[a].delay_tf_pct;
+         int db = g_rules[b].delay_is_tf_close ? 100 : g_rules[b].delay_tf_pct;
+         if(da < db) res = -1;
+         else if(da > db) res = 1;
+         break;
+      }
+      case RULE_SORT_PRICE:
+      {
+         string pa = g_rules[a].bull_price_filter + g_rules[a].bear_price_filter;
+         string pb = g_rules[b].bull_price_filter + g_rules[b].bear_price_filter;
+         if(pa < pb) res = -1;
+         else if(pa > pb) res = 1;
+         break;
+      }
+      case RULE_SORT_TRAIL:
+      {
+         int tra = g_rules[a].enable_trail ? 1 : 0;
+         int trb = g_rules[b].enable_trail ? 1 : 0;
+         if(tra != trb) res = (tra < trb) ? -1 : 1;
+         else
+         {
+            if(g_rules[a].trail_max_dist < g_rules[b].trail_max_dist) res = -1;
+            else if(g_rules[a].trail_max_dist > g_rules[b].trail_max_dist) res = 1;
+         }
+         break;
+      }
+      case RULE_SORT_STATUS:
+      {
+         int sta = g_rules[a].active ? 1 : 0;
+         int stb = g_rules[b].active ? 1 : 0;
+         if(sta < stb) res = -1;
+         else if(sta > stb) res = 1;
+         break;
+      }
+      default:
+         break;
+   }
+   
+   if(res == 0)
+   {
+      if(a < b) res = -1;
+      else if(a > b) res = 1;
+      return res; // tie-breaker always keeps stable order
+   }
+   
+   return g_sort_asc ? res : -res;
+}
+
+void GetSortedRuleIndices(int &indices[])
+{
+   int n = ArraySize(g_rules);
+   ArrayResize(indices, n);
+   for(int i = 0; i < n; i++) indices[i] = i;
+   if(n <= 1) return;
+   
+   // Insertion sort for stable in-place index ordering
+   for(int i = 1; i < n; i++)
+   {
+      int key = indices[i];
+      int j = i - 1;
+      while(j >= 0 && CompareRules(indices[j], key) > 0)
+      {
+         indices[j + 1] = indices[j];
+         j--;
+      }
+      indices[j + 1] = key;
+   }
+}
+
+//+------------------------------------------------------------------+
 //| UI PRIMITIVE HELPERS                                             |
 //+------------------------------------------------------------------+
 void CreateRect(string name, int x, int y, int w, int h, color bg_color, color border_color)
@@ -1524,25 +1697,48 @@ void CreateDashboardUI()
    int table_y = upper_y + 285;
    CreateRect("CARD_TABLE", root_x + 14, table_y, win_w - 28, 255, CLR_CANVAS_BG, CLR_BORDER_HARD);
    
-   // Table Header Bar
+   // Table Header Bar (Dynamic Sort Buttons)
    CreateRect("TH_BG", root_x + 14, table_y, win_w - 28, 24, CLR_CARD_BG, CLR_BORDER_HARD);
-   CreateLabel("TH_NO",     root_x + 24,  table_y + 6, "NO",        CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_SYM",    root_x + 55,  table_y + 6, "SYMBOL",    CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_DIR",    root_x + 135, table_y + 6, "DIRECTION", CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_LOT",    root_x + 225, table_y + 6, "LOT/RISK",  CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_RR",     root_x + 295, table_y + 6, "RR",        CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_TF",     root_x + 345, table_y + 6, "TF",        CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_MAX",    root_x + 395, table_y + 6, "MAX",       CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_MULT",   root_x + 445, table_y + 6, "MULT",      CLR_GOLD_NEON, 8, true);
-   CreateLabel("TH_DELAY",  root_x + 495, table_y + 6, "DELAY",     CLR_CYAN_NEON, 8, true);
-   CreateLabel("TH_FILTER", root_x + 565, table_y + 6, "PRICE BOUNDS", CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_TRAIL",  root_x + 685, table_y + 6, "AUTO TRAIL",CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_STATUS", root_x + 820, table_y + 6, "STATUS",    CLR_TEXT_MED, 8, true);
-   CreateLabel("TH_ACT",    root_x + 895, table_y + 6, "ACTIONS",   CLR_TEXT_MED, 8, true);
+   RenderTableHeaders(root_x, table_y);
    
    UpdatePreviewTerminalBox();
    UpdateDashboardUI();
    ChartRedraw();
+}
+
+void RenderTableHeaders(int root_x, int table_y)
+{
+   ObjectsDeleteAll(0, g_prefix + "BTN_TH_");
+   ObjectsDeleteAll(0, g_prefix + "TH_");
+   
+   string s_no    = "NO"     + (g_sort_col == RULE_SORT_NO     ? (g_sort_asc ? "▲" : "▼") : "");
+   string s_sym   = "SYMBOL" + (g_sort_col == RULE_SORT_SYM    ? (g_sort_asc ? "▲" : "▼") : "");
+   string s_dir   = "DIR"    + (g_sort_col == RULE_SORT_DIR    ? (g_sort_asc ? "▲" : "▼") : "");
+   string s_lot   = "LOT"    + (g_sort_col == RULE_SORT_LOT    ? (g_sort_asc ? "▲" : "▼") : "");
+   string s_rr    = "RR"     + (g_sort_col == RULE_SORT_RR     ? (g_sort_asc ? "▲" : "▼") : "");
+   string s_tf    = "TF"     + (g_sort_col == RULE_SORT_TF     ? (g_sort_asc ? "▲" : "▼") : "");
+   string s_max   = "MAX"    + (g_sort_col == RULE_SORT_MAX    ? (g_sort_asc ? "▲" : "▼") : "");
+   string s_mult  = "MULT"   + (g_sort_col == RULE_SORT_MULT   ? (g_sort_asc ? "▲" : "▼") : "");
+   string s_tp    = "TP"     + (g_sort_col == RULE_SORT_TP     ? (g_sort_asc ? "▲" : "▼") : "");
+   string s_delay = "DELAY"  + (g_sort_col == RULE_SORT_DELAY  ? (g_sort_asc ? "▲" : "▼") : "");
+   string s_price = "PRICE"  + (g_sort_col == RULE_SORT_PRICE  ? (g_sort_asc ? "▲" : "▼") : "");
+   string s_trail = "TRAIL"  + (g_sort_col == RULE_SORT_TRAIL  ? (g_sort_asc ? "▲" : "▼") : "");
+   string s_stat  = "STATUS" + (g_sort_col == RULE_SORT_STATUS ? (g_sort_asc ? "▲" : "▼") : "");
+
+   CreateButton("BTN_TH_NO",     root_x + 20,  table_y + 2, 32, 20, s_no,    CLR_CARD_BG, (g_sort_col == RULE_SORT_NO)     ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
+   CreateButton("BTN_TH_SYM",    root_x + 54,  table_y + 2, 76, 20, s_sym,   CLR_CARD_BG, (g_sort_col == RULE_SORT_SYM)    ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
+   CreateButton("BTN_TH_DIR",    root_x + 132, table_y + 2, 86, 20, s_dir,   CLR_CARD_BG, (g_sort_col == RULE_SORT_DIR)    ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
+   CreateButton("BTN_TH_LOT",    root_x + 220, table_y + 2, 68, 20, s_lot,   CLR_CARD_BG, (g_sort_col == RULE_SORT_LOT)    ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
+   CreateButton("BTN_TH_RR",     root_x + 290, table_y + 2, 48, 20, s_rr,    CLR_CARD_BG, (g_sort_col == RULE_SORT_RR)     ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
+   CreateButton("BTN_TH_TF",     root_x + 340, table_y + 2, 48, 20, s_tf,    CLR_CARD_BG, (g_sort_col == RULE_SORT_TF)     ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
+   CreateButton("BTN_TH_MAX",    root_x + 390, table_y + 2, 48, 20, s_max,   CLR_CARD_BG, (g_sort_col == RULE_SORT_MAX)    ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
+   CreateButton("BTN_TH_MULT",   root_x + 440, table_y + 2, 36, 20, s_mult,  CLR_CARD_BG, (g_sort_col == RULE_SORT_MULT)   ? CLR_GOLD_NEON : CLR_GOLD_NEON, CLR_CARD_BG);
+   CreateButton("BTN_TH_TP",     root_x + 478, table_y + 2, 32, 20, s_tp,    CLR_CARD_BG, (g_sort_col == RULE_SORT_TP)     ? CLR_GOLD_NEON : CLR_GOLD_NEON, CLR_CARD_BG);
+   CreateButton("BTN_TH_DELAY",  root_x + 512, table_y + 2, 52, 20, s_delay, CLR_CARD_BG, (g_sort_col == RULE_SORT_DELAY)  ? CLR_GOLD_NEON : CLR_CYAN_NEON, CLR_CARD_BG);
+   CreateButton("BTN_TH_PRICE",  root_x + 566, table_y + 2, 116,20, s_price, CLR_CARD_BG, (g_sort_col == RULE_SORT_PRICE)  ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
+   CreateButton("BTN_TH_TRAIL",  root_x + 684, table_y + 2, 128,20, s_trail, CLR_CARD_BG, (g_sort_col == RULE_SORT_TRAIL)  ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
+   CreateButton("BTN_TH_STATUS", root_x + 814, table_y + 2, 60, 20, s_stat,  CLR_CARD_BG, (g_sort_col == RULE_SORT_STATUS) ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
+   CreateLabel("TH_ACT",         root_x + 888, table_y + 6, "ACTIONS", CLR_TEXT_MED, 8, true);
 }
 
 void UpdatePreviewTerminalBox()
@@ -1682,12 +1878,16 @@ void UpdateDashboardUI()
    if(g_rules_page >= max_pages) g_rules_page = max_pages - 1;
    if(g_rules_page < 0) g_rules_page = 0;
    
+   int sorted_indices[];
+   GetSortedRuleIndices(sorted_indices);
+   
    int start_idx = g_rules_page * RULES_PER_PAGE;
    int end_idx   = start_idx + RULES_PER_PAGE;
    if(end_idx > total_rules) end_idx = total_rules;
    
-   for(int i = start_idx, r = 0; i < end_idx; i++, r++)
+   for(int pos = start_idx, r = 0; pos < end_idx; pos++, r++)
    {
+      int i = sorted_indices[pos];
       int cur_y = start_y + (r * 38);
       string r_pfx = StringFormat("ROW_%d_", i);
       bool is_selected = (g_selected_rule_idx == i || g_editing_rule_idx == i);
@@ -1722,9 +1922,12 @@ void UpdateDashboardUI()
       
       int mult_disp = (g_rules[i].entry_multiplier <= 0) ? 1 : g_rules[i].entry_multiplier;
       CreateLabel(r_pfx + "MULT", root_x + 445, cur_y + 9, IntegerToString(mult_disp) + "x", CLR_GOLD_NEON, 8, true);
+
+      int mtp_disp = (g_rules[i].multi_tp <= 0) ? 1 : g_rules[i].multi_tp;
+      CreateLabel(r_pfx + "MTP", root_x + 482, cur_y + 9, IntegerToString(mtp_disp) + "x", CLR_GOLD_NEON, 8, true);
       
-      string delay_disp = g_rules[i].delay_is_tf_close ? "TF Close" : (IntegerToString(g_rules[i].delay_tf_pct) + "%");
-      CreateLabel(r_pfx + "DELAY", root_x + 495, cur_y + 9, delay_disp, CLR_CYAN_NEON, 8, false);
+      string delay_disp = g_rules[i].delay_is_tf_close ? "Close" : (IntegerToString(g_rules[i].delay_tf_pct) + "%");
+      CreateLabel(r_pfx + "DELAY", root_x + 515, cur_y + 9, delay_disp, CLR_CYAN_NEON, 8, false);
       
       string f_str = "";
       if(g_rules[i].direction == TRADE_DIR_BUY)
@@ -1739,7 +1942,7 @@ void UpdateDashboardUI()
       {
          f_str = "B:" + g_rules[i].bull_price_filter + " | S:" + g_rules[i].bear_price_filter;
       }
-      CreateLabel(r_pfx + "FLT", root_x + 565, cur_y + 9, f_str, CLR_TEXT_MED, 7, false);
+      CreateLabel(r_pfx + "FLT", root_x + 568, cur_y + 9, f_str, CLR_TEXT_MED, 7, false);
       
       string trail_str = g_rules[i].enable_trail ? StringFormat("BE:%.0f%%|D:%.1f|RV:%.1f", g_rules[i].trail_be_rem_dist_pct * 100.0, g_rules[i].trail_max_dist, g_rules[i].atr_multiplier) : "OFF";
       CreateLabel(r_pfx + "TRL", root_x + 685, cur_y + 9, trail_str, g_rules[i].enable_trail ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, false);
@@ -2365,6 +2568,41 @@ void OnChartEvent(const int id,
          int max_pages = (total_rules + RULES_PER_PAGE - 1) / RULES_PER_PAGE;
          if(g_rules_page < max_pages - 1) g_rules_page++;
          CreateDashboardUI();
+         return;
+      }
+      else if(StringFind(sparam, g_prefix + "BTN_TH_") == 0)
+      {
+         CaptureFormInputs();
+         string col_key = StringSubstr(sparam, StringLen(g_prefix + "BTN_TH_"));
+         ENUM_RULE_SORT_COL target_col = RULE_SORT_NO;
+         if(col_key == "NO")         target_col = RULE_SORT_NO;
+         else if(col_key == "SYM")   target_col = RULE_SORT_SYM;
+         else if(col_key == "DIR")   target_col = RULE_SORT_DIR;
+         else if(col_key == "LOT")   target_col = RULE_SORT_LOT;
+         else if(col_key == "RR")    target_col = RULE_SORT_RR;
+         else if(col_key == "TF")    target_col = RULE_SORT_TF;
+         else if(col_key == "MAX")   target_col = RULE_SORT_MAX;
+         else if(col_key == "MULT")  target_col = RULE_SORT_MULT;
+         else if(col_key == "TP")    target_col = RULE_SORT_TP;
+         else if(col_key == "DELAY") target_col = RULE_SORT_DELAY;
+         else if(col_key == "PRICE") target_col = RULE_SORT_PRICE;
+         else if(col_key == "TRAIL") target_col = RULE_SORT_TRAIL;
+         else if(col_key == "STATUS")target_col = RULE_SORT_STATUS;
+         
+         if(g_sort_col == target_col)
+         {
+            g_sort_asc = !g_sort_asc; // Toggle ASC / DESC
+         }
+         else
+         {
+            g_sort_col = target_col;
+            g_sort_asc = true; // Default to ascending on new column
+         }
+         
+         g_rules_page = 0; // Return to first page on sort change
+         int table_y = root_y + 44 + 285;
+         RenderTableHeaders(root_x, table_y);
+         UpdateDashboardUI();
          return;
       }
       else if(sparam == g_prefix + "BTN_SUBMIT_RULE")

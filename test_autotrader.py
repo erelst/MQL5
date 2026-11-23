@@ -371,6 +371,39 @@ def check_spread_compensated_tp():
     print("test_spread_compensated_tp: OK (Net RR exactly 1:RR via Bid/Ask spread compensation on TP)")
 
 
+def check_table_sorting_and_columns():
+    """Verify rules table column sorting (CompareRules, GetSortedRuleIndices, BTN_TH_),
+    shortened PRICE header, and restored TP column.
+    """
+    src = open(SRC).read()
+    # Enum & variables
+    assert "enum ENUM_RULE_SORT_COL" in src
+    assert "RULE_SORT_NO" in src
+    assert "RULE_SORT_SYM" in src
+    assert "RULE_SORT_TP" in src
+    assert "RULE_SORT_PRICE" in src
+    assert "ENUM_RULE_SORT_COL   g_sort_col          = RULE_SORT_NO;" in src
+    assert "bool                 g_sort_asc          = true;" in src
+    # Header buttons & shortened labels
+    assert 'CreateButton("BTN_TH_NO"' in src
+    assert 'CreateButton("BTN_TH_SYM"' in src
+    assert 'CreateButton("BTN_TH_TP"' in src
+    assert 'CreateButton("BTN_TH_PRICE"' in src
+    assert 's_price = "PRICE"' in src
+    assert 's_tp    = "TP"' in src
+    # Table data display has MTP column
+    assert 'CreateLabel(r_pfx + "MTP"' in src
+    # Sorting logic & index mapping
+    assert "void GetSortedRuleIndices(int &indices[])" in src
+    assert "int CompareRules(int a, int b)" in src
+    assert "GetSortedRuleIndices(sorted_indices);" in src
+    assert "int i = sorted_indices[pos];" in src
+    # Chart event clicks for header buttons
+    assert 'StringFind(sparam, g_prefix + "BTN_TH_") == 0' in src
+    assert 'RenderTableHeaders(root_x, table_y);' in src
+    print("test_table_sorting_and_columns: OK (Sortable columns, PRICE header, TP column restored)")
+
+
 if __name__ == "__main__":
     try:
         check_detector()
@@ -382,6 +415,7 @@ if __name__ == "__main__":
         check_combo_packages()
         check_auto_adopt_and_ticket_resolution()
         check_spread_compensated_tp()
+        check_table_sorting_and_columns()
     except Exception as exc:  # noqa: BLE001 - a test, any failure is a failure
         print("test_autotrader: FAILED -> %s" % exc)
         sys.exit(1)
