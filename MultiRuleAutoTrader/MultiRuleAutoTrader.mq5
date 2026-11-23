@@ -845,6 +845,7 @@ void AdoptOpenEAPositions()
       double trail_dist = InpMaxDistATR;
       double atr_mult   = InpRelVolThreshold;
       double be_rem_pct = InpTrailBERemDistPct;
+      double ext_rem_pct= InpTrailExtRemDistPct;
       bool trail_enabled = true;
       
       bool found_rule = false;
@@ -860,7 +861,7 @@ void AdoptOpenEAPositions()
                trail_dist    = g_rules[r].trail_max_dist;
                atr_mult      = g_rules[r].atr_multiplier;
                be_rem_pct    = g_rules[r].trail_be_rem_dist_pct;
-               double ext_rem_pct= g_rules[r].trail_ext_rem_dist_pct;
+               ext_rem_pct   = g_rules[r].trail_ext_rem_dist_pct;
                trail_enabled = g_rules[r].enable_trail;
                found_rule    = true;
                break;
@@ -878,11 +879,6 @@ void AdoptOpenEAPositions()
       if(!trail_enabled) continue;
       
       double atr100 = CalculateATR100(sym, AtrBaseTF(adopted_tf), InpATRPeriod);
-      double ext_rem_pct = InpTrailExtRemDistPct;
-      for(int r = 0; r < total_rules; r++)
-      {
-         if(g_rules[r].symbol == sym) { ext_rem_pct = g_rules[r].trail_ext_rem_dist_pct; break; }
-      }
       RegisterPositionTracking(tkt, sym, adopted_tf, atr100, open_p, tp_p, trail_dist, atr_mult, be_rem_pct, ext_rem_pct);
       PrintFormat("[AUTO-ADOPT] Position #%I64u on %s (Magic: %I64u) adopted by Auto Trail (TF: %s | BE Rem: %.0f%% | EXT Rem: %.0f%% | D: %.1f | RV: %.1f)",
                   tkt, sym, (ulong)m_position.Magic(), EnumToString(adopted_tf), be_rem_pct * 100.0, ext_rem_pct * 100.0, trail_dist, atr_mult);
