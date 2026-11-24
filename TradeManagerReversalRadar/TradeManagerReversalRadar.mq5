@@ -1265,8 +1265,8 @@ void ProcessAutoTrailSLTP()
       m_trade.SetExpertMagicNumber(cur_magic);
       
       ENUM_TIMEFRAMES tf = AtrBaseTF(g_tracking_list[i].timeframe);
-      // ponytail: MathMax(bar 0, bar 1) captures the candle that thrust price into the TP zone even if bar 0 just opened
-      double curr_tr  = MathMax(GetTrueRange(sym, tf, 0), GetTrueRange(sym, tf, 1));
+      // ponytail: 3-bar thrust window (bar 0, 1, 2) captures the impulse surge into TP without stale momentum
+      double curr_tr  = MathMax(GetTrueRange(sym, tf, 0), MathMax(GetTrueRange(sym, tf, 1), GetTrueRange(sym, tf, 2)));
       double ewma_tr  = GetEWMA_TR(sym, tf, InpEWMABars, InpEWMALambda);
       if(ewma_tr <= 0) ewma_tr = SymbolInfoDouble(sym, SYMBOL_POINT) * 10;
       double rel_vol  = curr_tr / ewma_tr;
