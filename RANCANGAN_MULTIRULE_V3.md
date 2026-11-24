@@ -456,13 +456,13 @@ $$\text{Proximity Allowed} = \mathbf{\text{Layer 1 (Progres \% Target)}} \ \land
   - **Jarak Tempuh Keuntungan Nyata:** $\text{cur\_gain} \ge \text{base\_target\_dist} \times (1.0 - \text{ext\_pct})$ (harga sudah berjalan maju $\ge 80\%$).
 - **Fungsi Proteksi:** Menjadi tembok penghalang mutlak pada TP pendek / scalping. Berapa pun besarnya ATR pasar saat itu, **TP Extension DILARANG keras aktif jika harga belum mencapai minimal 80% target**.
 
-#### 2. Lapis 2: Dinamika Lilin Pasar (EWMA TR & Volume Spike)
+#### 2. Lapis 2: Dinamika Lilin Pasar (Unbroken Profit Leg, EWMA TR, & Anti-Rejection Gate)
 - Hanya dievaluasi ketika Lapis 1 sudah terpenuhi (harga sudah berada di zona $\ge 80\%$):
-  - Kedekatan dalam satuan lilin: $\text{dist\_to\_tp} \le \text{MaxDistATR}$ ($\le 1.10\times\text{TR}$).
-  - Ledakan volume: $\text{RelVol} \ge \text{RelVolThreshold}$ ($\ge 1.60\times$).
-- **Fungsi Dinamis:** Pada trade swing / TP jauh (misal target TP 100 pip, ATR 10 pip):
-  - Saat harga menempuh 80% (sisa 20 pip), Lapis 1 lolos, tetapi **Lapis 2 menahan** karena 20 pip masih di luar jangkauan 1 lilin ATR (11 pip).
-  - TP baru di-extend saat harga sudah benar-benar berada dalam radius sambaran 1 lilin ($\le 11$ pip) tepat di bibir target TP.
+  - **Unbroken Profit Leg (Maksimal 4 Bar):** Menghitung nilai True Range tertinggi dari lilin live (shift 0) dan lilin-lilin sebelumnya (shift 1..4) yang konsisten *close* di area profit. Jika ada satu lilin yang *close* di area rugi/impas, rantai pencarian langsung putus (*reset*). Ini menangkap gelombang dorongan (*thrust surge*) utuh sekaligus mengabaikan *floating minus* lama.
+  - **Kedekatan dalam satuan lilin:** $\text{dist\_to\_tp} \le \text{MaxDistATR}$ ($\le 1.10\times\text{TR}$).
+  - **Ambang Batas RelVol Realistis:** $\text{RelVol} \ge \text{RelVolThreshold}$ (default disempurnakan ke $\ge 1.25\times$).
+  - **Anti-Rejection Live Candle Gate:** Mencegah perpanjangan TP jika lilin live sedang membentuk sumbu penolakan (*rejection wick* $> 50\%$ *range*) yang membanting harga menjauh dari target TP.
+  - **Real-time Diagnostic Log:** Mencetak log throttled `[TRAIL PROXIMITY]` ke tab *Experts* MT5 agar trader dapat memantau angka pasti `RelVol`, `DistTR`, `LegBars`, dan status penolakan.
 
 ---
 

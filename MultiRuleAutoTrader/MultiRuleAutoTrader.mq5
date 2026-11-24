@@ -963,8 +963,20 @@ void ProcessAutoTrailSLTP()
       m_trade.SetExpertMagicNumber(m_position.Magic());
       
       ENUM_TIMEFRAMES tf = AtrBaseTF(g_tracking_list[i].timeframe);
-      // ponytail: 3-bar thrust window (bar 0, 1, 2) captures the impulse surge into TP without stale momentum
-      double curr_tr  = MathMax(GetTrueRange(sym, tf, 0), MathMax(GetTrueRange(sym, tf, 1), GetTrueRange(sym, tf, 2)));
+      // ponytail: scan unbroken profit leg (max 4 bars back: shift 1..4) where candle closed in profit territory.
+      // If any bar closed at/beyond open_p (loss/breakeven), the profit leg breaks immediately.
+      double curr_tr = GetTrueRange(sym, tf, 0); // start with live candle (shift 0)
+      int leg_bars = 1;
+      for(int s = 1; s <= 4; s++)
+      {
+         double c_p = iClose(sym, tf, s);
+         if(c_p <= 0) break;
+         bool in_profit = (ptype == POSITION_TYPE_BUY) ? (c_p > open_p) : (c_p < open_p);
+         if(!in_profit) break; // chain broken by dip into loss/BE
+         double tr_s = GetTrueRange(sym, tf, s);
+         if(tr_s > curr_tr) curr_tr = tr_s;
+         leg_bars++;
+      }
       double ewma_tr  = GetEWMA_TR(sym, tf, InpEWMABars, InpEWMALambda);
       if(ewma_tr <= 0) ewma_tr = SymbolInfoDouble(sym, SYMBOL_POINT) * 10;
       double rel_vol  = curr_tr / ewma_tr;
@@ -1111,23 +1123,32 @@ void ProcessAutoTrailSLTP()
       double max_dist_allowed = (g_tracking_list[i].trail_max_dist > 0) ? g_tracking_list[i].trail_max_dist : InpMaxDistATR;
       double relvol_threshold = (g_tracking_list[i].atr_multiplier > 0)  ? g_tracking_list[i].atr_multiplier : InpRelVolThreshold;
       
+      // ponytail: live rejection check - prevent extend if live bar forms >50% rejection wick dumping from TP
+      double b0_open = iOpen(sym, tf, 0);
+      double b0_high = iHigh(sym, tf, 0);
+      double b0_low  = iLow(sym, tf, 0);
+      bool is_rejection = false;
+      if(ptype == POSITION_TYPE_BUY  && bid < b0_open && (b0_high - bid) > (curr_tr * 0.5)) is_rejection = true;
+      if(ptype == POSITION_TYPE_SELL && ask > b0_open && (ask - b0_low)  > (curr_tr * 0.5)) is_rejection = true;
+      bool rejection_ok = !is_rejection;
+
       bool proximity_ok  = progress_ok && (dist_to_tp <= max_dist_allowed);
       bool volatility_ok = (rel_vol >= relvol_threshold);
       
-      if(progress_ok && !(proximity_ok && volatility_ok && is_eligible_tp_runner))
+      if(progress_ok && !(proximity_ok && volatility_ok && rejection_ok && is_eligible_tp_runner))
       {
          // ponytail: throttled diagnostic print so trader sees exact reason why TP hasn't extended
          static datetime s_last_diag = 0;
          if(TimeCurrent() - s_last_diag >= 3)
          {
-            PrintFormat("[TRAIL PROXIMITY] %s #%d in Zone (sisa %.1f%%): RelVol=%.2f (need >=%.2f) | DistTR=%.2f (need <=%.2f) | Runner=%s",
+            PrintFormat("[TRAIL PROXIMITY] %s #%d in Zone (sisa %.1f%%): RelVol=%.2f (need >=%.2f) | DistTR=%.2f (need <=%.2f) | LegBars=%d | Reject=%s | Runner=%s",
                         sym, tkt, (ext_rem_dist / base_target_dist) * 100.0, rel_vol, relvol_threshold, dist_to_tp, max_dist_allowed,
-                        is_eligible_tp_runner ? "YES" : "NO (Protected TP1)");
+                        leg_bars, is_rejection ? "YES" : "NO", is_eligible_tp_runner ? "YES" : "NO (Protected TP1)");
             s_last_diag = TimeCurrent();
          }
       }
       
-      if(is_eligible_tp_runner && proximity_ok && volatility_ok)
+      if(is_eligible_tp_runner && proximity_ok && volatility_ok && rejection_ok)
       {
          double excess = rel_vol - relvol_threshold;
          double extend_amount = excess * atr_ref * InpExtendFactor;
