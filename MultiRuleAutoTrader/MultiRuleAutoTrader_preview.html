@@ -425,7 +425,7 @@
             <span style="font-size: 9px; color: var(--text-med); margin-left: 6px;">Max Dist TR:</span>
             <input type="text" id="inp-traildist" value="1.10" style="width: 45px;" oninput="updatePreviewFromForm()">
             <span style="font-size: 9px; color: var(--text-med); margin-left: 6px;">RelVol Thr:</span>
-            <input type="text" id="inp-atrmult" value="1.60" style="width: 45px;" oninput="updatePreviewFromForm()">
+            <input type="text" id="inp-atrmult" value="1.25" style="width: 45px;" oninput="updatePreviewFromForm()">
           </div>
 
           <!-- Row F: % TF Progress Delay vs TF Close -->
@@ -609,7 +609,7 @@
           continuation: isContinuation,
           trailOn: isTrailOn,
           trailDist: document.getElementById('inp-traildist').value || '1.10',
-          atrMult: document.getElementById('inp-atrmult').value || '1.60',
+          atrMult: document.getElementById('inp-atrmult').value || '1.25',
           delayClose: isDelayClose,
           delayPct: parseInt(document.getElementById('inp-delaypct').value) || 30,
           sigEng: sigEng,

@@ -113,7 +113,7 @@ input ENUM_TRAIL_BE_MODE   InpTrailBEMode      = TRAIL_BE_PROXIMITY; // Default 
 input double               InpTrailBERemDistPct= 0.20;               // Default Trail BE Remaining TP Distance (0.20 = 20%)
 input double               InpTrailExtRemDistPct= 0.20;              // Default TP Extension Remaining TP Distance (0.20 = 20%)
 input double               InpMaxDistATR       = 1.10;               // Default Max Proximity to TP (in EWMA TR units)
-input double               InpRelVolThreshold  = 1.60;               // Default RelVol Threshold (>= 1.60x)
+input double               InpRelVolThreshold  = 1.25;               // Default RelVol Threshold (>= 1.25x)
 input double               InpEWMALambda       = 0.90;               // EWMA TR Lambda Decay (0.88 - 0.92)
 input int                  InpEWMABars         = 30;                 // EWMA TR Baseline Bars
 input double               InpExtendFactor     = 0.70;               // TP Extension Factor (excess * ATR * factor)
@@ -166,7 +166,7 @@ double            g_be_fixed_price = 0.0; // Fixed SL price for BE_OFFSET_CUSTOM
 
 // Persistent Auto Trail Form Inputs (Order Manager)
 double            g_form_trail_max_dist   = 1.10; // Max Dist TR
-double            g_form_trail_atr_mult   = 1.60; // RelVol Thresh
+double            g_form_trail_atr_mult   = 1.25; // RelVol Thresh
 double            g_form_trail_be_rem_pct = 20.0; // BE Dist % (default 20%)
 double            g_form_trail_ext_rem_pct= 20.0; // EXT Dist % (default 20%)
 string            g_form_trail_tf         = "5";  // TF acuan (default M5)
@@ -1265,7 +1265,8 @@ void ProcessAutoTrailSLTP()
       m_trade.SetExpertMagicNumber(cur_magic);
       
       ENUM_TIMEFRAMES tf = AtrBaseTF(g_tracking_list[i].timeframe);
-      double curr_tr  = GetTrueRange(sym, tf, 0);
+      // ponytail: MathMax(bar 0, bar 1) captures the candle that thrust price into the TP zone even if bar 0 just opened
+      double curr_tr  = MathMax(GetTrueRange(sym, tf, 0), GetTrueRange(sym, tf, 1));
       double ewma_tr  = GetEWMA_TR(sym, tf, InpEWMABars, InpEWMALambda);
       if(ewma_tr <= 0) ewma_tr = SymbolInfoDouble(sym, SYMBOL_POINT) * 10;
       double rel_vol  = curr_tr / ewma_tr;
@@ -1407,6 +1408,19 @@ void ProcessAutoTrailSLTP()
       
       bool proximity_ok  = progress_ok && (dist_to_tp <= max_dist_allowed);
       bool volatility_ok = (rel_vol >= relvol_threshold);
+      
+      if(progress_ok && !(proximity_ok && volatility_ok && is_eligible_tp_runner))
+      {
+         // ponytail: throttled diagnostic print so trader sees exact reason why TP hasn't extended
+         static datetime s_last_diag = 0;
+         if(TimeCurrent() - s_last_diag >= 3)
+         {
+            PrintFormat("[TRAIL PROXIMITY] %s #%d in Zone (sisa %.1f%%): RelVol=%.2f (need >=%.2f) | DistTR=%.2f (need <=%.2f) | Runner=%s",
+                        sym, tkt, (ext_rem_dist / base_target_dist) * 100.0, rel_vol, relvol_threshold, dist_to_tp, max_dist_allowed,
+                        is_eligible_tp_runner ? "YES" : "NO (Protected TP1)");
+            s_last_diag = TimeCurrent();
+         }
+      }
       
       if(is_eligible_tp_runner && proximity_ok && volatility_ok)
       {

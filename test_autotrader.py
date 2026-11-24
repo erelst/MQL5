@@ -430,6 +430,8 @@ def check_tp_extension_dual_layer_and_ext_dist():
     assert "double ext_pct = (g_tracking_list[i].trail_ext_rem_dist_pct > 0) ? g_tracking_list[i].trail_ext_rem_dist_pct : InpTrailExtRemDistPct;" in src_at
     assert "ext_rem_dist <= max_ext_rem_allowed && ext_cur_gain >= min_ext_gain_req" in src_at
     assert "bool proximity_ok  = progress_ok && (dist_to_tp <= max_dist_allowed);" in src_at
+    assert "MathMax(GetTrueRange(sym, tf, 0), GetTrueRange(sym, tf, 1))" in src_at
+    assert "[TRAIL PROXIMITY]" in src_at
     assert "INP_TRAIL_EXT_DIST" in src_at
     assert "FileWriteInteger(handle, 7);" in src_at
     assert "state_ver >= 7" in src_at
@@ -440,6 +442,8 @@ def check_tp_extension_dual_layer_and_ext_dist():
     assert "ext_rem_dist <= max_ext_rem_allowed && ext_cur_gain >= min_ext_gain_req" in src_tm
     assert "INP_TRAIL_EXT" in src_tm
     assert "ActivateBulkAutoTrail(double max_dist, double relvol_th, double be_rem_pct, double ext_rem_pct, ENUM_TIMEFRAMES tf)" in src_tm
+    assert "MathMax(GetTrueRange(sym, tf, 0), GetTrueRange(sym, tf, 1))" in src_tm
+    assert "[TRAIL PROXIMITY]" in src_tm
 
     # 3. Mathematical validation of dual-layer gate (Scalping vs Swing)
     # Scenario A: Scalping (TP target = 15 pts, ATR = 20 pts, EXT% = 20%, MAX TR = 1.1)
