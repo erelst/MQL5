@@ -417,75 +417,106 @@ Saat pengguna sedang mengisi atau mengubah kolom di form deck (misalnya simbol, 
 
 ---
 
-## 11. Pemisahan Independen EXT DIST% & Dual-Layer Proximity Gate pada TP Extension
+## 11. Arsitektur Streamlined TP Extension & Sinergi Multi-Gate
 
 ### A. Latar Belakang & Akar Masalah Blind Spot ATR Tunggal
-1. **Mekanisme Awal TP Extension:**
-   - Sebelumnya, pengecekan kedekatan harga ke Take Profit pada modul TP Extension murni hanya mengandalkan rasio lilin EWMA TR dinamis:
-     $$\text{dist\_to\_tp} = \frac{|\text{cur\_tp} - \text{Price}|}{\text{EWMA TR}} \le \text{InpMaxDistATR} \quad (\text{default: } 1.10\times\text{TR})$$
-   - Disertai konfirmasi lonjakan volume lilin: $\text{RelVol} \ge \text{InpRelVolThreshold}$ (default $1.60\times$).
-2. **Blind Spot pada Scalping / TP Jarak Pendek (RR 1:1):**
-   - Jika trader mengambil posisi scalping dengan target TP sebesar $1.0\times\text{ATR}$ (atau $1.2\times\text{ATR}$):
-     - Begitu order baru dieksekusi 1 detik: jarak harga berjalan ke TP adalah $1.0\times\text{ATR}$.
-     - Pengecekan kode: `dist_to_tp <= 1.10 ATR` $\rightarrow$ **Langsung lolos bernilai TRUE sejak detik pertama pembukaan!**
-     - Apabila candle saat itu bervolume tinggi, TP langsung diperpanjang (*extended*) seketika di dekat titik Open dan Stop Loss langsung ditarik ke Break-Even, padahal harga belum menempuh perjalanan targetnya. Fluktuasi normal 1-2 tick langsung memicu likuidasi di BE dan mematikan potensi trade.
-3. **Penyebab Mengapa Terjadi Dilema Variabel:**
-   - Jika TP Extension ikut mencatut variabel `BE DIST%`, penamaan di UI menjadi keliru dan menyesatkan karena label Break-Even dipakai untuk mengontrol perpanjangan Take Profit.
-   - Diperlukan kontrol mandiri yang memisahkan ambang toleransi BE dengan ambang toleransi Extend TP secara independen, transparan, dan tidak saling tumpang-tindih.
+1. **Mekanisme Awal TP Extension (Masa Lalu):**
+   - Sebelumnya, perpanjangan TP murni mengandalkan rasio jarak lilin ATR:
+     $$\text{dist\_to\_tp} = \frac{|\text{cur\_tp} - \text{Price}|}{\text{EWMA TR}} \le 1.10\times\text{TR}$$
+   - **Blind Spot pada Scalping:** Pada target TP pendek (misal $1.0\times\text{ATR}$), syarat jarak ini langsung terpenuhi sejak detik pertama order dibuka, memicu perpanjangan TP dan menggeser SL ke BE prematur saat harga baru berjalan beberapa pip.
+2. **Kelahiran Gate 1 (`EXT DIST%`):**
+   - Untuk memproteksi scalping, ditambahkan pagar persentase target: harga wajib menempuh keuntungan nyata $\ge 80\%$ dan sisa jarak $\le 20\%$.
+3. **Konflik Gate 2A (Radius ATR Lama) vs Gate 1:**
+   - Ketika Gate 1 dipasang bersamaan dengan Gate 2A lama (`dist_to_tp <= 1.1x ATR`), terjadi **tabrakan dua tolok ukur jarak**:
+     - User menyetel `EXT DIST% = 20%`. Ekspektasi trader: di sisa 20% itulah TP dievaluasi.
+     - Namun Gate 2A lama diam-diam mencegat: jika 1.1x ATR bernilai lebih kecil dari 20% TP, TP dilarang extend sampai harga sisa 10% atau 7%.
+     - **Inilah penyebab kenapa BE jalan di 20%, tapi TP Extend macet.**
+   - **Solusi Bersih:** Menghapus Gate 2A sepenuhnya. Urusan jarak diserahkan 100% secara mandiri dan jujur kepada **Gate 1 (`EXT DIST%`)**.
 
 ---
 
-### B. Solusi Arsitektur: Kontrol Mandiri `EXT DIST%`
-- Menambahkan parameter input dan variabel kontrol tersendiri:
-  - **`InpTrailExtRemDistPct = 0.20`** (Default: 20% sisa jarak).
-  - Struct `AutoTraderRule`: `double trail_ext_rem_dist_pct`.
-  - Struct `SPositionTracking`: `double trail_ext_rem_dist_pct`.
-  - UI Input Edit Box: **`EXT%:`** pada MultiRuleAutoTrader dan **`EXT DIST %:`** pada TradeManager.
-- Penamaan **`BE DIST%`** tetap murni dan 100% akurat hanya untuk mengontrol pergeseran Stop Loss ke Break-Even, sementara **`EXT DIST%`** murni mengontrol batas toleransi sebelum Take Profit diizinkan extend.
+### B. Corong Seleksi Berlapis (*Fail-Safe Multi-Gate Funnel*)
+
+Sistem evaluasi TP Extension bekerja sebagai corong seleksi berlapis tanpa redundansi:
+
+```
+[ ORDER BERJALAN ]
+       │
+       ▼
+┌──────────────────────────────────────────────────────────┐
+│ GATE 1: Pagar Jarak Persentase Target (Jarak Statis)     │
+│ Syarat: Sisa Jarak <= EXT DIST% (20%) & Gain >= 80%      │
+└──────────────────────────┬───────────────────────────────┘
+                           │ Lolos (Harga di bibir target, sinkron 1:1 dg BE)
+                           ▼
+┌──────────────────────────────────────────────────────────┐
+│ GATE 2B: Momentum Gelombang (Unbroken Profit Leg vs EWMA)│
+│ Syarat: Max TR (Rantai Profit 1-4 Bar) / EWMA TR >= 1.25 │
+└──────────────────────────┬───────────────────────────────┘
+                           │ Lolos (Dorongan terbukti segar & bertenaga)
+                           ▼
+┌──────────────────────────────────────────────────────────┐
+│ GATE 2C: Satpam Penolakan (Anti-Rejection Live Gate)     │
+│ Syarat: Bar 0 TIDAK membentuk sumbu bantingan > 50%      │
+└──────────────────────────┬───────────────────────────────┘
+                           │ Lolos (Bukan lilin pembalikan)
+                           ▼
+┌──────────────────────────────────────────────────────────┐
+│ GATE RUNNER: Proteksi Multi-TP                           │
+│ Syarat: Hanya order TP terjauh (TP2+) yang boleh extend  │
+└──────────────────────────┬───────────────────────────────┘
+                           │ Lolos (TP1 tetap secured 100%)
+                           ▼
+                   [ EXTEND TP DISET ]
+```
 
 ---
 
-### C. Mekanisme Dual-Layer Proximity Gate (Harmonisasi 2 Lapis)
-Syarat kedekatan harga sebelum memperpanjang TP kini diwajibkan melewati **2 Lapisan Pengaman Sekaligus (`AND`)**:
+### C. Rincian Peran & Logika Masing-Masing Gate
 
-$$\text{Proximity Allowed} = \mathbf{\text{Layer 1 (Progres \% Target)}} \ \land \ \mathbf{\text{Layer 2 (Dinamika Lilin ATR)}}$$
+#### 1. Gate 1: Pagar Jarak Persentase Target (`progress_ok`)
+* **Rumus:** $\text{sisa\_jarak} \le \text{base\_tp\_dist} \times \text{ext\_pct}$ DAN $\text{keuntungan} \ge \text{base\_tp\_dist} \times (1.0 - \text{ext\_pct})$.
+* **Peran:** Menjadi **penguasa tunggal urusan jarak**. Menutup celah prematur scalping (karena sebelum 80% perjalanan ditempuh, pintu terkunci rapat). Menjamin perlakuan jarak sinkron 1:1 dengan `BE DIST%`.
 
-#### 1. Lapis 1: Pagar Pengaman Progres (% Target TP)
-- Memastikan harga secara riil telah menempuh mayoritas perjalanan target awal:
-  - **Sisa Jarak:** $\text{rem\_dist} \le \text{base\_target\_dist} \times \text{ext\_pct}$ (sisa $\le 20\%$).
-  - **Jarak Tempuh Keuntungan Nyata:** $\text{cur\_gain} \ge \text{base\_target\_dist} \times (1.0 - \text{ext\_pct})$ (harga sudah berjalan maju $\ge 80\%$).
-- **Fungsi Proteksi:** Menjadi tembok penghalang mutlak pada TP pendek / scalping. Berapa pun besarnya ATR pasar saat itu, **TP Extension DILARANG keras aktif jika harga belum mencapai minimal 80% target**.
+#### 2. Gate 2B: Momentum Gelombang Dorongan (`volatility_ok`)
+* **Mekanisme Unbroken Profit Leg (Maksimal 4 Bar):**
+  * Memeriksa lilin live (bar 0) dan lilin-lilin sebelumnya (shift 1..4) yang konsisten *close* di area profit.
+  * Jika ada satu lilin yang *close* di area rugi/impas, pencarian **langsung putus (*reset*)**.
+  * **Kelebihan:** Mengabaikan masa *floating minus* lama, sekaligus membatasi usia dorongan maksimal 4 bar agar tidak menangkap "momentum basi" yang sudah terjadi 1 jam lalu.
+* **Perbandingan terhadap EWMA TR:**
+  * $\text{RelVol} = \frac{\text{Max TR}}{\text{EWMA TR}} \ge 1.25\times$.
+  * Ambang batas $1.25\times$ (125% dari denyut rata-rata pasar berjalan) sangat realistis untuk momentum tren sehat, tanpa harus menunggu anomali news ekstrim ($1.60\times$).
 
-#### 2. Lapis 2: Dinamika Lilin Pasar (Unbroken Profit Leg, EWMA TR, & Anti-Rejection Gate)
-- Hanya dievaluasi ketika Lapis 1 sudah terpenuhi (harga sudah berada di zona $\ge 80\%$):
-  - **Unbroken Profit Leg (Maksimal 4 Bar):** Menghitung nilai True Range tertinggi dari lilin live (shift 0) dan lilin-lilin sebelumnya (shift 1..4) yang konsisten *close* di area profit. Jika ada satu lilin yang *close* di area rugi/impas, rantai pencarian langsung putus (*reset*). Ini menangkap gelombang dorongan (*thrust surge*) utuh sekaligus mengabaikan *floating minus* lama.
-  - **Kedekatan dalam satuan lilin:** $\text{dist\_to\_tp} \le \text{MaxDistATR}$ ($\le 1.10\times\text{TR}$).
-  - **Ambang Batas RelVol Realistis:** $\text{RelVol} \ge \text{RelVolThreshold}$ (default disempurnakan ke $\ge 1.25\times$).
-  - **Anti-Rejection Live Candle Gate:** Mencegah perpanjangan TP jika lilin live sedang membentuk sumbu penolakan (*rejection wick* $> 50\%$ *range*) yang membanting harga menjauh dari target TP.
-  - **Real-time Diagnostic Log:** Mencetak log throttled `[TRAIL PROXIMITY]` ke tab *Experts* MT5 agar trader dapat memantau angka pasti `RelVol`, `DistTR`, `LegBars`, dan status penolakan.
+#### 3. Gate 2C: Satpam Penolakan Live (`rejection_ok`)
+* **Rumus:** 
+  * Untuk BUY: $\text{bid} < \text{Open Bar 0}$ DAN $(\text{High Bar 0} - \text{bid}) > 0.5\times\text{TrueRange}$.
+  * Untuk SELL: $\text{ask} > \text{Open Bar 0}$ DAN $(\text{ask} - \text{Low Bar 0}) > 0.5\times\text{TrueRange}$.
+* **Peran Penyelamat:** Jika lilin live sedang membentuk jarum pembalikan (*pinbar/rejection wick* $> 50\%$) tepat di bibir target, TP dilarang di-extend. Trade dibiarkan menyentuh TP asli tunai, menyelamatkan trader dari jebakan kena BE akibat pembalikan tajam.
 
----
-
-### D. Simulasi Perilaku: Scalping vs Swing
-
-| Skenario | Target TP | EWMA TR | Lapis 1 (`EXT% = 20%`) | Lapis 2 (`MAX TR = 1.1x`) | Hasil Eksekusi Dual-Layer |
-|---|---|---|---|---|---|
-| **Scalping (Baru Open)** | 15 pip | 20 pip | ❌ Blokir (gain = 0, rem = 15 pip) | ✅ Lolos (15 $\le$ 22 pip) | **DIBLOKIR (Aman dari prematur!)** |
-| **Scalping (Dekat TP)** | 15 pip | 20 pip | ✅ Lolos (gain = 13, rem = 2 pip) | ✅ Lolos (2 $\le$ 22 pip) | **LOLOS (Extend jika RelVol $\ge$ 1.6x)** |
-| **Swing (Baru Masuk 80%)**| 100 pip| 10 pip | ✅ Lolos (gain = 80, rem = 20 pip)| ❌ Tahan (20 > 11 pip) | **DITAHAN (Tunggu lebih dekat ke TP)** |
-| **Swing (Dekat TP)** | 100 pip| 10 pip | ✅ Lolos (gain = 90, rem = 10 pip)| ✅ Lolos (10 $\le$ 11 pip) | **LOLOS (Extend di bibir target)** |
+#### 4. Gate Runner: Pengunci Profit Multi-TP (`is_eligible_tp_runner`)
+* Pada rule dengan `MULTI TP > 1`: Order posisi TP1 (target terdekat) **dilarang keras extend**. Hanya order runner (target terjauh) yang boleh diperpanjang, memastikan profit pertama pasti terkunci ke saldo riil.
 
 ---
 
-### E. Hubungan Kerja Antara Trail BE dan TP Extended
-Keduanya bekerja saling melengkapi tanpa ada konflik maupun hambatan:
-1. **Kondisi Pasar Normal (Volume Biasa):**
-   - Saat harga masuk sisa 20%, **BE terpicu** $\rightarrow$ Stop Loss digeser mengunci modal (`Open ± Spread`).
-   - Karena volume tidak meledak, TP **tidak di-extend**. Order selesai menyentuh TP asli dengan profit maksimal.
-2. **Kondisi Pasar Tren Kuat (Volume Meledak):**
-   - Saat harga masuk sisa 20%, **BE terpicu** $\rightarrow$ Stop Loss digeser mengunci modal.
-   - Di saat yang sama, Lapis 2 mendeteksi lonjakan volume $\rightarrow$ **TP di-extend** lebih jauh untuk menangkap gelombang tren besar (*runner*).
-   - Pada siklus extend berikutnya, Stop Loss secara bertahap ditarik mengunci level TP sebelumnya (`prev_tp_level`).
+### D. Matriks Perilaku Sistem di Berbagai Kondisi Pasar
+
+| Kondisi Pasar di Bibir TP | Gate 1 (Jarak) | Gate 2B (Momentum) | Gate 2C (Anti-Reject) | Runner Gate | Tindakan Sistem | Hasil Finansial |
+|---|---|---|---|---|---|---|
+| **Merayap Pelan / Sideways** | ✅ Lolos | ❌ Gagal ($<1.25$) | ✅ Lolos | ✅ Lolos | **DITAHAN (No Extend)** | Kena TP Asli (Profit 100% Cash) |
+| **Ditolak Keras (Pinbar Reversal)** | ✅ Lolos | ✅ Lolos | ❌ **BLOKIR** | ✅ Lolos | **DITAHAN (No Extend)** | Kena TP Asli (Selamat dari BE) |
+| **TP 1 pada Multi-TP** | ✅ Lolos | ✅ Lolos | ✅ Lolos | ❌ **BLOKIR** | **DITAHAN (No Extend)** | Profit TP 1 Diamankan Tunai |
+| **Rally Kuat / Trend Continuation** | ✅ Lolos | ✅ Lolos ($\ge 1.25$) | ✅ Lolos | ✅ Lolos | **EXTEND TP (Runner)** | Panen Profit Lebih Besar ($>2R-3R$) |
+| **Scalping Baru Open** | ❌ **BLOKIR** | - | - | - | **DIBLOKIR** | Kebal dari Pemicu Prematur |
+
+---
+
+### E. Real-Time Diagnostic Logging di Tab Experts
+
+Ketika harga berada di dalam zona sisa $\le 20\%$ target, EA secara otomatis mencetak informasi diagnostik (di-throttle setiap 3 detik) ke terminal MT5:
+```text
+[TRAIL PROXIMITY] EURUSD #1024 in Zone (sisa 18.5%): RelVol=1.32 (need >=1.25) | DistTR=0.74 | LegBars=3 | Reject=NO | Runner=YES
+```
+Trader memiliki visibilitas total dan dapat melihat angka pasti tanpa meraba-raba di kegelapan.
 
 ---
 

@@ -1132,17 +1132,19 @@ void ProcessAutoTrailSLTP()
       if(ptype == POSITION_TYPE_SELL && ask > b0_open && (ask - b0_low)  > (curr_tr * 0.5)) is_rejection = true;
       bool rejection_ok = !is_rejection;
 
-      bool proximity_ok  = progress_ok && (dist_to_tp <= max_dist_allowed);
+      // ponytail: Gate 1 (progress_ok via EXT DIST%) is the sole distance gate.
+      // Gate 2A (dist_to_tp <= max_dist_allowed) removed to eliminate distance conflicts with EXT DIST%.
+      bool proximity_ok  = progress_ok;
       bool volatility_ok = (rel_vol >= relvol_threshold);
       
-      if(progress_ok && !(proximity_ok && volatility_ok && rejection_ok && is_eligible_tp_runner))
+      if(progress_ok && !(volatility_ok && rejection_ok && is_eligible_tp_runner))
       {
          // ponytail: throttled diagnostic print so trader sees exact reason why TP hasn't extended
          static datetime s_last_diag = 0;
          if(TimeCurrent() - s_last_diag >= 3)
          {
-            PrintFormat("[TRAIL PROXIMITY] %s #%d in Zone (sisa %.1f%%): RelVol=%.2f (need >=%.2f) | DistTR=%.2f (need <=%.2f) | LegBars=%d | Reject=%s | Runner=%s",
-                        sym, tkt, (ext_rem_dist / base_target_dist) * 100.0, rel_vol, relvol_threshold, dist_to_tp, max_dist_allowed,
+            PrintFormat("[TRAIL PROXIMITY] %s #%d in Zone (sisa %.1f%%): RelVol=%.2f (need >=%.2f) | DistTR=%.2f | LegBars=%d | Reject=%s | Runner=%s",
+                        sym, tkt, (ext_rem_dist / base_target_dist) * 100.0, rel_vol, relvol_threshold, dist_to_tp,
                         leg_bars, is_rejection ? "YES" : "NO", is_eligible_tp_runner ? "YES" : "NO (Protected TP1)");
             s_last_diag = TimeCurrent();
          }

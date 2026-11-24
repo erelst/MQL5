@@ -429,7 +429,7 @@ def check_tp_extension_dual_layer_and_ext_dist():
     assert "input double               InpTrailExtRemDistPct= 0.20;" in src_at
     assert "double ext_pct = (g_tracking_list[i].trail_ext_rem_dist_pct > 0) ? g_tracking_list[i].trail_ext_rem_dist_pct : InpTrailExtRemDistPct;" in src_at
     assert "ext_rem_dist <= max_ext_rem_allowed && ext_cur_gain >= min_ext_gain_req" in src_at
-    assert "bool proximity_ok  = progress_ok && (dist_to_tp <= max_dist_allowed);" in src_at
+    assert "bool proximity_ok  = progress_ok;" in src_at
     assert "bool in_profit = (ptype == POSITION_TYPE_BUY) ? (c_p > open_p) : (c_p < open_p);" in src_at
     assert "rejection_ok" in src_at
     assert "[TRAIL PROXIMITY]" in src_at
@@ -443,55 +443,48 @@ def check_tp_extension_dual_layer_and_ext_dist():
     assert "ext_rem_dist <= max_ext_rem_allowed && ext_cur_gain >= min_ext_gain_req" in src_tm
     assert "INP_TRAIL_EXT" in src_tm
     assert "ActivateBulkAutoTrail(double max_dist, double relvol_th, double be_rem_pct, double ext_rem_pct, ENUM_TIMEFRAMES tf)" in src_tm
+    assert "bool proximity_ok  = progress_ok;" in src_tm
     assert "bool in_profit = (ptype == POSITION_TYPE_BUY) ? (c_p > open_p) : (c_p < open_p);" in src_tm
     assert "rejection_ok" in src_tm
     assert "[TRAIL PROXIMITY]" in src_tm
 
-    # 3. Mathematical validation of dual-layer gate (Scalping vs Swing)
-    # Scenario A: Scalping (TP target = 15 pts, ATR = 20 pts, EXT% = 20%, MAX TR = 1.1)
-    target_dist_scalp = 15.0
-    atr_scalp = 20.0
-    max_dist_allowed_pts = 1.1 * atr_scalp  # 22.0 pts
+    # 3. Mathematical validation of Streamlined TP Extension Architecture
+    # (Gate 1: Progress Gate | Gate 2B: Unbroken Leg Momentum | Gate 2C: Anti-Rejection Gate)
+    target_dist = 50.0
     ext_pct_val = 0.20
+    ewma_tr = 10.0
 
-    # At bar 0 (just opened): gain = 0, rem = 15.0
-    rem_0 = 15.0
+    # Test A: Premature check at open (gain = 0, rem = 50.0) -> MUST be blocked by Gate 1
+    rem_0 = 50.0
     gain_0 = 0.0
-    layer1_0 = (rem_0 <= target_dist_scalp * ext_pct_val) and (gain_0 >= target_dist_scalp * (1.0 - ext_pct_val))
-    layer2_0 = (rem_0 <= max_dist_allowed_pts)
-    assert not layer1_0, "Layer 1 MUST block immediate trigger at open"
-    assert layer2_0, "Layer 2 alone would have prematurely triggered without Layer 1!"
-    assert not (layer1_0 and layer2_0), "Dual-layer gate must block premature trigger!"
+    gate1_0 = (rem_0 <= target_dist * ext_pct_val) and (gain_0 >= target_dist * (1.0 - ext_pct_val))
+    assert not gate1_0, "Gate 1 MUST block trigger at order open"
 
-    # Near TP (gain = 13.0, rem = 2.0 pts)
-    rem_near = 2.0
-    gain_near = 13.0
-    layer1_near = (rem_near <= target_dist_scalp * ext_pct_val) and (gain_near >= target_dist_scalp * (1.0 - ext_pct_val))
-    layer2_near = (rem_near <= max_dist_allowed_pts)
-    assert layer1_near and layer2_near, "Dual-layer gate must trigger when both layers are satisfied"
+    # Test B: In 20% zone (gain = 42.0, rem = 8.0) but WEAK / STAGNANT momentum (rel_vol = 1.05 < 1.25)
+    # -> Gate 1 passes, but Gate 2B blocks! Trade safely hits original TP.
+    rem_zone = 8.0
+    gain_zone = 42.0
+    gate1_zone = (rem_zone <= target_dist * ext_pct_val) and (gain_zone >= target_dist * (1.0 - ext_pct_val))
+    relvol_weak = 1.05
+    relvol_th = 1.25
+    gate2b_weak = (relvol_weak >= relvol_th)
+    assert gate1_zone and not gate2b_weak, "Weak momentum must not extend TP"
 
-    # Scenario B: Swing (TP target = 100 pts, ATR = 10 pts, EXT% = 20%, MAX TR = 1.1)
-    target_dist_swing = 100.0
-    atr_swing = 10.0
-    max_dist_allowed_swing = 1.1 * atr_swing  # 11.0 pts
+    # Test C: In 20% zone with STRONG momentum (rel_vol = 1.45) but REJECTION WICK (> 50% wick)
+    # -> Gate 2C blocks! Protects trade from extending into a pinbar reversal.
+    relvol_strong = 1.45
+    gate2b_strong = (relvol_strong >= relvol_th)
+    is_rejection_dump = True
+    gate2c_reject = not is_rejection_dump
+    assert gate1_zone and gate2b_strong and not gate2c_reject, "Rejection wick must block extend"
 
-    # Price at 80% progress (gain = 80.0, rem = 20.0 pts)
-    rem_80 = 20.0
-    gain_80 = 80.0
-    layer1_80 = (rem_80 <= target_dist_swing * ext_pct_val) and (gain_80 >= target_dist_swing * (1.0 - ext_pct_val))
-    layer2_80 = (rem_80 <= max_dist_allowed_swing)
-    assert layer1_80, "Layer 1 passes at 80% progress"
-    assert not layer2_80, "Layer 2 keeps holding until price is strictly within ATR proximity (11 pts)"
-    assert not (layer1_80 and layer2_80), "Dual-layer gate ensures swing positions aren't extended too early!"
+    # Test D: In 20% zone with STRONG momentum AND healthy non-rejection bar -> EXTEND TRIGGERED!
+    is_rejection_none = False
+    gate2c_healthy = not is_rejection_none
+    extend_triggered = gate1_zone and gate2b_strong and gate2c_healthy
+    assert extend_triggered, "All 3 gates pass: TP extended cleanly!"
 
-    # Price within ATR of TP (gain = 90.0, rem = 10.0 pts)
-    rem_swing_close = 10.0
-    gain_swing_close = 90.0
-    layer1_close = (rem_swing_close <= target_dist_swing * ext_pct_val) and (gain_swing_close >= target_dist_swing * (1.0 - ext_pct_val))
-    layer2_close = (rem_swing_close <= max_dist_allowed_swing)
-    assert layer1_close and layer2_close, "Both layers pass and cleanly trigger extension!"
-
-    print("test_tp_extension_dual_layer_and_ext_dist: OK (independent EXT DIST% + dual-layer gate protects scalping & swing)")
+    print("test_tp_extension_dual_layer_and_ext_dist: OK (streamlined Gate 1 distance + unbroken leg momentum + anti-rejection gate)")
 
 
 if __name__ == "__main__":
