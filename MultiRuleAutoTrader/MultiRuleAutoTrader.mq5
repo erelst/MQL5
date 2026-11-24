@@ -1754,34 +1754,34 @@ void RenderTableHeaders(int root_x, int table_y)
    ObjectsDeleteAll(0, g_prefix + "BTN_TH_");
    ObjectsDeleteAll(0, g_prefix + "TH_");
    
-   string s_no    = "NO"     + (g_sort_col == RULE_SORT_NO     ? (g_sort_asc ? "▲" : "▼") : "");
-   string s_sym   = "SYMBOL" + (g_sort_col == RULE_SORT_SYM    ? (g_sort_asc ? "▲" : "▼") : "");
-   string s_dir   = "DIR"    + (g_sort_col == RULE_SORT_DIR    ? (g_sort_asc ? "▲" : "▼") : "");
-   string s_lot   = "LOT"    + (g_sort_col == RULE_SORT_LOT    ? (g_sort_asc ? "▲" : "▼") : "");
-   string s_rr    = "RR"     + (g_sort_col == RULE_SORT_RR     ? (g_sort_asc ? "▲" : "▼") : "");
-   string s_tf    = "TF"     + (g_sort_col == RULE_SORT_TF     ? (g_sort_asc ? "▲" : "▼") : "");
-   string s_max   = "MAX"    + (g_sort_col == RULE_SORT_MAX    ? (g_sort_asc ? "▲" : "▼") : "");
-   string s_mult  = "MULT"   + (g_sort_col == RULE_SORT_MULT   ? (g_sort_asc ? "▲" : "▼") : "");
-   string s_tp    = "TP"     + (g_sort_col == RULE_SORT_TP     ? (g_sort_asc ? "▲" : "▼") : "");
-   string s_delay = "DELAY"  + (g_sort_col == RULE_SORT_DELAY  ? (g_sort_asc ? "▲" : "▼") : "");
-   string s_price = "PRICE"  + (g_sort_col == RULE_SORT_PRICE  ? (g_sort_asc ? "▲" : "▼") : "");
-   string s_trail = "TRAIL"  + (g_sort_col == RULE_SORT_TRAIL  ? (g_sort_asc ? "▲" : "▼") : "");
-   string s_stat  = "STATUS" + (g_sort_col == RULE_SORT_STATUS ? (g_sort_asc ? "▲" : "▼") : "");
+   string s_no    = "NO"     + (g_sort_col == RULE_SORT_NO     ? (g_sort_asc ? " ▲" : " ▼") : "");
+   string s_sym   = "SYMBOL" + (g_sort_col == RULE_SORT_SYM    ? (g_sort_asc ? " ▲" : " ▼") : "");
+   string s_dir   = "DIR"    + (g_sort_col == RULE_SORT_DIR    ? (g_sort_asc ? " ▲" : " ▼") : "");
+   string s_lot   = "LOT"    + (g_sort_col == RULE_SORT_LOT    ? (g_sort_asc ? " ▲" : " ▼") : "");
+   string s_rr    = "RR"     + (g_sort_col == RULE_SORT_RR     ? (g_sort_asc ? " ▲" : " ▼") : "");
+   string s_tf    = "TF"     + (g_sort_col == RULE_SORT_TF     ? (g_sort_asc ? " ▲" : " ▼") : "");
+   string s_max   = "MAX"    + (g_sort_col == RULE_SORT_MAX    ? (g_sort_asc ? " ▲" : " ▼") : "");
+   string s_mult  = "MULT"   + (g_sort_col == RULE_SORT_MULT   ? (g_sort_asc ? " ▲" : " ▼") : "");
+   string s_tp    = "TP"     + (g_sort_col == RULE_SORT_TP     ? (g_sort_asc ? " ▲" : " ▼") : "");
+   string s_delay = "DELAY"  + (g_sort_col == RULE_SORT_DELAY  ? (g_sort_asc ? " ▲" : " ▼") : "");
+   string s_price = "PRICE"  + (g_sort_col == RULE_SORT_PRICE  ? (g_sort_asc ? " ▲" : " ▼") : "");
+   string s_trail = "TRAIL"  + (g_sort_col == RULE_SORT_TRAIL  ? (g_sort_asc ? " ▲" : " ▼") : "");
+   string s_stat  = "STATUS" + (g_sort_col == RULE_SORT_STATUS ? (g_sort_asc ? " ▲" : " ▼") : "");
 
-   CreateButton("BTN_TH_NO",     root_x + 18,  table_y + 2, 36, 20, s_no,    CLR_CARD_BG, (g_sort_col == RULE_SORT_NO)     ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
-   CreateButton("BTN_TH_SYM",    root_x + 58,  table_y + 2, 80, 20, s_sym,   CLR_CARD_BG, (g_sort_col == RULE_SORT_SYM)    ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
-   CreateButton("BTN_TH_DIR",    root_x + 142, table_y + 2, 90, 20, s_dir,   CLR_CARD_BG, (g_sort_col == RULE_SORT_DIR)    ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
-   CreateButton("BTN_TH_LOT",    root_x + 236, table_y + 2, 66, 20, s_lot,   CLR_CARD_BG, (g_sort_col == RULE_SORT_LOT)    ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
-   CreateButton("BTN_TH_RR",     root_x + 306, table_y + 2, 50, 20, s_rr,    CLR_CARD_BG, (g_sort_col == RULE_SORT_RR)     ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
-   CreateButton("BTN_TH_TF",     root_x + 360, table_y + 2, 56, 20, s_tf,    CLR_CARD_BG, (g_sort_col == RULE_SORT_TF)     ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
-   CreateButton("BTN_TH_MAX",    root_x + 420, table_y + 2, 50, 20, s_max,   CLR_CARD_BG, (g_sort_col == RULE_SORT_MAX)    ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
-   CreateButton("BTN_TH_MULT",   root_x + 474, table_y + 2, 42, 20, s_mult,  CLR_CARD_BG, (g_sort_col == RULE_SORT_MULT)   ? CLR_GOLD_NEON : CLR_GOLD_NEON, CLR_CARD_BG);
-   CreateButton("BTN_TH_TP",     root_x + 520, table_y + 2, 38, 20, s_tp,    CLR_CARD_BG, (g_sort_col == RULE_SORT_TP)     ? CLR_GOLD_NEON : CLR_GOLD_NEON, CLR_CARD_BG);
-   CreateButton("BTN_TH_DELAY",  root_x + 562, table_y + 2, 56, 20, s_delay, CLR_CARD_BG, (g_sort_col == RULE_SORT_DELAY)  ? CLR_GOLD_NEON : CLR_CYAN_NEON, CLR_CARD_BG);
-   CreateButton("BTN_TH_PRICE",  root_x + 622, table_y + 2, 142,20, s_price, CLR_CARD_BG, (g_sort_col == RULE_SORT_PRICE)  ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
-   CreateButton("BTN_TH_TRAIL",  root_x + 768, table_y + 2, 132,20, s_trail, CLR_CARD_BG, (g_sort_col == RULE_SORT_TRAIL)  ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
-   CreateButton("BTN_TH_STATUS", root_x + 904, table_y + 2, 58, 20, s_stat,  CLR_CARD_BG, (g_sort_col == RULE_SORT_STATUS) ? CLR_GOLD_NEON : CLR_TEXT_MED, CLR_CARD_BG);
-   CreateLabel("TH_ACT",         root_x + 972, table_y + 6, "ACTIONS", CLR_TEXT_MED, 8, true);
+   CreateLabel("BTN_TH_NO",     root_x + 18,  table_y + 6, s_no,    (g_sort_col == RULE_SORT_NO)     ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, true);
+   CreateLabel("BTN_TH_SYM",    root_x + 56,  table_y + 6, s_sym,   (g_sort_col == RULE_SORT_SYM)    ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, true);
+   CreateLabel("BTN_TH_DIR",    root_x + 144, table_y + 6, s_dir,   (g_sort_col == RULE_SORT_DIR)    ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, true);
+   CreateLabel("BTN_TH_LOT",    root_x + 232, table_y + 6, s_lot,   (g_sort_col == RULE_SORT_LOT)    ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, true);
+   CreateLabel("BTN_TH_RR",     root_x + 310, table_y + 6, s_rr,    (g_sort_col == RULE_SORT_RR)     ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, true);
+   CreateLabel("BTN_TH_TF",     root_x + 358, table_y + 6, s_tf,    (g_sort_col == RULE_SORT_TF)     ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, true);
+   CreateLabel("BTN_TH_MAX",    root_x + 418, table_y + 6, s_max,   (g_sort_col == RULE_SORT_MAX)    ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, true);
+   CreateLabel("BTN_TH_MULT",   root_x + 472, table_y + 6, s_mult,  (g_sort_col == RULE_SORT_MULT)   ? CLR_GOLD_NEON : CLR_GOLD_NEON, 8, true);
+   CreateLabel("BTN_TH_TP",     root_x + 518, table_y + 6, s_tp,    (g_sort_col == RULE_SORT_TP)     ? CLR_GOLD_NEON : CLR_GOLD_NEON, 8, true);
+   CreateLabel("BTN_TH_DELAY",  root_x + 560, table_y + 6, s_delay, (g_sort_col == RULE_SORT_DELAY)  ? CLR_GOLD_NEON : CLR_CYAN_NEON, 8, true);
+   CreateLabel("BTN_TH_PRICE",  root_x + 620, table_y + 6, s_price, (g_sort_col == RULE_SORT_PRICE)  ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, true);
+   CreateLabel("BTN_TH_TRAIL",  root_x + 735, table_y + 6, s_trail, (g_sort_col == RULE_SORT_TRAIL)  ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, true);
+   CreateLabel("BTN_TH_STATUS", root_x + 885, table_y + 6, s_stat,  (g_sort_col == RULE_SORT_STATUS) ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, true);
+   CreateLabel("TH_ACT",         root_x + 958, table_y + 6, "ACTIONS", CLR_TEXT_MED, 8, true);
 }
 
 void UpdatePreviewTerminalBox()
@@ -1942,39 +1942,39 @@ void UpdateDashboardUI()
       color row_bg = is_selected ? CLR_ROW_SELECTED : ((r % 2 == 0) ? CLR_CARD_BG : CLR_PANEL_BG);
       CreateRect(r_pfx + "BG", root_x + 14, cur_y, win_w - 28, 34, row_bg, is_selected ? CLR_GOLD_NEON : CLR_BORDER_SOFT);
       
-      CreateLabel(r_pfx + "NO", root_x + 22, cur_y + 9, StringFormat("#%d", i + 1), CLR_TEXT_PURE, 8, true);
-      CreateLabel(r_pfx + "SYM", root_x + 62, cur_y + 9, g_rules[i].symbol, CLR_TEXT_PURE, 8, true);
+      CreateLabel(r_pfx + "NO", root_x + 18, cur_y + 9, StringFormat("#%d", i + 1), CLR_TEXT_PURE, 8, true);
+      CreateLabel(r_pfx + "SYM", root_x + 56, cur_y + 9, g_rules[i].symbol, CLR_TEXT_PURE, 8, true);
       
       string dir_str = "BUY & SELL";
       color  dir_clr = CLR_CYAN_NEON;
       if(g_rules[i].direction == TRADE_DIR_BUY)  { dir_str = "BUY ONLY";  dir_clr = CLR_BULL_NEON; }
       if(g_rules[i].direction == TRADE_DIR_SELL) { dir_str = "SELL ONLY"; dir_clr = CLR_BEAR_NEON; }
-      CreateLabel(r_pfx + "DIR", root_x + 146, cur_y + 9, dir_str, dir_clr, 8, true);
+      CreateLabel(r_pfx + "DIR", root_x + 144, cur_y + 9, dir_str, dir_clr, 8, true);
       
       string lot_str = (g_rules[i].lot_mode == LOT_FIXED) ? DoubleToString(g_rules[i].lot_value, 2) + "L" : 
                        (g_rules[i].lot_mode == LOT_RISK_PCT ? DoubleToString(g_rules[i].lot_value, 1) + "%R" : 
                        DoubleToString(g_rules[i].lot_value, 1) + (AccountInfoString(ACCOUNT_CURRENCY) != "" ? AccountInfoString(ACCOUNT_CURRENCY) : "M"));
-      CreateLabel(r_pfx + "LOT", root_x + 240, cur_y + 9, lot_str, CLR_TEXT_PURE, 8, false);
+      CreateLabel(r_pfx + "LOT", root_x + 232, cur_y + 9, lot_str, CLR_TEXT_PURE, 8, false);
       
       CreateLabel(r_pfx + "RR", root_x + 310, cur_y + 9, StringFormat("1:%.1f", g_rules[i].risk_reward_ratio), CLR_CYAN_NEON, 8, true);
       
       string str_tf = StringSubstr(EnumToString(g_rules[i].timeframe), 7);
       if(g_rules[i].timeframe == PERIOD_M5)
          str_tf += g_rules[i].allow_m1_fallback ? "+M1" : "";
-      CreateLabel(r_pfx + "TF", root_x + 364, cur_y + 9, "[" + str_tf + "]", CLR_GOLD_NEON, 8, true);
+      CreateLabel(r_pfx + "TF", root_x + 358, cur_y + 9, "[" + str_tf + "]", CLR_GOLD_NEON, 8, true);
       
       string max_ord_disp = (g_rules[i].max_orders <= 0) ? "UNL" : StringFormat("%d/%dx", g_rules[i].orders_opened_count, g_rules[i].max_orders);
       color max_ord_clr = (g_rules[i].max_orders > 0 && g_rules[i].orders_opened_count >= g_rules[i].max_orders) ? CLR_BEAR_NEON : CLR_TEXT_PURE;
-      CreateLabel(r_pfx + "MAX", root_x + 424, cur_y + 9, max_ord_disp, max_ord_clr, 8, true);
+      CreateLabel(r_pfx + "MAX", root_x + 418, cur_y + 9, max_ord_disp, max_ord_clr, 8, true);
       
       int mult_disp = (g_rules[i].entry_multiplier <= 0) ? 1 : g_rules[i].entry_multiplier;
-      CreateLabel(r_pfx + "MULT", root_x + 478, cur_y + 9, IntegerToString(mult_disp) + "x", CLR_GOLD_NEON, 8, true);
+      CreateLabel(r_pfx + "MULT", root_x + 472, cur_y + 9, IntegerToString(mult_disp) + "x", CLR_GOLD_NEON, 8, true);
 
       int mtp_disp = (g_rules[i].multi_tp <= 0) ? 1 : g_rules[i].multi_tp;
-      CreateLabel(r_pfx + "MTP", root_x + 524, cur_y + 9, IntegerToString(mtp_disp) + "x", CLR_GOLD_NEON, 8, true);
+      CreateLabel(r_pfx + "MTP", root_x + 518, cur_y + 9, IntegerToString(mtp_disp) + "x", CLR_GOLD_NEON, 8, true);
       
       string delay_disp = g_rules[i].delay_is_tf_close ? "Close" : (IntegerToString(g_rules[i].delay_tf_pct) + "%");
-      CreateLabel(r_pfx + "DELAY", root_x + 566, cur_y + 9, delay_disp, CLR_CYAN_NEON, 8, false);
+      CreateLabel(r_pfx + "DELAY", root_x + 560, cur_y + 9, delay_disp, CLR_CYAN_NEON, 8, false);
       
       string f_str = "";
       if(g_rules[i].direction == TRADE_DIR_BUY)
@@ -1989,18 +1989,18 @@ void UpdateDashboardUI()
       {
          f_str = "B:" + g_rules[i].bull_price_filter + " | S:" + g_rules[i].bear_price_filter;
       }
-      CreateLabel(r_pfx + "FLT", root_x + 626, cur_y + 9, f_str, CLR_TEXT_MED, 7, false);
+      CreateLabel(r_pfx + "FLT", root_x + 620, cur_y + 9, f_str, CLR_TEXT_MED, 7, false);
       
       string trail_str = g_rules[i].enable_trail ? StringFormat("BE:%.0f%%|EX:%.0f%%|D:%.1f", g_rules[i].trail_be_rem_dist_pct * 100.0, g_rules[i].trail_ext_rem_dist_pct * 100.0, g_rules[i].trail_max_dist) : "OFF";
-      CreateLabel(r_pfx + "TRL", root_x + 772, cur_y + 9, trail_str, g_rules[i].enable_trail ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, false);
+      CreateLabel(r_pfx + "TRL", root_x + 735, cur_y + 9, trail_str, g_rules[i].enable_trail ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, false);
       
       string r_status_txt = g_rules[i].active ? "ACTIVE" : "PAUSED";
       color  r_status_bg  = g_rules[i].active ? CLR_POWER_ON_BG : CLR_POWER_OFF_BG;
       color  r_status_clr = g_rules[i].active ? CLR_BULL_NEON : CLR_BEAR_NEON;
-      CreateButton("BTN_TOGGLE_RULE_" + IntegerToString(i), root_x + 904, cur_y + 6, 58, 22, r_status_txt, r_status_bg, r_status_clr, r_status_clr);
+      CreateButton("BTN_TOGGLE_RULE_" + IntegerToString(i), root_x + 883, cur_y + 6, 58, 22, r_status_txt, r_status_bg, r_status_clr, r_status_clr);
       
-      CreateButton("BTN_EDIT_RULE_" + IntegerToString(i), root_x + 968, cur_y + 6, 34, 22, "EDIT", is_selected ? CLR_TAB_ACTIVE_BG : CLR_CARD_BG, is_selected ? CLR_GOLD_NEON : CLR_CYAN_NEON, is_selected ? CLR_GOLD_NEON : CLR_BORDER_HARD);
-      CreateButton("BTN_DEL_RULE_"  + IntegerToString(i), root_x + 1006, cur_y + 6, 20, 22, "X",  C'34,8,18', CLR_BEAR_NEON, CLR_BEAR_NEON);
+      CreateButton("BTN_EDIT_RULE_" + IntegerToString(i), root_x + 956, cur_y + 6, 36, 22, "EDIT", is_selected ? CLR_TAB_ACTIVE_BG : CLR_CARD_BG, is_selected ? CLR_GOLD_NEON : CLR_CYAN_NEON, is_selected ? CLR_GOLD_NEON : CLR_BORDER_HARD);
+      CreateButton("BTN_DEL_RULE_"  + IntegerToString(i), root_x + 998, cur_y + 6, 22, 22, "X",  C'34,8,18', CLR_BEAR_NEON, CLR_BEAR_NEON);
    }
    
    // Render pagination buttons dynamically if rules exceed RULES_PER_PAGE

@@ -384,11 +384,11 @@ def check_table_sorting_and_columns():
     assert "RULE_SORT_PRICE" in src
     assert "ENUM_RULE_SORT_COL   g_sort_col          = RULE_SORT_NO;" in src
     assert "bool                 g_sort_asc          = true;" in src
-    # Header buttons & shortened labels
-    assert 'CreateButton("BTN_TH_NO"' in src
-    assert 'CreateButton("BTN_TH_SYM"' in src
-    assert 'CreateButton("BTN_TH_TP"' in src
-    assert 'CreateButton("BTN_TH_PRICE"' in src
+    # Header sortable labels & shortened labels
+    assert 'CreateLabel("BTN_TH_NO"' in src
+    assert 'CreateLabel("BTN_TH_SYM"' in src
+    assert 'CreateLabel("BTN_TH_TP"' in src
+    assert 'CreateLabel("BTN_TH_PRICE"' in src
     assert 's_price = "PRICE"' in src
     assert 's_tp    = "TP"' in src
     # Table data display has MTP column
