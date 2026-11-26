@@ -382,6 +382,7 @@ def check_table_sorting_and_columns():
     assert "RULE_SORT_SYM" in src
     assert "RULE_SORT_TP" in src
     assert "RULE_SORT_PRICE" in src
+    assert "RULE_SORT_TYPE" in src
     assert "ENUM_RULE_SORT_COL   g_sort_col          = RULE_SORT_NO;" in src
     assert "bool                 g_sort_asc          = true;" in src
     # Header sortable labels & shortened labels
@@ -389,10 +390,13 @@ def check_table_sorting_and_columns():
     assert 'CreateLabel("BTN_TH_SYM"' in src
     assert 'CreateLabel("BTN_TH_TP"' in src
     assert 'CreateLabel("BTN_TH_PRICE"' in src
+    assert 'CreateLabel("BTN_TH_TYPE"' in src
     assert 's_price = "PRICE"' in src
+    assert 's_type  = "TYPE"' in src
     assert 's_tp    = "TP"' in src
-    # Table data display has MTP column
+    # Table data display has MTP and TYPE column
     assert 'CreateLabel(r_pfx + "MTP"' in src
+    assert 'CreateLabel(r_pfx + "TYPE"' in src
     # Sorting logic & index mapping
     assert "void GetSortedRuleIndices(int &indices[])" in src
     assert "int CompareRules(int a, int b)" in src
@@ -541,11 +545,18 @@ def check_rr_and_relvol_precision_and_parsing():
     assert 'CreateEdit("INP_RR", root_x + 85, row_c_y, 75, 20, FormatFloatClean(g_form_rr, 2)' in src
     assert 'CreateEdit("INP_ATR_MULT", root_x + 420, row_e_y, 48, 20, FormatFloatClean(g_form_atr_mult, 2)' in src
     
-    # 4. Table list display: RR column uses FormatRR, TRL column uses RV:
+    # 4. Table list display: RR column uses FormatRR, TYPE column displays COMBO (AND) / ANY (OR)
     assert 'CreateLabel(r_pfx + "RR", root_x + 310, cur_y + 9, FormatRR(g_rules[i].risk_reward_ratio)' in src
-    assert 'BE:%.0f%%|EX:%.0f%%|RV:%s' in src
+    assert 'CreateLabel(r_pfx + "TYPE", root_x + 740, cur_y + 9, type_str, type_clr, 8, true);' in src
+    assert 'COMBO (AND)' in src
+    assert 'ANY (OR)' in src
     
-    # 5. Capture & Submit use ParseDoubleClean
+    # 5. UI preview terminal deck decomposes Trail into explicit BE, EXT, D & RelVol lines
+    assert '• BE Trigger (BE%%): Sisa Target <= %.0f%% -> Kunci BE' in src
+    assert '• TP Extend Dist (EXT%%): Sisa Target <= %.0f%%' in src
+    assert '• Max Dist TR (D): <= %.1f TR | RelVol: >= %sx' in src
+    
+    # 6. Capture & Submit use ParseDoubleClean
     assert 'ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_RR", OBJPROP_TEXT))' in src
     assert 'ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_ATR_MULT", OBJPROP_TEXT))' in src
     

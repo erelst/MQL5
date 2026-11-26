@@ -54,7 +54,7 @@ enum ENUM_RULE_SORT_COL
    RULE_SORT_TP,
    RULE_SORT_DELAY,
    RULE_SORT_PRICE,
-   RULE_SORT_TRAIL,
+   RULE_SORT_TYPE,
    RULE_SORT_STATUS
 };
 
@@ -1422,16 +1422,12 @@ int CompareRules(int a, int b)
          else if(pa > pb) res = 1;
          break;
       }
-      case RULE_SORT_TRAIL:
+      case RULE_SORT_TYPE:
       {
-         int tra = g_rules[a].enable_trail ? 1 : 0;
-         int trb = g_rules[b].enable_trail ? 1 : 0;
-         if(tra != trb) res = (tra < trb) ? -1 : 1;
-         else
-         {
-            if(g_rules[a].trail_max_dist < g_rules[b].trail_max_dist) res = -1;
-            else if(g_rules[a].trail_max_dist > g_rules[b].trail_max_dist) res = 1;
-         }
+         int ma = (int)g_rules[a].signal_mode;
+         int mb = (int)g_rules[b].signal_mode;
+         if(ma < mb) res = -1;
+         else if(ma > mb) res = 1;
          break;
       }
       case RULE_SORT_STATUS:
@@ -1836,7 +1832,7 @@ void RenderTableHeaders(int root_x, int table_y)
    string s_tp    = "TP"     + (g_sort_col == RULE_SORT_TP     ? (g_sort_asc ? " ▲" : " ▼") : "");
    string s_delay = "DELAY"  + (g_sort_col == RULE_SORT_DELAY  ? (g_sort_asc ? " ▲" : " ▼") : "");
    string s_price = "PRICE"  + (g_sort_col == RULE_SORT_PRICE  ? (g_sort_asc ? " ▲" : " ▼") : "");
-   string s_trail = "TRAIL"  + (g_sort_col == RULE_SORT_TRAIL  ? (g_sort_asc ? " ▲" : " ▼") : "");
+   string s_type  = "TYPE"   + (g_sort_col == RULE_SORT_TYPE   ? (g_sort_asc ? " ▲" : " ▼") : "");
    string s_stat  = "STATUS" + (g_sort_col == RULE_SORT_STATUS ? (g_sort_asc ? " ▲" : " ▼") : "");
 
    CreateLabel("BTN_TH_NO",     root_x + 18,  table_y + 6, s_no,    (g_sort_col == RULE_SORT_NO)     ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, true);
@@ -1850,7 +1846,7 @@ void RenderTableHeaders(int root_x, int table_y)
    CreateLabel("BTN_TH_TP",     root_x + 518, table_y + 6, s_tp,    (g_sort_col == RULE_SORT_TP)     ? CLR_GOLD_NEON : CLR_GOLD_NEON, 8, true);
    CreateLabel("BTN_TH_DELAY",  root_x + 560, table_y + 6, s_delay, (g_sort_col == RULE_SORT_DELAY)  ? CLR_GOLD_NEON : CLR_CYAN_NEON, 8, true);
    CreateLabel("BTN_TH_PRICE",  root_x + 620, table_y + 6, s_price, (g_sort_col == RULE_SORT_PRICE)  ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, true);
-   CreateLabel("BTN_TH_TRAIL",  root_x + 735, table_y + 6, s_trail, (g_sort_col == RULE_SORT_TRAIL)  ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, true);
+   CreateLabel("BTN_TH_TYPE",   root_x + 740, table_y + 6, s_type,  (g_sort_col == RULE_SORT_TYPE)   ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, true);
    CreateLabel("BTN_TH_STATUS", root_x + 885, table_y + 6, s_stat,  (g_sort_col == RULE_SORT_STATUS) ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, true);
    CreateLabel("TH_ACT",         root_x + 958, table_y + 6, "ACTIONS", CLR_TEXT_MED, 8, true);
 }
@@ -1947,14 +1943,19 @@ void UpdatePreviewTerminalBox()
    
    if(prev_trail)
    {
-      string l6 = StringFormat("Auto Trail BE: Sisa Target <= %.0f%% -> Kunci BE", prev_be_pct);
-      string l7 = StringFormat("Trail TP Extend: Sisa <= %.0f%% & RelVol >= %sx", prev_ext_pct, FormatFloatClean(prev_atr_m, 2));
-      string l8 = "Trail SL Lock: Kunci ke Prev TP pada siklus extend berikutnya";
+      string l6 = "Auto Trail EWMA Engine: AKTIF (ON)";
+      string l7 = StringFormat("• BE Trigger (BE%%): Sisa Target <= %.0f%% -> Kunci BE", prev_be_pct);
+      string l8 = StringFormat("• TP Extend Dist (EXT%%): Sisa Target <= %.0f%%", prev_ext_pct);
+      string l9 = StringFormat("• Max Dist TR (D): <= %.1f TR | RelVol: >= %sx", prev_dist, FormatFloatClean(prev_atr_m, 2));
+      string l10= "• Trail SL Lock: Kunci ke Prev TP pada siklus extend berikutnya";
+      string l11= "*Multi TP dipantau independen dari TP terdekat";
       
-      CreateLabel("SIM_L6", prev_x + 10, line_y + 86,  l6, CLR_GOLD_NEON, 8, true);
-      CreateLabel("SIM_L7", prev_x + 10, line_y + 106, l7, CLR_CYAN_NEON, 8, true);
-      CreateLabel("SIM_L8", prev_x + 10, line_y + 126, l8, CLR_BULL_NEON, 8, true);
-      CreateLabel("SIM_L9", prev_x + 10, line_y + 152, "*Multi TP dipantau independen dari TP terdekat", CLR_TEXT_MED, 7, false);
+      CreateLabel("SIM_L6",  prev_x + 10, line_y + 86,  l6,  CLR_GOLD_NEON, 8, true);
+      CreateLabel("SIM_L7",  prev_x + 10, line_y + 104, l7,  CLR_CYAN_NEON, 8, false);
+      CreateLabel("SIM_L8",  prev_x + 10, line_y + 122, l8,  CLR_BULL_NEON, 8, false);
+      CreateLabel("SIM_L9",  prev_x + 10, line_y + 140, l9,  CLR_GOLD_NEON, 8, false);
+      CreateLabel("SIM_L10", prev_x + 10, line_y + 158, l10, CLR_TEXT_PURE, 8, false);
+      CreateLabel("SIM_L11", prev_x + 10, line_y + 180, l11, CLR_TEXT_MED, 7, false);
    }
    else
    {
@@ -2062,9 +2063,9 @@ void UpdateDashboardUI()
       }
       CreateLabel(r_pfx + "FLT", root_x + 620, cur_y + 9, f_str, CLR_TEXT_MED, 7, false);
       
-      string rv_str = FormatFloatClean(g_rules[i].atr_multiplier > 0 ? g_rules[i].atr_multiplier : InpRelVolThreshold, 2);
-      string trail_str = g_rules[i].enable_trail ? StringFormat("BE:%.0f%%|EX:%.0f%%|RV:%s", g_rules[i].trail_be_rem_dist_pct * 100.0, g_rules[i].trail_ext_rem_dist_pct * 100.0, rv_str) : "OFF";
-      CreateLabel(r_pfx + "TRL", root_x + 735, cur_y + 9, trail_str, g_rules[i].enable_trail ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, false);
+      string type_str = (g_rules[i].signal_mode == SIGNAL_MODE_COMBO) ? "COMBO (AND)" : "ANY (OR)";
+      color  type_clr = (g_rules[i].signal_mode == SIGNAL_MODE_COMBO) ? CLR_GOLD_NEON : CLR_CYAN_NEON;
+      CreateLabel(r_pfx + "TYPE", root_x + 740, cur_y + 9, type_str, type_clr, 8, true);
       
       string r_status_txt = g_rules[i].active ? "ACTIVE" : "PAUSED";
       color  r_status_bg  = g_rules[i].active ? CLR_POWER_ON_BG : CLR_POWER_OFF_BG;
@@ -2742,7 +2743,7 @@ void OnChartEvent(const int id,
          else if(col_key == "TP")    target_col = RULE_SORT_TP;
          else if(col_key == "DELAY") target_col = RULE_SORT_DELAY;
          else if(col_key == "PRICE") target_col = RULE_SORT_PRICE;
-         else if(col_key == "TRAIL") target_col = RULE_SORT_TRAIL;
+         else if(col_key == "TYPE" || col_key == "TRAIL") target_col = RULE_SORT_TYPE;
          else if(col_key == "STATUS")target_col = RULE_SORT_STATUS;
          
          if(g_sort_col == target_col)
@@ -2932,8 +2933,8 @@ void OnChartEvent(const int id,
             sparam == g_prefix + r_pfx + "NO" || sparam == g_prefix + r_pfx + "DIR" ||
             sparam == g_prefix + r_pfx + "LOT" || sparam == g_prefix + r_pfx + "RR" ||
             sparam == g_prefix + r_pfx + "TF" || sparam == g_prefix + r_pfx + "FLT" ||
-            sparam == g_prefix + r_pfx + "TRL" || sparam == g_prefix + r_pfx + "MTP" ||
-            sparam == g_prefix + r_pfx + "MAX" || sparam == g_prefix + r_pfx + "MULT" ||
+            sparam == g_prefix + r_pfx + "TYPE" || sparam == g_prefix + r_pfx + "TRL" ||
+            sparam == g_prefix + r_pfx + "MTP" || sparam == g_prefix + r_pfx + "MAX" || sparam == g_prefix + r_pfx + "MULT" ||
             sparam == g_prefix + r_pfx + "DELAY")
          {
             g_selected_rule_idx = i;

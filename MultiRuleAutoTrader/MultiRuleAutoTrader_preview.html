@@ -489,7 +489,7 @@
               <th style="width: 50px;">MODE</th>
               <th style="width: 65px;">DELAY</th>
               <th style="width: 120px;">PRICE BOUNDS</th>
-              <th style="width: 135px;">AUTO TRAIL</th>
+              <th style="width: 120px;">TYPE</th>
               <th style="width: 70px;">STATUS</th>
               <th style="width: 80px; text-align: center;">ACTIONS</th>
             </tr>
@@ -651,9 +651,11 @@
             Sinyal Aktif: <span class="hl-cyan">${sigStr}</span>
           </div>
           <div style="border-top: 1px dashed var(--border-soft); padding-top: 4px; margin-top: 4px;">
-            🛡️ <strong class="hl-gold">Auto Trail BE</strong>: Sisa Target &le; <span class="hl-cyan">${bePctStr}%</span> &rarr; Kunci <span class="hl-cyan">BE</span><br>
-            🚀 <strong class="hl-cyan">Trail TP Extension</strong>: Sisa &le; <span class="hl-cyan">${extPctStr}%</span> &amp; RelVol &ge; <span class="hl-gold">${r.atrMult}x</span> &rarr; <span class="hl-cyan">TP Extend</span><br>
-            🔒 <strong class="hl-bull">Trail SL Lock (Cycle 2+)</strong>: Kunci ke <span class="hl-bull">TP Sebelumnya</span>
+            🛡️ <strong class="hl-gold">Auto Trail EWMA Engine</strong>: AKTIF (ON)<br>
+            • <strong class="hl-cyan">BE Trigger (BE%)</strong>: Sisa Target &le; <span class="hl-cyan">${bePctStr}%</span> &rarr; Kunci BE<br>
+            • <strong class="hl-bull">TP Extend Dist (EXT%)</strong>: Sisa Target &le; <span class="hl-cyan">${extPctStr}%</span><br>
+            • <strong class="hl-gold">Max Dist TR (D)</strong>: &le; ${r.trailDist || '1.10'}TR | <strong class="hl-gold">RelVol</strong>: &ge; <span class="hl-gold">${r.atrMult}x</span><br>
+            • <strong class="hl-text">Trail SL Lock (Cycle 2+)</strong>: Kunci ke Prev TP
           </div>
           <div style="color:var(--text-med); font-size:8px; margin-top: 4px;">
             *Multi TP dipantau independen dari TP terdekat | Klik baris rule untuk mengganti preview
@@ -711,7 +713,7 @@
         let lotTxt = r.lotMode === 'FIXED' ? `${r.lotVal}L` : (r.lotMode === 'RISK' ? `${r.lotVal}%R` : `${r.lotVal}$`);
         let contBadge = r.continuation ? `<span style="color:var(--gold-bright); font-size:9px;">[CONT]</span>` : `<span style="color:var(--text-med); font-size:9px;">[SEQ]</span>`;
         let boundsTxt = `B:${r.bMax} | S:${r.sMin}`;
-        let trailTxt = r.trailOn ? `<span style="color:var(--gold-bright)">BE:${r.beDistPct || 20}%|EX:${r.extDistPct || 20}%|RV:${r.atrMult}</span>` : `<span style="color:var(--text-med)">OFF</span>`;
+        let typeBadge = r.sigMode === 'COMBO' ? `<span style="color:var(--gold-bright); font-weight:800;">COMBO (AND)</span>` : `<span style="color:var(--cyan-bright); font-weight:800;">ANY (OR)</span>`;
         let delayTxt = r.delayClose ? 'TF Close' : `${r.delayPct}%`;
         let statusBadge = r.active ? 
           `<span class="badge-status badge-active" onclick="event.stopPropagation(); toggleRuleStatus(${idx})">ACTIVE</span>` :
@@ -731,7 +733,7 @@
           <td>${contBadge}</td>
           <td>${delayTxt}</td>
           <td style="color:var(--text-med); font-size:9px;">${boundsTxt}</td>
-          <td>${trailTxt}</td>
+          <td>${typeBadge}</td>
           <td>${statusBadge}</td>
           <td style="text-align: center;">
             <button class="btn-sm" onclick="event.stopPropagation(); editRule(${idx})">EDIT</button>
