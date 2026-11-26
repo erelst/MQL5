@@ -451,6 +451,13 @@ def check_tp_extension_dual_layer_and_ext_dist():
     assert "bool in_profit = (ptype == POSITION_TYPE_BUY) ? (c_p > open_p) : (c_p < open_p);" in src_tm
     assert "rejection_ok" in src_tm
     assert "[TRAIL PROXIMITY]" in src_tm
+    assert "input bool                 InpAutoAdoptManual  = true;" in src_tm
+    assert "void AdoptOpenManualPositions()" in src_tm
+    assert 'm_position.Magic() == InpAutoTraderMagic' in src_tm
+    assert 'StringFind(comment, "AT TRAIL") >= 0' in src_tm
+    assert 'if(comment != "") continue;' in src_tm
+    assert "BTN_TOGGLE_AUTO_ADOPT" in src_tm
+    assert "[AUTO-ADOPT-MANUAL]" in src_tm
 
     # 3. Mathematical validation of Streamlined TP Extension Architecture
     # (Gate 1: Progress Gate | Gate 2B: Unbroken Leg Momentum | Gate 2C: Anti-Rejection Gate)

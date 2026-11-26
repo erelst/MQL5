@@ -109,6 +109,7 @@ input bool     InpEnableSoundAlerts    = true;       // Enable Sound/Pop-up Aler
 
 input group "=== AUTO TRAIL SL & TP (EWMA TR ENGINE) ==="
 input bool                 InpEnableTrail      = true;               // Default Enable Trail SL & TP
+input bool                 InpAutoAdoptManual  = true;               // Auto-Adopt Manual Trades (Comment == "" & Non-AT)
 input ENUM_TRAIL_BE_MODE   InpTrailBEMode      = TRAIL_BE_PROXIMITY; // Default Trail BE Mode
 input double               InpTrailBERemDistPct= 0.20;               // Default Trail BE Remaining TP Distance (0.20 = 20%)
 input double               InpTrailExtRemDistPct= 0.20;              // Default TP Extension Remaining TP Distance (0.20 = 20%)
@@ -170,6 +171,7 @@ double            g_form_trail_atr_mult   = 1.25; // RelVol Thresh
 double            g_form_trail_be_rem_pct = 20.0; // BE Dist % (default 20%)
 double            g_form_trail_ext_rem_pct= 20.0; // EXT Dist % (default 20%)
 string            g_form_trail_tf         = "5";  // TF acuan (default M5)
+bool              g_auto_adopt_manual     = true; // Auto-Adopt manual trades runtime toggle
 
 const int         MAX_ROWS_PER_PAGE = 8;
 string            g_prefix = "TMRR_";
@@ -256,6 +258,7 @@ void RemoveRadarSymbol(int index);
 bool IsOrderSelected(ulong ticket);
 void SetOrderSelected(ulong ticket, bool sel);
 void SelectAllOrders(bool sel);
+void AdoptOpenManualPositions();
 void SaveStateToFile();
 void LoadStateFromFile();
 ENUM_TIMEFRAMES AtrBaseTF(const ENUM_TIMEFRAMES tf);
@@ -331,6 +334,7 @@ int OnInit()
    
    EventSetTimer(InpTimerSeconds);
    
+   g_auto_adopt_manual = InpAutoAdoptManual;
    LoadStateFromFile();
    
    // Default watchlist starts empty unless loaded from persistent state (ponytail: YAGNI default symbols)
@@ -342,6 +346,8 @@ int OnInit()
    
    CreateDashboardUI();
    UpdateDashboardUI();
+   
+   AdoptOpenManualPositions();
    
    Print("TradeManagerReversalRadar initialized successfully.");
    return(INIT_SUCCEEDED);
@@ -372,6 +378,20 @@ void OnTick()
    
    // Real-time Reversal radar scan across symbols
    CheckReversalRadar();
+}
+
+//+------------------------------------------------------------------+
+//| TradeTransaction function                                        |
+//+------------------------------------------------------------------+
+void OnTradeTransaction(const MqlTradeTransaction &trans,
+                        const MqlTradeRequest &request,
+                        const MqlTradeResult &result)
+{
+   if(trans.type == TRADE_TRANSACTION_DEAL_ADD)
+   {
+      AdoptOpenManualPositions();
+      UpdateDashboardUI();
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -583,6 +603,19 @@ void OnChartEvent(const int id,
       else if(sparam == g_prefix + "BTN_CANCEL_TRAIL")
       {
          DeactivateBulkAutoTrail();
+         UpdateDashboardUI();
+         return;
+      }
+      else if(sparam == g_prefix + "BTN_TOGGLE_AUTO_ADOPT")
+      {
+         g_auto_adopt_manual = !g_auto_adopt_manual;
+         if(g_auto_adopt_manual)
+         {
+            CaptureOrdersFormInputs();
+            AdoptOpenManualPositions();
+         }
+         SaveStateToFile();
+         CreateDashboardUI();
          UpdateDashboardUI();
          return;
       }
@@ -1240,6 +1273,13 @@ void RegisterPositionTracking(ulong ticket, string sym, ENUM_TIMEFRAMES tf, doub
 
 void ProcessAutoTrailSLTP()
 {
+   static datetime s_last_manual_adopt = 0;
+   if(TimeCurrent() - s_last_manual_adopt >= 1)
+   {
+      AdoptOpenManualPositions();
+      s_last_manual_adopt = TimeCurrent();
+   }
+
    int size = ArraySize(g_tracking_list);
    if(size == 0) return;
    
@@ -1566,6 +1606,75 @@ void ProcessAutoTrailSLTP()
             }
          }
       }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| AUTO-ADOPT OPEN MANUAL POSITIONS INTO AUTO TRAIL ENGINE          |
+//| Hanya mengadopsi posisi manual murni (bukan AT TRAIL & tanpa comment) |
+//+------------------------------------------------------------------+
+void AdoptOpenManualPositions()
+{
+   if(!g_auto_adopt_manual) return;
+   
+   int total_pos = PositionsTotal();
+   if(total_pos == 0) return;
+   
+   int tf_val = (int)StringToInteger(g_form_trail_tf);
+   ENUM_TIMEFRAMES tf = PERIOD_M5;
+   if(tf_val == 1)      tf = PERIOD_M1;
+   else if(tf_val == 5) tf = PERIOD_M5;
+   else if(tf_val == 15) tf = PERIOD_M15;
+   else if(tf_val == 30) tf = PERIOD_M30;
+   else if(tf_val == 60) tf = PERIOD_H1;
+   else if(tf_val == 240) tf = PERIOD_H4;
+   else if(tf_val == 1440) tf = PERIOD_D1;
+   
+   double max_dist    = (g_form_trail_max_dist > 0)    ? g_form_trail_max_dist    : InpMaxDistATR;
+   double relvol_th   = (g_form_trail_atr_mult > 0)    ? g_form_trail_atr_mult    : InpRelVolThreshold;
+   double be_rem_pct  = (g_form_trail_be_rem_pct > 0)  ? g_form_trail_be_rem_pct  : (InpTrailBERemDistPct * 100.0);
+   double ext_rem_pct = (g_form_trail_ext_rem_pct > 0) ? g_form_trail_ext_rem_pct : (InpTrailExtRemDistPct * 100.0);
+
+   for(int i = 0; i < total_pos; i++)
+   {
+      ulong tkt = PositionGetTicket(i);
+      if(tkt == 0) continue;
+      if(!m_position.SelectByTicket(tkt)) continue;
+      
+      // Strict filter:
+      // 1. Jangan sentuh posisi milik AutoTrader (InpAutoTraderMagic)
+      if(m_position.Magic() == InpAutoTraderMagic) continue;
+      
+      // 2. Bukan AT TRAIL dan komentar WAJIB KOSONG (karena sudah pasti entry manual)
+      string comment = m_position.Comment();
+      StringTrimLeft(comment);
+      StringTrimRight(comment);
+      if(StringFind(comment, "AT TRAIL") >= 0) continue;
+      if(comment != "") continue; // Jika ada comment, bukan entry manual murni!
+      
+      double open_p = m_position.PriceOpen();
+      double tp_p   = m_position.TakeProfit();
+      if(tp_p <= 0) continue; // Wajib ada TP awal untuk evaluasi persentase sisa target
+      
+      // Cek apakah tiket posisi ini sudah aktif dalam tracking list
+      bool already_tracked = false;
+      int t_size = ArraySize(g_tracking_list);
+      for(int k = 0; k < t_size; k++)
+      {
+         if(g_tracking_list[k].ticket == tkt && g_tracking_list[k].active)
+         {
+            already_tracked = true;
+            break;
+         }
+      }
+      if(already_tracked) continue;
+      
+      string sym = m_position.Symbol();
+      double atr100 = CalculateATR100(sym, AtrBaseTF(tf), InpDefaultATRPeriod);
+      RegisterPositionTracking(tkt, sym, tf, atr100, open_p, tp_p, max_dist, relvol_th, be_rem_pct, ext_rem_pct);
+      
+      PrintFormat("[AUTO-ADOPT-MANUAL] Position #%I64u on %s adopted by TradeManager Auto Trail (TF: %s | BE Rem: %.0f%% | EXT Rem: %.0f%% | D: %.1f | RV: %.2f)",
+                  tkt, sym, EnumToString(tf), be_rem_pct, ext_rem_pct, max_dist, relvol_th);
    }
 }
 
@@ -2564,6 +2673,11 @@ void CreateDashboardUI()
       int box_b_x = root_x + 16 + box_w + gap;
       CreateRect("CARD_TRAIL", box_b_x, deck_y, box_w, 245, CLR_CARD_BG, CLR_BORDER_HARD);
       CreateLabel("LBL_TRAIL_TITLE", box_b_x + 12, deck_y + 10, "AUTO TRAIL ENGINE (EWMA TR)", CLR_CYAN_NEON, 9, true);
+
+      string adopt_lbl = g_auto_adopt_manual ? "ADOPT: ON" : "ADOPT: OFF";
+      color  adopt_bg  = g_auto_adopt_manual ? CLR_POWER_ON_BG : CLR_POWER_OFF_BG;
+      color  adopt_clr = g_auto_adopt_manual ? CLR_BULL_NEON : CLR_BEAR_NEON;
+      CreateButton("BTN_TOGGLE_AUTO_ADOPT", box_b_x + box_w - 145, deck_y + 6, 130, 20, adopt_lbl, adopt_bg, adopt_clr, adopt_clr);
       
       CreateLabel("LBL_TR_TF", box_b_x + 12, deck_y + 34, "BASE TF (MIN):", CLR_TEXT_MED, 8, true);
       CreateEdit("INP_TRAIL_TF", box_b_x + 140, deck_y + 30, 100, 22, g_form_trail_tf, CLR_CANVAS_BG, CLR_TEXT_PURE);
@@ -2575,7 +2689,7 @@ void CreateDashboardUI()
       
       CreateLabel("LBL_TR_MULT", box_b_x + 12, deck_y + 86, "RELVOL THRESH:", CLR_TEXT_MED, 8, true);
       CreateEdit("INP_TRAIL_MULT", box_b_x + 140, deck_y + 82, 100, 22, DoubleToString(g_form_trail_atr_mult, 2), CLR_CANVAS_BG, CLR_TEXT_PURE);
-      CreateLabel("LBL_TR_MULT_HINT", box_b_x + 250, deck_y + 86, "Lonjakan vol (>=1.60x)", CLR_TEXT_MED, 7, false);
+      CreateLabel("LBL_TR_MULT_HINT", box_b_x + 250, deck_y + 86, "Lonjakan vol (>=1.25x)", CLR_TEXT_MED, 7, false);
       
       CreateLabel("LBL_TR_BE", box_b_x + 12, deck_y + 112, "BE DIST %:", CLR_TEXT_MED, 8, true);
       CreateEdit("INP_TRAIL_BE", box_b_x + 140, deck_y + 108, 100, 22, DoubleToString(g_form_trail_be_rem_pct, 0), CLR_CANVAS_BG, CLR_GOLD_NEON);
@@ -2585,7 +2699,7 @@ void CreateDashboardUI()
       CreateEdit("INP_TRAIL_EXT", box_b_x + 140, deck_y + 134, 100, 22, DoubleToString(g_form_trail_ext_rem_pct, 0), CLR_CANVAS_BG, CLR_GOLD_NEON);
       CreateLabel("LBL_TR_EXT_HINT", box_b_x + 250, deck_y + 138, "Sisa target extend TP (20%)", CLR_TEXT_MED, 7, false);
 
-      CreateLabel("LBL_TR_INFO", box_b_x + 12, deck_y + 166, "*Posisi AutoTrader ([AT TRAIL]) dilindungi otomatis agar tidak konflik.", CLR_CYAN_NEON, 7, false);
+      CreateLabel("LBL_TR_INFO", box_b_x + 12, deck_y + 166, "*Auto-Adopt aktif untuk entry manual (tanpa comment). [AT TRAIL] dilindungi.", CLR_CYAN_NEON, 7, false);
       
       CreateButton("BTN_APPLY_TRAIL", box_b_x + 12, deck_y + 196, 250, 26, "ACTIVATE AUTO TRAIL", CLR_TAB_ACTIVE_BG, CLR_CYAN_NEON, CLR_CYAN_NEON);
       CreateButton("BTN_CANCEL_TRAIL", box_b_x + 270, deck_y + 196, 160, 26, "STOP TRAIL", CLR_PANEL_BG, CLR_BEAR_NEON, CLR_BORDER_HARD);
@@ -2938,8 +3052,8 @@ void SaveStateToFile()
    int handle = FileOpen(filename, FILE_WRITE|FILE_BIN);
    if(handle != INVALID_HANDLE)
    {
-      // Version header (7 = v7 with Auto Trail engine and tracking)
-      FileWriteInteger(handle, 7);
+      // Version header (8 = v8 with Auto Adopt manual toggle and EXT persistence)
+      FileWriteInteger(handle, 8);
 
       // 0. Save UI Active Tab & Offset Mode
       FileWriteInteger(handle, g_active_tab);
@@ -3042,6 +3156,7 @@ void SaveStateToFile()
          FileWriteDouble(handle, g_tracking_list[i].trail_max_dist);
          FileWriteDouble(handle, g_tracking_list[i].atr_multiplier);
          FileWriteDouble(handle, g_tracking_list[i].trail_be_rem_dist_pct);
+         FileWriteDouble(handle, g_tracking_list[i].trail_ext_rem_dist_pct);
          FileWriteInteger(handle, g_tracking_list[i].be_applied ? 1 : 0);
          FileWriteInteger(handle, g_tracking_list[i].active ? 1 : 0);
       }
@@ -3050,9 +3165,13 @@ void SaveStateToFile()
       FileWriteDouble(handle, g_form_trail_max_dist);
       FileWriteDouble(handle, g_form_trail_atr_mult);
       FileWriteDouble(handle, g_form_trail_be_rem_pct);
+      FileWriteDouble(handle, g_form_trail_ext_rem_pct);
       int trail_tf_len = StringLen(g_form_trail_tf);
       FileWriteInteger(handle, trail_tf_len);
       if(trail_tf_len > 0) FileWriteString(handle, g_form_trail_tf, trail_tf_len);
+
+      // 7. Persistent Auto Adopt Manual Toggle
+      FileWriteInteger(handle, g_auto_adopt_manual ? 1 : 0);
 
       FileClose(handle);
    }
@@ -3071,7 +3190,7 @@ void LoadStateFromFile()
    {
       int first = FileReadInteger(handle);
       int version;
-      if(first >= 2 && first <= 7)
+      if(first >= 2 && first <= 8)
       {
          version = first;
          g_active_tab = FileReadInteger(handle);
@@ -3249,6 +3368,10 @@ void LoadStateFromFile()
             g_tracking_list[i].trail_max_dist = FileReadDouble(handle);
             g_tracking_list[i].atr_multiplier = FileReadDouble(handle);
             g_tracking_list[i].trail_be_rem_dist_pct = FileReadDouble(handle);
+            if(version >= 8)
+               g_tracking_list[i].trail_ext_rem_dist_pct = FileReadDouble(handle);
+            else
+               g_tracking_list[i].trail_ext_rem_dist_pct = InpTrailExtRemDistPct;
             g_tracking_list[i].be_applied = (FileReadInteger(handle) == 1);
             g_tracking_list[i].active = (FileReadInteger(handle) == 1);
          }
@@ -3258,8 +3381,18 @@ void LoadStateFromFile()
             g_form_trail_max_dist = FileReadDouble(handle);
             g_form_trail_atr_mult = FileReadDouble(handle);
             g_form_trail_be_rem_pct = FileReadDouble(handle);
+            if(version >= 8 && FileIsEnding(handle) == false)
+               g_form_trail_ext_rem_pct = FileReadDouble(handle);
+            else
+               g_form_trail_ext_rem_pct = 20.0;
+
             int trail_tf_len = FileReadInteger(handle);
             if(trail_tf_len > 0) g_form_trail_tf = FileReadString(handle, trail_tf_len);
+
+            if(version >= 8 && FileIsEnding(handle) == false)
+               g_auto_adopt_manual = (FileReadInteger(handle) == 1);
+            else
+               g_auto_adopt_manual = InpAutoAdoptManual;
          }
       }
 
