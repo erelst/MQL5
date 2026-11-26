@@ -487,6 +487,74 @@ def check_tp_extension_dual_layer_and_ext_dist():
     print("test_tp_extension_dual_layer_and_ext_dist: OK (streamlined Gate 1 distance + unbroken leg momentum + anti-rejection gate)")
 
 
+def check_rr_and_relvol_precision_and_parsing():
+    """Verify that RR and RelVol retain 2 decimal places (e.g. 1.25) across:
+    1. UI Form Edit Box creation (not truncated to 1.3 by DoubleToString(val, 1))
+    2. Input capture & submit parsing (ParseDoubleClean handles '.' and ',')
+    3. Rules table display (FormatRR displays 1:1.25, TRL column displays RV:1.25)
+    4. Diagnostic/auto-adopt log formatting (RV: %.2f)
+    """
+    src = open(SRC).read()
+    
+    # 1. Clean parse helper handles ',' and '.' seamlessly
+    assert "double ParseDoubleClean(string text)" in src
+    assert 'StringReplace(text, ",", ".");' in src
+    
+    # Python simulation of ParseDoubleClean
+    def parse_double_clean(s: str) -> float:
+        return float(s.replace(",", ".").strip())
+    
+    assert parse_double_clean("1.25") == 1.25
+    assert parse_double_clean("1,25") == 1.25
+    assert parse_double_clean(" 1.25 ") == 1.25
+    
+    # 2. FormatFloatClean & FormatRR helpers
+    assert "string FormatFloatClean(double val, int max_dec = 2)" in src
+    assert "string FormatRR(double rr)" in src
+    
+    def format_float_clean(val: float, max_dec: int = 2) -> str:
+        if max_dec <= 1:
+            return f"{val:.1f}"
+        rounded2 = round(val * 100.0) / 100.0
+        rounded1 = round(val * 10.0) / 10.0
+        if abs(rounded2 - rounded1) > 0.001:
+            return f"{val:.2f}"
+        return f"{val:.1f}"
+    
+    def format_rr(rr: float) -> str:
+        if rr <= 0:
+            return "1:2.0"
+        rounded2 = round(rr * 100.0) / 100.0
+        rounded1 = round(rr * 10.0) / 10.0
+        if abs(rounded2 - rounded1) > 0.001:
+            return f"1:{rr:.2f}"
+        return f"1:{rr:.1f}"
+    
+    assert format_float_clean(1.25, 2) == "1.25"
+    assert format_float_clean(1.6, 2) == "1.6"
+    assert format_float_clean(2.0, 2) == "2.0"
+    assert format_rr(1.25) == "1:1.25"
+    assert format_rr(1.5) == "1:1.5"
+    assert format_rr(2.0) == "1:2.0"
+    
+    # 3. Form input creation must use FormatFloatClean and width 48 for RelVol
+    assert 'CreateEdit("INP_RR", root_x + 85, row_c_y, 75, 20, FormatFloatClean(g_form_rr, 2)' in src
+    assert 'CreateEdit("INP_ATR_MULT", root_x + 420, row_e_y, 48, 20, FormatFloatClean(g_form_atr_mult, 2)' in src
+    
+    # 4. Table list display: RR column uses FormatRR, TRL column uses RV:
+    assert 'CreateLabel(r_pfx + "RR", root_x + 310, cur_y + 9, FormatRR(g_rules[i].risk_reward_ratio)' in src
+    assert 'BE:%.0f%%|EX:%.0f%%|RV:%s' in src
+    
+    # 5. Capture & Submit use ParseDoubleClean
+    assert 'ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_RR", OBJPROP_TEXT))' in src
+    assert 'ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_ATR_MULT", OBJPROP_TEXT))' in src
+    
+    # 6. Auto-adopt log formatting uses RV: %.2f
+    assert 'RV: %.2f' in src
+    
+    print("test_rr_and_relvol_precision_and_parsing: OK (2-decimal precision for RR & RelVol in UI form, table list, and comma-safe parser)")
+
+
 if __name__ == "__main__":
     try:
         check_detector()
@@ -501,6 +569,7 @@ if __name__ == "__main__":
         check_table_sorting_and_columns()
         check_be_progress_verification()
         check_tp_extension_dual_layer_and_ext_dist()
+        check_rr_and_relvol_precision_and_parsing()
     except Exception as exc:  # noqa: BLE001 - a test, any failure is a failure
         print("test_autotrader: FAILED -> %s" % exc)
         sys.exit(1)

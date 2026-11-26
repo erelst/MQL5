@@ -226,6 +226,14 @@ string FindExactOrMarketWatchSymbol(string input_sym)
    // If SymbolSelect succeeded, symbol now exists in Market Watch
    return input_sym;
 }
+
+double ParseDoubleClean(string text)
+{
+   StringReplace(text, ",", ".");
+   StringTrimLeft(text);
+   StringTrimRight(text);
+   return StringToDouble(text);
+}
 void CreateDashboardUI();
 void UpdateDashboardUI();
 void DestroyDashboardUI();
@@ -420,22 +428,22 @@ void CaptureOrdersFormInputs()
 {
    if(ObjectFind(0, g_prefix + "INP_TRAIL_DIST") >= 0)
    {
-      double d = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_DIST", OBJPROP_TEXT));
+      double d = ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_TRAIL_DIST", OBJPROP_TEXT));
       if(d > 0) g_form_trail_max_dist = d;
    }
    if(ObjectFind(0, g_prefix + "INP_TRAIL_MULT") >= 0)
    {
-      double m = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_MULT", OBJPROP_TEXT));
+      double m = ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_TRAIL_MULT", OBJPROP_TEXT));
       if(m > 0) g_form_trail_atr_mult = m;
    }
    if(ObjectFind(0, g_prefix + "INP_TRAIL_BE") >= 0)
    {
-      double b = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_BE", OBJPROP_TEXT));
+      double b = ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_TRAIL_BE", OBJPROP_TEXT));
       if(b >= 0 && b <= 100) g_form_trail_be_rem_pct = b;
    }
    if(ObjectFind(0, g_prefix + "INP_TRAIL_EXT") >= 0)
    {
-      double e = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_EXT", OBJPROP_TEXT));
+      double e = ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_TRAIL_EXT", OBJPROP_TEXT));
       if(e >= 0 && e <= 100) g_form_trail_ext_rem_pct = e;
    }
    if(ObjectFind(0, g_prefix + "INP_TRAIL_TF") >= 0)

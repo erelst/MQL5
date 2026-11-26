@@ -251,12 +251,46 @@ ulong ResolvePositionTicket(ulong order_ticket, ulong deal_ticket, string sym);
 void AdoptOpenEAPositions();
 string FindExactOrMarketWatchSymbol(string input_sym);
 bool EvaluatePriceFilter(double price, string filter_str);
+double ParseDoubleClean(string text);
+string FormatFloatClean(double val, int max_dec = 2);
+string FormatRR(double rr);
 double GetTrueRange(const string sym, const ENUM_TIMEFRAMES tf, int shift = 0);
 double GetEWMA_TR(const string sym, const ENUM_TIMEFRAMES tf, int barsToUse = 30, double lambda = 0.90);
 bool CheckAndExtendTP(ulong ticket, double relVolThreshold, double maxDistATR, double extendFactor, double maxExtendATR, double lambda);
 bool IsStrongHammer(const string sym, const ENUM_TIMEFRAMES tf, const int shift, double &out_low, double &out_cur_price);
 bool IsStrongShootingStar(const string sym, const ENUM_TIMEFRAMES tf, const int shift, double &out_high, double &out_cur_price);
 bool CheckStochHA(const string sym, const ENUM_TIMEFRAMES tf, const int shift, bool check_buy);
+
+//+------------------------------------------------------------------+
+//| CLEAN STRING & NUMERIC PARSING / FORMATTING HELPERS              |
+//+------------------------------------------------------------------+
+double ParseDoubleClean(string text)
+{
+   StringReplace(text, ",", ".");
+   StringTrimLeft(text);
+   StringTrimRight(text);
+   return StringToDouble(text);
+}
+
+string FormatFloatClean(double val, int max_dec = 2)
+{
+   if(max_dec <= 1) return DoubleToString(val, 1);
+   double rounded2 = MathRound(val * 100.0) / 100.0;
+   double rounded1 = MathRound(val * 10.0) / 10.0;
+   if(MathAbs(rounded2 - rounded1) > 0.001)
+      return DoubleToString(val, 2);
+   return DoubleToString(val, 1);
+}
+
+string FormatRR(double rr)
+{
+   if(rr <= 0) return "1:2.0";
+   double rounded2 = MathRound(rr * 100.0) / 100.0;
+   double rounded1 = MathRound(rr * 10.0) / 10.0;
+   if(MathAbs(rounded2 - rounded1) > 0.001)
+      return StringFormat("1:%.2f", rr);
+   return StringFormat("1:%.1f", rr);
+}
 
 //+------------------------------------------------------------------+
 //| FLEXIBLE PRICE FILTER EVALUATION (<, >, <=, >=, RANGE, ALL)       |
@@ -880,7 +914,7 @@ void AdoptOpenEAPositions()
       
       double atr100 = CalculateATR100(sym, AtrBaseTF(adopted_tf), InpATRPeriod);
       RegisterPositionTracking(tkt, sym, adopted_tf, atr100, open_p, tp_p, trail_dist, atr_mult, be_rem_pct, ext_rem_pct);
-      PrintFormat("[AUTO-ADOPT] Position #%I64u on %s (Magic: %I64u) adopted by Auto Trail (TF: %s | BE Rem: %.0f%% | EXT Rem: %.0f%% | D: %.1f | RV: %.1f)",
+      PrintFormat("[AUTO-ADOPT] Position #%I64u on %s (Magic: %I64u) adopted by Auto Trail (TF: %s | BE Rem: %.0f%% | EXT Rem: %.0f%% | D: %.1f | RV: %.2f)",
                   tkt, sym, (ulong)m_position.Magic(), EnumToString(adopted_tf), be_rem_pct * 100.0, ext_rem_pct * 100.0, trail_dist, atr_mult);
    }
 }
@@ -1640,7 +1674,7 @@ void CreateDashboardUI()
    // Row C: Risk Reward & Timeframe (y = upper_y + 72)
    int row_c_y = upper_y + 72;
    CreateLabel("LBL_RR", root_x + 22, row_c_y + 3, "RR RATIO:", CLR_TEXT_PURE, 8, true);
-   CreateEdit("INP_RR", root_x + 85, row_c_y, 75, 20, DoubleToString(g_form_rr, 2), CLR_CANVAS_BG, CLR_CYAN_NEON);
+   CreateEdit("INP_RR", root_x + 85, row_c_y, 75, 20, FormatFloatClean(g_form_rr, 2), CLR_CANVAS_BG, CLR_CYAN_NEON);
    
    CreateLabel("LBL_TF", root_x + 175, row_c_y + 3, "TIMEFRAME (MIN):", CLR_TEXT_PURE, 8, true);
    int tf_min = 5;
@@ -1715,7 +1749,7 @@ void CreateDashboardUI()
    CreateEdit("INP_TRAIL_DIST", root_x + 323, row_e_y, 38, 20, DoubleToString(g_form_trail_dist, 1), CLR_CANVAS_BG, CLR_GOLD_NEON);
    
    CreateLabel("LBL_ATR_MULT_LBL", root_x + 368, row_e_y + 3, "RELVOL:", CLR_TEXT_MED, 7, true);
-   CreateEdit("INP_ATR_MULT", root_x + 420, row_e_y, 38, 20, DoubleToString(g_form_atr_mult, 1), CLR_CANVAS_BG, CLR_CYAN_NEON);
+   CreateEdit("INP_ATR_MULT", root_x + 420, row_e_y, 48, 20, FormatFloatClean(g_form_atr_mult, 2), CLR_CANVAS_BG, CLR_CYAN_NEON);
    
    // Row F: % TF Progress Delay vs TF Close (y = upper_y + 144)
    int row_f_y = upper_y + 144;
@@ -1900,7 +1934,7 @@ void UpdatePreviewTerminalBox()
    if(sig_list == "") sig_list = "NONE";
    
    string l1 = StringFormat("Target: %s (%s) | %s | %s", prev_sym, prev_tf, prev_dir, prev_rule_tag);
-   string l2 = StringFormat("Rasio RR: 1:%.2f | Mode Lot: %s", prev_rr, prev_lot);
+   string l2 = StringFormat("Rasio RR: %s | Mode Lot: %s", FormatRR(prev_rr), prev_lot);
    string l3 = StringFormat("Entry Mult: %dx | Multi TP: %dx | Mode: %s", prev_mult, prev_mtp, prev_sm);
    string l4 = StringFormat("Sinyal Aktif: %s", sig_list);
    string l5 = "-------------------------------------------------------------";
@@ -1914,8 +1948,8 @@ void UpdatePreviewTerminalBox()
    if(prev_trail)
    {
       string l6 = StringFormat("Auto Trail BE: Sisa Target <= %.0f%% -> Kunci BE", prev_be_pct);
-      string l7 = StringFormat("Trail TP Extend: Sisa <= %.0f%% & <= %.1fTR & RelVol >= %.2fx", prev_ext_pct, prev_dist, prev_atr_m);
-      string l8 = StringFormat("Trail SL Lock: Sisa <= %.1fTR ke TP baru -> Kunci ke Prev TP", prev_dist);
+      string l7 = StringFormat("Trail TP Extend: Sisa <= %.0f%% & RelVol >= %sx", prev_ext_pct, FormatFloatClean(prev_atr_m, 2));
+      string l8 = "Trail SL Lock: Kunci ke Prev TP pada siklus extend berikutnya";
       
       CreateLabel("SIM_L6", prev_x + 10, line_y + 86,  l6, CLR_GOLD_NEON, 8, true);
       CreateLabel("SIM_L7", prev_x + 10, line_y + 106, l7, CLR_CYAN_NEON, 8, true);
@@ -1993,7 +2027,7 @@ void UpdateDashboardUI()
                        DoubleToString(g_rules[i].lot_value, 1) + (AccountInfoString(ACCOUNT_CURRENCY) != "" ? AccountInfoString(ACCOUNT_CURRENCY) : "M"));
       CreateLabel(r_pfx + "LOT", root_x + 232, cur_y + 9, lot_str, CLR_TEXT_PURE, 8, false);
       
-      CreateLabel(r_pfx + "RR", root_x + 310, cur_y + 9, StringFormat("1:%.1f", g_rules[i].risk_reward_ratio), CLR_CYAN_NEON, 8, true);
+      CreateLabel(r_pfx + "RR", root_x + 310, cur_y + 9, FormatRR(g_rules[i].risk_reward_ratio), CLR_CYAN_NEON, 8, true);
       
       string str_tf = StringSubstr(EnumToString(g_rules[i].timeframe), 7);
       if(g_rules[i].timeframe == PERIOD_M5)
@@ -2028,7 +2062,8 @@ void UpdateDashboardUI()
       }
       CreateLabel(r_pfx + "FLT", root_x + 620, cur_y + 9, f_str, CLR_TEXT_MED, 7, false);
       
-      string trail_str = g_rules[i].enable_trail ? StringFormat("BE:%.0f%%|EX:%.0f%%|D:%.1f", g_rules[i].trail_be_rem_dist_pct * 100.0, g_rules[i].trail_ext_rem_dist_pct * 100.0, g_rules[i].trail_max_dist) : "OFF";
+      string rv_str = FormatFloatClean(g_rules[i].atr_multiplier > 0 ? g_rules[i].atr_multiplier : InpRelVolThreshold, 2);
+      string trail_str = g_rules[i].enable_trail ? StringFormat("BE:%.0f%%|EX:%.0f%%|RV:%s", g_rules[i].trail_be_rem_dist_pct * 100.0, g_rules[i].trail_ext_rem_dist_pct * 100.0, rv_str) : "OFF";
       CreateLabel(r_pfx + "TRL", root_x + 735, cur_y + 9, trail_str, g_rules[i].enable_trail ? CLR_GOLD_NEON : CLR_TEXT_MED, 8, false);
       
       string r_status_txt = g_rules[i].active ? "ACTIVE" : "PAUSED";
@@ -2446,7 +2481,7 @@ void CaptureFormInputs()
    string cur_sym = ObjectGetString(0, g_prefix + "INP_SYM", OBJPROP_TEXT);
    if(cur_sym != "") g_form_sym = cur_sym;
    
-   double cur_rr = StringToDouble(ObjectGetString(0, g_prefix + "INP_RR", OBJPROP_TEXT));
+   double cur_rr = ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_RR", OBJPROP_TEXT));
    if(cur_rr > 0) g_form_rr = cur_rr;
    
    int cur_tf = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_TF", OBJPROP_TEXT));
@@ -2458,23 +2493,23 @@ void CaptureFormInputs()
    else if(cur_tf == 240) g_form_tf = PERIOD_H4;
    else if(cur_tf == 1440) g_form_tf = PERIOD_D1;
    
-   double cur_lot = StringToDouble(ObjectGetString(0, g_prefix + "INP_LOT", OBJPROP_TEXT));
+   double cur_lot = ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_LOT", OBJPROP_TEXT));
    if(cur_lot > 0) g_form_lot_val = cur_lot;
    
-   double cur_tdist = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_DIST", OBJPROP_TEXT));
+   double cur_tdist = ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_TRAIL_DIST", OBJPROP_TEXT));
    if(cur_tdist > 0) g_form_trail_dist = cur_tdist;
    
-   double cur_amult = StringToDouble(ObjectGetString(0, g_prefix + "INP_ATR_MULT", OBJPROP_TEXT));
+   double cur_amult = ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_ATR_MULT", OBJPROP_TEXT));
    if(cur_amult > 0) g_form_atr_mult = cur_amult;
    
    if(ObjectFind(0, g_prefix + "INP_TRAIL_BE_DIST") >= 0)
    {
-      double cur_be_dist = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_BE_DIST", OBJPROP_TEXT));
+      double cur_be_dist = ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_TRAIL_BE_DIST", OBJPROP_TEXT));
       if(cur_be_dist > 0 && cur_be_dist <= 100) g_form_be_dist_pct = cur_be_dist;
    }
    if(ObjectFind(0, g_prefix + "INP_TRAIL_EXT_DIST") >= 0)
    {
-      double cur_ext_dist = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_EXT_DIST", OBJPROP_TEXT));
+      double cur_ext_dist = ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_TRAIL_EXT_DIST", OBJPROP_TEXT));
       if(cur_ext_dist > 0 && cur_ext_dist <= 100) g_form_ext_dist_pct = cur_ext_dist;
    }
    
@@ -2734,7 +2769,7 @@ void OnChartEvent(const int id,
             return;
          }
          
-         double rr_val = StringToDouble(ObjectGetString(0, g_prefix + "INP_RR", OBJPROP_TEXT));
+         double rr_val = ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_RR", OBJPROP_TEXT));
          if(rr_val <= 0) rr_val = 2.0;
          
          int tf_input = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_TF", OBJPROP_TEXT));
@@ -2747,23 +2782,23 @@ void OnChartEvent(const int id,
          else if(tf_input == 240) tf_val = PERIOD_H4;
          else if(tf_input == 1440) tf_val = PERIOD_D1;
          
-         double lot_val = StringToDouble(ObjectGetString(0, g_prefix + "INP_LOT", OBJPROP_TEXT));
+         double lot_val = ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_LOT", OBJPROP_TEXT));
          if(lot_val <= 0) lot_val = 0.01;
          
-         double trail_dist = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_DIST", OBJPROP_TEXT));
+         double trail_dist = ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_TRAIL_DIST", OBJPROP_TEXT));
          if(trail_dist <= 0) trail_dist = InpMaxDistATR;
          
-         double atr_mult = StringToDouble(ObjectGetString(0, g_prefix + "INP_ATR_MULT", OBJPROP_TEXT));
+         double atr_mult = ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_ATR_MULT", OBJPROP_TEXT));
          if(atr_mult <= 0) atr_mult = InpRelVolThreshold;
          
          double be_dist_val = 20.0;
          if(ObjectFind(0, g_prefix + "INP_TRAIL_BE_DIST") >= 0)
-            be_dist_val = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_BE_DIST", OBJPROP_TEXT));
+            be_dist_val = ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_TRAIL_BE_DIST", OBJPROP_TEXT));
          if(be_dist_val <= 0 || be_dist_val > 100) be_dist_val = 20.0;
 
          double ext_dist_val = 20.0;
          if(ObjectFind(0, g_prefix + "INP_TRAIL_EXT_DIST") >= 0)
-            ext_dist_val = StringToDouble(ObjectGetString(0, g_prefix + "INP_TRAIL_EXT_DIST", OBJPROP_TEXT));
+            ext_dist_val = ParseDoubleClean(ObjectGetString(0, g_prefix + "INP_TRAIL_EXT_DIST", OBJPROP_TEXT));
          if(ext_dist_val <= 0 || ext_dist_val > 100) ext_dist_val = 20.0;
          
          int max_ord_val = (int)StringToInteger(ObjectGetString(0, g_prefix + "INP_MAX_ORD", OBJPROP_TEXT));
